@@ -92,6 +92,7 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const timeISO = useMemo(() => getTimeISO(form), [form]);
 
@@ -180,12 +181,29 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
     }
   };
 
-  const onDelete = async (id: string) => {
-    if (!confirm("Delete this event?")) return;
-    const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
-    if (res.ok) {
+  const onDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Delete “${name}”? This cannot be undone.`)) return;
+
+    setError("");
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/events/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        cache: "no-store",
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+
+      if (!res.ok) {
+        setError(data.error || `Could not delete event (${res.status})`);
+        return;
+      }
+
       setEvents((prev) => prev.filter((item) => item.id !== id));
       if (editingId === id) reset();
+    } catch {
+      setError("Could not delete event. Please try again.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -196,6 +214,11 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
           <h2 className="font-display text-2xl text-cream">Events</h2>
           <span className="font-body text-xs text-muted">{events.length} total</span>
         </div>
+        {error ? (
+          <p className="mb-3 rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-200">
+            {error}
+          </p>
+        ) : null}
         <div className="space-y-3">
           {events.map((event) => (
             <div
@@ -227,8 +250,9 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => onDelete(event.id)}
-                    className="rounded-full border border-red-400/30 p-2 text-red-300 hover:bg-red-400/10"
+                    onClick={() => onDelete(event.id, event.name)}
+                    disabled={deletingId === event.id}
+                    className="rounded-full border border-red-400/30 p-2 text-red-300 hover:bg-red-400/10 disabled:opacity-50"
                     aria-label={`Delete ${event.name}`}
                   >
                     <Trash2 size={14} />

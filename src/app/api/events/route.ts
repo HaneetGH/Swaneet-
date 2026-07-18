@@ -4,6 +4,8 @@ import { isAuthenticated } from "@/lib/auth";
 import { listEvents, readStore, writeStore } from "@/lib/store";
 import type { ManagedEvent } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 const eventSchema = z.object({
   name: z.string().trim().min(2, "Event name is required"),
   date: z.string().trim().min(2, "Date is required"),
