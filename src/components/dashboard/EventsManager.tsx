@@ -146,21 +146,31 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
           body: JSON.stringify(payload),
         },
       );
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string | { formErrors?: string[] };
+        event?: ManagedEvent;
+      };
       if (!res.ok) {
-        setError(
+        const message =
           typeof data.error === "string"
             ? data.error
-            : "Could not save event",
-        );
+            : data.error?.formErrors?.[0] ||
+              `Could not save event (${res.status})`;
+        setError(message);
         return;
       }
+      if (!data.event) {
+        setError("Could not save event");
+        return;
+      }
+
+      const saved = data.event;
       if (editingId) {
         setEvents((prev) =>
-          prev.map((item) => (item.id === editingId ? data.event : item)),
+          prev.map((item) => (item.id === editingId ? saved : item)),
         );
       } else {
-        setEvents((prev) => [...prev, data.event]);
+        setEvents((prev) => [...prev, saved]);
       }
       reset();
     } catch {

@@ -1,11 +1,12 @@
 import { cookies } from "next/headers";
 import { getDefaultAdminPin, verifyPin } from "@/lib/pin";
-import { readStore } from "@/lib/store";
 
 export const ADMIN_COOKIE = "swaneet_admin";
 const TOKEN = "authenticated";
 
 export async function getStoredPinHash() {
+  // Lazy import avoids circular dependency with store/auth
+  const { readStore } = await import("@/lib/store");
   const store = await readStore();
   return store.adminPinHash || null;
 }
