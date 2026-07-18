@@ -103,3 +103,36 @@ export function detectPeriod(dayLabel: string): "morning" | "night" | "none" {
   if (/night/i.test(dayLabel)) return "night";
   return "none";
 }
+
+export type TimeParts = {
+  hour: string;
+  minute: string;
+  meridiem: "AM" | "PM";
+};
+
+export function timeISOToParts(timeISO: string): TimeParts {
+  if (!/^\d{2}:\d{2}$/.test(timeISO)) {
+    return { hour: "12", minute: "00", meridiem: "AM" };
+  }
+
+  const [hRaw, mRaw] = timeISO.split(":").map(Number);
+  const meridiem = hRaw >= 12 ? "PM" : "AM";
+  const hour12 = hRaw % 12 || 12;
+
+  return {
+    hour: String(hour12),
+    minute: String(mRaw).padStart(2, "0"),
+    meridiem,
+  };
+}
+
+export function partsToTimeISO(parts: TimeParts): string {
+  let hour = Number(parts.hour) % 12;
+  if (parts.meridiem === "PM") hour += 12;
+  return `${String(hour).padStart(2, "0")}:${parts.minute.padStart(2, "0")}`;
+}
+
+export const HOUR_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i + 1));
+export const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) =>
+  String(i).padStart(2, "0"),
+);

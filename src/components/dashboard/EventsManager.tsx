@@ -4,12 +4,17 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { EventIcon, ManagedEvent } from "@/lib/types";
 import {
+  HOUR_OPTIONS,
+  MINUTE_OPTIONS,
   detectPeriod,
   formatDayLabel,
   formatDisplayDate,
   formatDisplayTime,
   parseDisplayDate,
   parseDisplayTime,
+  partsToTimeISO,
+  timeISOToParts,
+  type TimeParts,
 } from "@/lib/datetime";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -17,7 +22,9 @@ import { cn } from "@/lib/utils";
 type FormState = {
   name: string;
   dateISO: string;
-  timeISO: string;
+  hour: string;
+  minute: string;
+  meridiem: "AM" | "PM";
   onwards: boolean;
   period: "morning" | "night" | "none";
   dayOverride: string;
@@ -31,7 +38,9 @@ type FormState = {
 const emptyForm: FormState = {
   name: "",
   dateISO: "",
-  timeISO: "",
+  hour: "12",
+  minute: "00",
+  meridiem: "PM",
   onwards: false,
   period: "none",
   dayOverride: "",
@@ -49,12 +58,23 @@ type EventsManagerProps = {
   initialEvents: ManagedEvent[];
 };
 
+function getTimeISO(form: Pick<FormState, "hour" | "minute" | "meridiem">) {
+  return partsToTimeISO({
+    hour: form.hour,
+    minute: form.minute,
+    meridiem: form.meridiem,
+  });
+}
+
 function eventToForm(event: ManagedEvent): FormState {
   const parsedTime = parseDisplayTime(event.time);
+  const parts: TimeParts = timeISOToParts(parsedTime.time);
   return {
     name: event.name,
     dateISO: parseDisplayDate(event.date),
-    timeISO: parsedTime.time,
+    hour: parts.hour,
+    minute: parts.minute,
+    meridiem: parts.meridiem,
     onwards: parsedTime.onwards,
     period: detectPeriod(event.day),
     dayOverride: "",
@@ -73,14 +93,16 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const timeISO = useMemo(() => getTimeISO(form), [form]);
+
   const preview = useMemo(() => {
-    if (!form.dateISO || !form.timeISO) return null;
+    if (!form.dateISO) return null;
     return {
       date: formatDisplayDate(form.dateISO),
-      time: formatDisplayTime(form.timeISO, form.onwards),
+      time: formatDisplayTime(timeISO, form.onwards),
       day: form.dayOverride || formatDayLabel(form.dateISO, form.period),
     };
-  }, [form.dateISO, form.timeISO, form.onwards, form.period, form.dayOverride]);
+  }, [form.dateISO, form.onwards, form.period, form.dayOverride, timeISO]);
 
   const reset = () => {
     setForm(emptyForm);
@@ -95,8 +117,8 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.dateISO || !form.timeISO) {
-      setError("Please choose a date and time");
+    if (!form.dateISO) {
+      setError("Please choose a date");
       return;
     }
 
@@ -107,7 +129,7 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
       name: form.name,
       date: formatDisplayDate(form.dateISO),
       day: form.dayOverride || formatDayLabel(form.dateISO, form.period),
-      time: formatDisplayTime(form.timeISO, form.onwards),
+      time: formatDisplayTime(timeISO, form.onwards),
       venue: form.venue,
       venueDetail: form.venueDetail,
       address: form.address,
@@ -238,7 +260,7 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
             />
           </label>
 
-          <label className="block">
+          <label className="block sm:col-span-2">
             <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
               Date
             </span>
@@ -253,20 +275,67 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
             />
           </label>
 
-          <label className="block">
+          <div className="sm:col-span-2">
             <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
               Time
             </span>
-            <input
-              type="time"
-              className={fieldClass}
-              value={form.timeISO}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, timeISO: e.target.value }))
-              }
-              required
-            />
-          </label>
+            <div className="grid grid-cols-3 gap-2">
+              <label className="block">
+                <span className="sr-only">Hour</span>
+                <select
+                  className={fieldClass}
+                  value={form.hour}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, hour: e.target.value }))
+                  }
+                  aria-label="Hour"
+                >
+                  {HOUR_OPTIONS.map((hour) => (
+                    <option key={hour} value={hour}>
+                      {hour}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="sr-only">Minute</span>
+                <select
+                  className={fieldClass}
+                  value={form.minute}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, minute: e.target.value }))
+                  }
+                  aria-label="Minute"
+                >
+                  {MINUTE_OPTIONS.map((minute) => (
+                    <option key={minute} value={minute}>
+                      {minute}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="sr-only">AM or PM</span>
+                <select
+                  className={fieldClass}
+                  value={form.meridiem}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      meridiem: e.target.value as "AM" | "PM",
+                    }))
+                  }
+                  aria-label="AM or PM"
+                >
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                </select>
+              </label>
+            </div>
+            <p className="mt-2 font-body text-xs text-muted">
+              Selected: {formatDisplayTime(timeISO, form.onwards)}
+            </p>
+          </div>
 
           <label className="flex items-center gap-3 rounded-xl border border-gold/20 bg-[#0d0b10] px-3 py-2.5 sm:col-span-2">
             <input
