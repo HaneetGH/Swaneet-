@@ -47,6 +47,18 @@
       "address": "test",
       "description": "",
       "icon": "heart"
+    },
+    {
+      "id": "event-1784363799773",
+      "name": "Roka",
+      "date": "14th April 2026",
+      "day": "Tuesday Morning",
+      "time": "12:30 PM",
+      "venue": "Jai Paradise",
+      "venueDetail": "",
+      "address": "Rohtak",
+      "description": "",
+      "icon": "heart"
     }
   ],
   "gallery": [],
