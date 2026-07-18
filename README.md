@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# #Swaneet — Wedding Invitation
 
-## Getting Started
+A premium, cinematic wedding microsite for **Haneet Singh & Swarandeep Kaur**.
 
-First, run the development server:
+## Stack
+
+- Next.js 15 · React · TypeScript · Tailwind CSS
+- Framer Motion · GSAP · Lenis
+- React Three Fiber · canvas-confetti
+
+## Getting started
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Dashboard
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Manage events and gallery images at [/dashboard](http://localhost:3002/dashboard).
 
-## Learn More
+Default PIN: `swaneet2026`  
+Override with `ADMIN_PIN` in `.env.local`.
 
-To learn more about Next.js, take a look at the following resources:
+| Content | Storage |
+| --- | --- |
+| Events & gallery metadata | `data/content.json` |
+| Uploaded images | `public/uploads/` |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Customize
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Content | File |
+| --- | --- |
+| Names, venue, family, RSVP defaults | `src/data/wedding.ts` |
+| Theme colors | `src/app/globals.css` |
+| Invitation art | `public/images/invitation.png` |
+| Background music (optional) | `public/audio/wedding-ambient.mp3` |
 
-## Deploy on Vercel
+Music is muted by default. Add an MP3 at the path above to enable the toggle.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev` — development server
+- `npm run build` — production build
+- `npm run start` — start production server
+- `npm run lint` — ESLint

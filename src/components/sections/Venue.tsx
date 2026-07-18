@@ -1,0 +1,75 @@
+"use client";
+
+import { ExternalLink, MapPin } from "lucide-react";
+import { wedding } from "@/data/wedding";
+import { SectionHeading } from "@/components/ui/SectionHeading";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { Button } from "@/components/ui/Button";
+
+export function Venue() {
+  const { venue } = wedding;
+
+  return (
+    <section id="venue" className="section-pad relative overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_right,rgba(212,175,55,0.08),transparent_70%)]"
+      />
+
+      <div className="relative mx-auto max-w-6xl">
+        <SectionHeading
+          eyebrow="Location"
+          title="The Venue"
+          subtitle="Where we gather to celebrate"
+        />
+
+        <div className="grid items-stretch gap-6 lg:grid-cols-2">
+          <GlassCard glow className="flex flex-col justify-between">
+            <div>
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-gold/30 bg-gold/10 text-gold">
+                <MapPin size={20} aria-hidden />
+              </div>
+              <h3 className="font-display text-3xl text-cream">{venue.name}</h3>
+              <p className="mt-2 font-body text-sm uppercase tracking-[0.2em] text-gold-soft">
+                {venue.detail}
+              </p>
+              <p className="mt-6 font-body text-base leading-relaxed text-muted">
+                {venue.address}
+              </p>
+              <p className="mt-2 font-body text-sm text-muted/80">
+                {venue.fullAddress}
+              </p>
+            </div>
+
+            <div className="mt-8">
+              <a
+                href={venue.mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button type="button" className="w-full sm:w-auto">
+                  Get Directions
+                  <ExternalLink size={14} aria-hidden />
+                </Button>
+              </a>
+            </div>
+          </GlassCard>
+
+          <GlassCard className="overflow-hidden p-2 md:p-3">
+            <div className="relative aspect-[4/3] overflow-hidden rounded-xl">
+              <iframe
+                title={`Map showing ${venue.name}`}
+                src={venue.embedUrl}
+                className="absolute inset-0 h-full w-full border-0 grayscale-[30%] contrast-125 saturate-50"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                allowFullScreen
+              />
+              <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-gold/20" />
+            </div>
+          </GlassCard>
+        </div>
+      </div>
+    </section>
+  );
+}

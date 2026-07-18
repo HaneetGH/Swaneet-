@@ -1,26 +1,192 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-deep: #07060a;
+  --bg-mid: #100e14;
+  --bg-elevated: #1a1520;
+  --gold: #d4af37;
+  --gold-soft: #e8d5a3;
+  --gold-deep: #9a7b2f;
+  --maroon: #6b1d2a;
+  --cream: #f3e9d7;
+  --text: #f7f0e4;
+  --text-muted: #b8a994;
+  --glass: rgba(255, 248, 230, 0.06);
+  --glass-border: rgba(212, 175, 55, 0.28);
+  --glow: rgba(212, 175, 55, 0.35);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg-deep);
+  --color-foreground: var(--text);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-gold-deep: var(--gold-deep);
+  --color-maroon: var(--maroon);
+  --color-cream: var(--cream);
+  --color-muted: var(--text-muted);
+  --font-display: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
+  --font-script: var(--font-great-vibes), "Great Vibes", cursive;
+  --font-body: var(--font-outfit), "Outfit", Georgia, serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: auto;
+}
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--font-body), Georgia, serif;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+@media (pointer: coarse) {
+  body {
+    cursor: auto;
+  }
+}
+
+::selection {
+  background: rgba(212, 175, 55, 0.35);
+  color: #fff8e7;
+}
+
+.gradient-text {
+  background: linear-gradient(
+    120deg,
+    #f8e7b0 0%,
+    #d4af37 40%,
+    #f3e9d7 70%,
+    #b8922a 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.gold-border {
+  position: relative;
+}
+
+.gold-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(232, 213, 163, 0.7),
+    rgba(212, 175, 55, 0.15),
+    rgba(154, 123, 47, 0.65)
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.ambient-bg {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(107, 29, 42, 0.28), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 85% 20%, rgba(212, 175, 55, 0.12), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 50% 90%, rgba(26, 21, 32, 0.9), transparent 60%),
+    linear-gradient(180deg, #07060a 0%, #100e14 45%, #0b0a10 100%);
+}
+
+.section-pad {
+  @apply px-5 py-20 sm:px-8 md:py-28 lg:px-12;
+}
+
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 0% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.animate-float {
+  animation: float-y 6s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 8s linear infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 4s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.7s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  body {
+    cursor: auto;
+  }
 }
