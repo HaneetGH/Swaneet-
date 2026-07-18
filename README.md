@@ -29,7 +29,7 @@ Locally (without cloud env vars), data is stored in:
 
 Manage RSVPs, events, and gallery images at `/dashboard`.
 
-Default PIN: `swaneet2026`  
+Default PIN: `swaneet10`  
 Override with `ADMIN_PIN` in `.env.local`.
 
 ## Deploy on Vercel
@@ -55,7 +55,7 @@ No code changes needed between local and production — it switches based on env
 Copy `.env.example` to `.env.local` for local cloud testing:
 
 ```bash
-ADMIN_PIN=swaneet2026
+ADMIN_PIN=swaneet10
 DATABASE_URL=postgresql://...
 BLOB_READ_WRITE_TOKEN=vercel_blob_...
 ```

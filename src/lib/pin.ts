@@ -25,5 +25,5 @@ export function verifyPin(pin: string, stored: string) {
 }
 
 export function getDefaultAdminPin() {
-  return process.env.ADMIN_PIN || "swaneet2026";
+  return process.env.ADMIN_PIN || "swaneet10";
 }
