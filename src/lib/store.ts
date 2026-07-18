@@ -27,13 +27,7 @@ export function defaultStore(): ContentStore {
       description: event.description,
       icon: event.icon,
     })),
-    gallery: wedding.gallery.map((item) => ({
-      id: String(item.id),
-      alt: item.alt,
-      src: "/images/invitation.png",
-      aspect: item.aspect,
-      createdAt: new Date(0).toISOString(),
-    })),
+    gallery: [],
     rsvps: [],
   };
 }
@@ -44,7 +38,14 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     events: raw.events ?? defaults.events,
     gallery: raw.gallery ?? defaults.gallery,
     rsvps: raw.rsvps ?? [],
+    adminPinHash: raw.adminPinHash,
   };
+}
+
+export async function updateAdminPinHash(adminPinHash: string) {
+  const store = await readStore();
+  store.adminPinHash = adminPinHash;
+  await writeStore(store);
 }
 
 async function ensureLocalStore(): Promise<void> {

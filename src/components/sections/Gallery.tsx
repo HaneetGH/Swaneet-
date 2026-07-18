@@ -2,32 +2,14 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
-import { X } from "lucide-react";
+import { Images, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { wedding } from "@/data/wedding";
 import type { GalleryImage } from "@/lib/types";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils";
 
-const gradients = [
-  "from-[#3a1c24] via-[#1a1520] to-[#2a2110]",
-  "from-[#1a1520] via-[#2a2110] to-[#3a1c24]",
-  "from-[#241820] via-[#100e14] to-[#3a2a14]",
-  "from-[#1c1420] via-[#2a1818] to-[#1a2010]",
-  "from-[#201818] via-[#1a1520] to-[#2a2410]",
-  "from-[#181420] via-[#241818] to-[#1a2018]",
-];
-
-const fallbackGallery: GalleryImage[] = wedding.gallery.map((item) => ({
-  id: String(item.id),
-  alt: item.alt,
-  src: "/images/invitation.png",
-  aspect: item.aspect,
-  createdAt: new Date(0).toISOString(),
-}));
-
 export function Gallery() {
-  const [gallery, setGallery] = useState<GalleryImage[]>(fallbackGallery);
+  const [gallery, setGallery] = useState<GalleryImage[]>([]);
   const [active, setActive] = useState<number | null>(null);
   const item = active !== null ? gallery[active] : null;
 
@@ -36,15 +18,13 @@ export function Gallery() {
     fetch("/api/gallery")
       .then((res) => res.json())
       .then((data: { gallery?: GalleryImage[] }) => {
-        if (alive && data.gallery?.length) setGallery(data.gallery);
+        if (alive) setGallery(data.gallery ?? []);
       })
       .catch(() => undefined);
     return () => {
       alive = false;
     };
   }, []);
-
-  const hasUploads = gallery.some((photo) => photo.src !== "/images/invitation.png");
 
   return (
     <section id="gallery" className="section-pad relative">
@@ -53,16 +33,23 @@ export function Gallery() {
           eyebrow="Moments"
           title="Gallery"
           subtitle={
-            hasUploads
+            gallery.length
               ? "A collection of moments from our celebration"
-              : "Placeholder frames inspired by the invitation — replace with your photographs"
+              : "Photos coming soon — check back later"
           }
         />
 
-        <div className="columns-1 gap-4 sm:columns-2 lg:columns-3">
-          {gallery.map((photo, i) => {
-            const isPlaceholder = photo.src === "/images/invitation.png";
-            return (
+        {gallery.length === 0 ? (
+          <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">
+            <Images className="mb-4 text-gold/50" size={32} />
+            <p className="font-display text-xl text-cream">No photos yet</p>
+            <p className="mt-2 font-body text-sm text-muted">
+              Gallery images will appear here once they are added.
+            </p>
+          </div>
+        ) : (
+          <div className="columns-1 gap-4 sm:columns-2 lg:columns-3">
+            {gallery.map((photo, i) => (
               <motion.button
                 key={photo.id}
                 type="button"
@@ -79,25 +66,12 @@ export function Gallery() {
                 )}
                 aria-label={`Open ${photo.alt}`}
               >
-                {isPlaceholder ? (
-                  <div
-                    className={cn(
-                      "absolute inset-0 bg-gradient-to-br opacity-90 transition duration-500 group-hover:scale-105",
-                      gradients[i % gradients.length],
-                    )}
-                  />
-                ) : null}
                 <Image
                   src={photo.src}
                   alt={photo.alt}
                   fill
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                  className={cn(
-                    "object-cover transition duration-700 group-hover:scale-105",
-                    isPlaceholder
-                      ? "opacity-40 mix-blend-luminosity group-hover:opacity-55"
-                      : "opacity-100",
-                  )}
+                  className="object-cover transition duration-700 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                 <div className="absolute inset-0 gold-border rounded-2xl" />
@@ -105,9 +79,9 @@ export function Gallery() {
                   {photo.alt}
                 </span>
               </motion.button>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <AnimatePresence>

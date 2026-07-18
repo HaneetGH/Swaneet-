@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, authCookieValue, getAdminPin } from "@/lib/auth";
+import {
+  ADMIN_COOKIE,
+  authCookieValue,
+  verifyAdminPin,
+} from "@/lib/auth";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { pin?: string };
-  if (!body.pin || body.pin !== getAdminPin()) {
+  if (!body.pin || !(await verifyAdminPin(body.pin))) {
     return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
   }
 

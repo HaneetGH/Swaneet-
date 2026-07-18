@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CalendarDays, Images, LogOut, Users } from "lucide-react";
+import { CalendarDays, Images, KeyRound, LogOut, Users } from "lucide-react";
 import type { GalleryImage, ManagedEvent, RsvpEntry } from "@/lib/types";
+import { ChangePinForm } from "@/components/dashboard/ChangePinForm";
 import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
 import { RsvpManager } from "@/components/dashboard/RsvpManager";
@@ -16,7 +17,7 @@ type DashboardShellProps = {
   rsvps: RsvpEntry[];
 };
 
-type Tab = "rsvp" | "events" | "gallery";
+type Tab = "rsvp" | "events" | "gallery" | "settings";
 
 export function DashboardShell({
   events,
@@ -67,6 +68,7 @@ export function DashboardShell({
               ["rsvp", "RSVPs", Users],
               ["gallery", "Upload Images", Images],
               ["events", "Events", CalendarDays],
+              ["settings", "PIN", KeyRound],
             ] as const
           ).map(([id, label, Icon]) => (
             <button
@@ -95,8 +97,10 @@ export function DashboardShell({
           <RsvpManager initialRsvps={rsvps} />
         ) : tab === "events" ? (
           <EventsManager initialEvents={events} />
-        ) : (
+        ) : tab === "gallery" ? (
           <GalleryManager initialGallery={gallery} />
+        ) : (
+          <ChangePinForm />
         )}
       </div>
     </div>

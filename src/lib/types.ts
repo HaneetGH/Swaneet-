@@ -36,4 +36,6 @@ export type ContentStore = {
   events: ManagedEvent[];
   gallery: GalleryImage[];
   rsvps: RsvpEntry[];
+  /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */
+  adminPinHash?: string;
 };

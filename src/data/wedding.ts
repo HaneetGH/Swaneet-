@@ -115,14 +115,11 @@ export const wedding = {
       ],
     },
   },
-  gallery: [
-    { id: 1, alt: "Invitation artwork — the couple", aspect: "portrait" as const },
-    { id: 2, alt: "Invitation artwork — floral arch", aspect: "landscape" as const },
-    { id: 3, alt: "Invitation artwork — golden lanterns", aspect: "square" as const },
-    { id: 4, alt: "Invitation artwork — peacocks", aspect: "portrait" as const },
-    { id: 5, alt: "Invitation artwork — palace", aspect: "landscape" as const },
-    { id: 6, alt: "Invitation artwork — celebration", aspect: "square" as const },
-  ],
+  gallery: [] as ReadonlyArray<{
+    id: number;
+    alt: string;
+    aspect: "portrait" | "landscape" | "square";
+  }>,
   story: [
     {
       title: "Two Families",
