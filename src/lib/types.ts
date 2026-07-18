@@ -21,7 +21,19 @@ export type GalleryImage = {
   createdAt: string;
 };
 
+export type RsvpEntry = {
+  id: string;
+  name: string;
+  guests: number;
+  attendance: "yes" | "no" | "maybe";
+  meal?: "vegetarian" | "non-vegetarian" | "no-preference";
+  notes?: string;
+  contactFamily?: string;
+  createdAt: string;
+};
+
 export type ContentStore = {
   events: ManagedEvent[];
   gallery: GalleryImage[];
+  rsvps: RsvpEntry[];
 };

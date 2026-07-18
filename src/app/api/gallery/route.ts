@@ -1,40 +1,21 @@
 import { randomUUID } from "crypto";
-import { promises as fs } from "fs";
-import path from "path";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { listGallery, readStore, writeStore } from "@/lib/store";
 import type { GalleryImage } from "@/lib/types";
+import { saveUploadedImage } from "@/lib/uploads";
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_FILES = 10;
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 function collectFiles(form: FormData): File[] {
-  const fromFiles = form.getAll("files").filter((item): item is File => item instanceof File);
+  const fromFiles = form
+    .getAll("files")
+    .filter((item): item is File => item instanceof File);
   if (fromFiles.length) return fromFiles;
   const single = form.get("file");
   return single instanceof File ? [single] : [];
-}
-
-async function saveFile(
-  file: File,
-  alt: string,
-  aspect: GalleryImage["aspect"],
-): Promise<GalleryImage> {
-  const ext = file.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
-  const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-  await fs.writeFile(path.join(UPLOAD_DIR, filename), buffer);
-
-  return {
-    id: randomUUID(),
-    alt: alt || file.name.replace(/\.[^.]+$/, "") || "Wedding photo",
-    src: `/uploads/${filename}`,
-    aspect,
-    createdAt: new Date().toISOString(),
-  };
 }
 
 export async function GET() {
@@ -52,12 +33,17 @@ export async function POST(request: Request) {
   const alt = String(form.get("alt") || "");
   const aspectRaw = String(form.get("aspect") || "square");
   const aspect: GalleryImage["aspect"] =
-    aspectRaw === "portrait" || aspectRaw === "landscape" || aspectRaw === "square"
+    aspectRaw === "portrait" ||
+    aspectRaw === "landscape" ||
+    aspectRaw === "square"
       ? aspectRaw
       : "square";
 
   if (!files.length) {
-    return NextResponse.json({ error: "At least one image is required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "At least one image is required" },
+      { status: 400 },
+    );
   }
 
   if (files.length > MAX_FILES) {
@@ -70,7 +56,9 @@ export async function POST(request: Request) {
   for (const file of files) {
     if (!ALLOWED.has(file.type)) {
       return NextResponse.json(
-        { error: `${file.name}: only JPG, PNG, WEBP, or GIF images are allowed` },
+        {
+          error: `${file.name}: only JPG, PNG, WEBP, or GIF images are allowed`,
+        },
         { status: 400 },
       );
     }
@@ -82,8 +70,6 @@ export async function POST(request: Request) {
     }
   }
 
-  await fs.mkdir(UPLOAD_DIR, { recursive: true });
-
   const images: GalleryImage[] = [];
   for (const [index, file] of files.entries()) {
     const caption =
@@ -92,15 +78,20 @@ export async function POST(request: Request) {
         : alt
           ? `${alt} (${index + 1})`
           : file.name.replace(/\.[^.]+$/, "");
-    images.push(await saveFile(file, caption, aspect));
+
+    const src = await saveUploadedImage(file);
+    images.push({
+      id: randomUUID(),
+      alt: caption || "Wedding photo",
+      src,
+      aspect,
+      createdAt: new Date().toISOString(),
+    });
   }
 
   const store = await readStore();
   store.gallery = [...images, ...store.gallery];
   await writeStore(store);
 
-  return NextResponse.json(
-    { images, image: images[0] },
-    { status: 201 },
-  );
+  return NextResponse.json({ images, image: images[0] }, { status: 201 });
 }

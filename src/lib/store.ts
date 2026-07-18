@@ -1,12 +1,19 @@
 import { promises as fs } from "fs";
 import path from "path";
-import type { ContentStore, GalleryImage, ManagedEvent } from "@/lib/types";
+import { readStoreFromDb, writeStoreToDb } from "@/lib/db";
+import { hasDatabase } from "@/lib/env";
+import type {
+  ContentStore,
+  GalleryImage,
+  ManagedEvent,
+  RsvpEntry,
+} from "@/lib/types";
 import { wedding } from "@/data/wedding";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "content.json");
 
-function defaultStore(): ContentStore {
+export function defaultStore(): ContentStore {
   return {
     events: wedding.events.map((event) => ({
       id: event.id,
@@ -27,10 +34,20 @@ function defaultStore(): ContentStore {
       aspect: item.aspect,
       createdAt: new Date(0).toISOString(),
     })),
+    rsvps: [],
   };
 }
 
-async function ensureStore(): Promise<void> {
+function normalizeStore(raw: Partial<ContentStore>): ContentStore {
+  const defaults = defaultStore();
+  return {
+    events: raw.events ?? defaults.events,
+    gallery: raw.gallery ?? defaults.gallery,
+    rsvps: raw.rsvps ?? [],
+  };
+}
+
+async function ensureLocalStore(): Promise<void> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
     await fs.access(STORE_PATH);
@@ -39,26 +56,42 @@ async function ensureStore(): Promise<void> {
   }
 }
 
-export async function readStore(): Promise<ContentStore> {
-  await ensureStore();
+async function readLocalStore(): Promise<ContentStore> {
+  await ensureLocalStore();
   const raw = await fs.readFile(STORE_PATH, "utf8");
-  return JSON.parse(raw) as ContentStore;
+  return normalizeStore(JSON.parse(raw) as Partial<ContentStore>);
+}
+
+async function writeLocalStore(store: ContentStore): Promise<void> {
+  await ensureLocalStore();
+  await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
+}
+
+export async function readStore(): Promise<ContentStore> {
+  if (hasDatabase()) {
+    const fromDb = await readStoreFromDb();
+    if (!fromDb) {
+      const seeded = defaultStore();
+      await writeStoreToDb(seeded);
+      return seeded;
+    }
+    return normalizeStore(fromDb);
+  }
+
+  return readLocalStore();
 }
 
 export async function writeStore(store: ContentStore): Promise<void> {
-  await ensureStore();
-  await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
+  const normalized = normalizeStore(store);
+  if (hasDatabase()) {
+    await writeStoreToDb(normalized);
+    return;
+  }
+  await writeLocalStore(normalized);
 }
 
 export async function listEvents(): Promise<ManagedEvent[]> {
   const store = await readStore();
-  return store.events;
-}
-
-export async function saveEvents(events: ManagedEvent[]): Promise<ManagedEvent[]> {
-  const store = await readStore();
-  store.events = events;
-  await writeStore(store);
   return store.events;
 }
 
@@ -67,9 +100,30 @@ export async function listGallery(): Promise<GalleryImage[]> {
   return store.gallery;
 }
 
-export async function saveGallery(gallery: GalleryImage[]): Promise<GalleryImage[]> {
+export async function listRsvps(): Promise<RsvpEntry[]> {
   const store = await readStore();
-  store.gallery = gallery;
+  return store.rsvps;
+}
+
+export async function addRsvp(
+  entry: Omit<RsvpEntry, "id" | "createdAt">,
+): Promise<RsvpEntry> {
+  const store = await readStore();
+  const rsvp: RsvpEntry = {
+    ...entry,
+    id: `rsvp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+  };
+  store.rsvps = [rsvp, ...store.rsvps];
   await writeStore(store);
-  return store.gallery;
+  return rsvp;
+}
+
+export async function deleteRsvp(id: string): Promise<boolean> {
+  const store = await readStore();
+  const next = store.rsvps.filter((item) => item.id !== id);
+  if (next.length === store.rsvps.length) return false;
+  store.rsvps = next;
+  await writeStore(store);
+  return true;
 }

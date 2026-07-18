@@ -2,8 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check } from "lucide-react";
-import { useState } from "react";
+import { Heart } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { wedding } from "@/data/wedding";
@@ -31,8 +31,54 @@ type FormValues = z.infer<typeof schema>;
 const fieldClass =
   "w-full rounded-xl border border-gold/25 bg-[#141018] px-4 py-3 font-body text-sm text-cream outline-none transition placeholder:text-muted/60 focus:border-gold/60 focus:bg-[#1a1520] [color-scheme:dark]";
 
+const thankYouMessages = {
+  yes: [
+    {
+      title: "Aww, you’re coming!",
+      body: "Our hearts just did a little bhangra. Can’t wait to celebrate #Swaneet with you.",
+    },
+    {
+      title: "Yay, seat saved!",
+      body: "Thank you for saying yes. Maple Garden is going to sparkle brighter with you there.",
+    },
+    {
+      title: "Blessings received!",
+      body: "You’ve made Haneet & Swarandeep so happy. See you for the shaadi magic.",
+    },
+  ],
+  maybe: [
+    {
+      title: "Fingers crossed!",
+      body: "No pressure — just butterflies. We hope your “maybe” turns into a joyful yes.",
+    },
+    {
+      title: "We’re holding a little hope",
+      body: "Thank you for letting us know. We’ll keep a warm welcome ready, just in case.",
+    },
+  ],
+  no: [
+    {
+      title: "We’ll miss you",
+      body: "Thank you for telling us with love. Your blessings mean the world to #Swaneet.",
+    },
+    {
+      title: "Sending hugs anyway",
+      body: "We understand, and we’re grateful. Please keep us in your prayers on our big day.",
+    },
+  ],
+} as const;
+
+type ThankYouMessage = { title: string; body: string };
+
+function pickMessage(attendance: FormValues["attendance"]): ThankYouMessage {
+  const list = thankYouMessages[attendance];
+  return list[Math.floor(Math.random() * list.length)];
+}
+
 export function RSVP() {
   const [success, setSuccess] = useState(false);
+  const [message, setMessage] = useState<ThankYouMessage | null>(null);
+  const [submitError, setSubmitError] = useState("");
   const {
     register,
     handleSubmit,
@@ -47,11 +93,29 @@ export function RSVP() {
     },
   });
 
+  const familyList = useMemo(
+    () => wedding.rsvpFamilies.map((f) => f.name).join(", "),
+    [],
+  );
+
   const onSubmit = async (data: FormValues) => {
-    await new Promise((r) => setTimeout(r, 900));
-    console.info("RSVP submitted", data);
-    setSuccess(true);
-    reset();
+    setSubmitError("");
+    try {
+      const res = await fetch("/api/rsvp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        setSubmitError("Could not send your RSVP. Please try again.");
+        return;
+      }
+      setMessage(pickMessage(data.attendance));
+      setSuccess(true);
+      reset();
+    } catch {
+      setSubmitError("Could not send your RSVP. Please try again.");
+    }
   };
 
   return (
@@ -61,12 +125,12 @@ export function RSVP() {
         <SectionHeading
           eyebrow="Kindly reply"
           title="RSVP"
-          subtitle={`Please RSVP with the ${wedding.rsvpFamilies.map((f) => f.name).join(", ")}`}
+          subtitle={`Please RSVP with the ${familyList}`}
         />
 
         <GlassCard glow>
           <AnimatePresence mode="wait">
-            {success ? (
+            {success && message ? (
               <motion.div
                 key="success"
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -80,20 +144,25 @@ export function RSVP() {
                   transition={{ type: "spring", stiffness: 220, damping: 16 }}
                   className="mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-gold/40 bg-gold/15 text-gold"
                 >
-                  <Check size={28} />
+                  <Heart size={28} fill="currentColor" />
                 </motion.div>
-                <h3 className="font-display text-2xl text-cream">
-                  Thank you
+                <p className="font-body text-[10px] uppercase tracking-[0.35em] text-gold/70">
+                  {wedding.hashtag}
+                </p>
+                <h3 className="mt-3 font-script text-4xl text-gold-soft sm:text-5xl">
+                  {message.title}
                 </h3>
-                <p className="mt-3 max-w-sm font-body text-sm text-muted">
-                  Your response has been received. We look forward to celebrating
-                  with you.
+                <p className="mt-4 max-w-sm font-body text-sm leading-relaxed text-muted">
+                  {message.body}
                 </p>
                 <Button
                   type="button"
                   variant="outline"
                   className="mt-8"
-                  onClick={() => setSuccess(false)}
+                  onClick={() => {
+                    setSuccess(false);
+                    setMessage(null);
+                  }}
                 >
                   Submit another
                 </Button>
@@ -205,12 +274,16 @@ export function RSVP() {
                   />
                 </div>
 
+                {submitError ? (
+                  <p className="text-xs text-red-300">{submitError}</p>
+                ) : null}
+
                 <Button
                   type="submit"
                   disabled={isSubmitting}
                   className="w-full"
                 >
-                  {isSubmitting ? "Sending…" : "Send RSVP"}
+                  {isSubmitting ? "Sending with love…" : "Send RSVP"}
                 </Button>
               </motion.form>
             )}

@@ -3,22 +3,28 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CalendarDays, Images, LogOut } from "lucide-react";
-import type { GalleryImage, ManagedEvent } from "@/lib/types";
+import { CalendarDays, Images, LogOut, Users } from "lucide-react";
+import type { GalleryImage, ManagedEvent, RsvpEntry } from "@/lib/types";
 import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
+import { RsvpManager } from "@/components/dashboard/RsvpManager";
 import { cn } from "@/lib/utils";
 
 type DashboardShellProps = {
   events: ManagedEvent[];
   gallery: GalleryImage[];
+  rsvps: RsvpEntry[];
 };
 
-type Tab = "events" | "gallery";
+type Tab = "rsvp" | "events" | "gallery";
 
-export function DashboardShell({ events, gallery }: DashboardShellProps) {
+export function DashboardShell({
+  events,
+  gallery,
+  rsvps,
+}: DashboardShellProps) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("gallery");
+  const [tab, setTab] = useState<Tab>("rsvp");
 
   const logout = async () => {
     await fetch("/api/auth", { method: "DELETE" });
@@ -55,9 +61,10 @@ export function DashboardShell({ events, gallery }: DashboardShellProps) {
       </header>
 
       <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
-        <div className="mb-8 flex gap-2 rounded-full border border-gold/20 bg-[#141018] p-1 w-fit">
+        <div className="mb-8 flex flex-wrap gap-2 rounded-full border border-gold/20 bg-[#141018] p-1 w-fit">
           {(
             [
+              ["rsvp", "RSVPs", Users],
               ["gallery", "Upload Images", Images],
               ["events", "Events", CalendarDays],
             ] as const
@@ -75,11 +82,18 @@ export function DashboardShell({ events, gallery }: DashboardShellProps) {
             >
               <Icon size={14} />
               {label}
+              {id === "rsvp" && rsvps.length > 0 ? (
+                <span className="rounded-full bg-black/20 px-1.5 py-0.5 text-[10px]">
+                  {rsvps.length}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
 
-        {tab === "events" ? (
+        {tab === "rsvp" ? (
+          <RsvpManager initialRsvps={rsvps} />
+        ) : tab === "events" ? (
           <EventsManager initialEvents={events} />
         ) : (
           <GalleryManager initialGallery={gallery} />

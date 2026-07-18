@@ -1,8 +1,7 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { readStore, writeStore } from "@/lib/store";
+import { deleteUploadedImage } from "@/lib/uploads";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -20,15 +19,7 @@ export async function DELETE(_request: Request, { params }: Params) {
 
   store.gallery = store.gallery.filter((item) => item.id !== id);
   await writeStore(store);
-
-  if (image.src.startsWith("/uploads/")) {
-    const filePath = path.join(process.cwd(), "public", image.src);
-    try {
-      await fs.unlink(filePath);
-    } catch {
-      // File may already be missing
-    }
-  }
+  await deleteUploadedImage(image.src);
 
   return NextResponse.json({ ok: true });
 }

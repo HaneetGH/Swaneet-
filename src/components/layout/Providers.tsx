@@ -39,7 +39,9 @@ export function Providers({ children }: ProvidersProps) {
           <ScrollProgress />
           <CursorGlow />
           <MouseLight />
-          <div className="animate-fade-in">{children}</div>
+          <div className="animate-fade-in [animation-duration:1.1s]">
+            {children}
+          </div>
         </>
       ) : null}
     </>
