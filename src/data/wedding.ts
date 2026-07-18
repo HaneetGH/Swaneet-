@@ -20,7 +20,7 @@ export const wedding = {
   },
   grandparents: {
     names: "Late Sdn. Maya Devi & Late S. Ram Singh Chhabra Ji",
-    note: "With blessings from",
+    note: "With the blessings of Grand Parents",
   },
   childrenInvite: {
     names: ["Prabhmeet", "Rasneet"],
@@ -74,7 +74,8 @@ export const wedding = {
     name: "Maple Garden",
     detail: "A Unit of Sukhmani Resort",
     address: "Buria Road, Jagadhri",
-    fullAddress: "Maple Garden, Sukhmani Resort, Buria Road, Jagadhri",
+    fullAddress:
+      "Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri",
     mapQuery: "Maple Garden Sukhmani Resort Buria Road Jagadhri",
     mapsUrl:
       "https://www.google.com/maps/search/?api=1&query=Maple+Garden+Sukhmani+Resort+Buria+Road+Jagadhri",
@@ -106,11 +107,8 @@ export const wedding = {
       members: [
         {
           role: "Parents",
-          names: "Sdn. Gurmeet Kaur Chugh & S. Gurmeet Singh Chugh",
-        },
-        {
-          role: "Hometown",
-          names: "Hiriyur, Karnataka",
+          names:
+            "Sdn. Gurmeet Kaur Chugh & S. Gurmeet Singh Chugh of Hiriyur, Karnataka",
         },
       ],
     },
@@ -127,7 +125,7 @@ export const wedding = {
     },
     {
       title: "Blessings",
-      body: "With blessings from Late Sdn. Maya Devi & Late S. Ram Singh Chhabra Ji, the families invite you to celebrate this divine union.",
+      body: "With the blessings of Grand Parents Late Sdn. Maya Devi & Late S. Ram Singh Chhabra Ji, the families cordially invite you to the wedding celebrations.",
     },
     {
       title: "A Joyful Call",

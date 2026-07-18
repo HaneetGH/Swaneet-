@@ -45,7 +45,7 @@ export function Footer() {
         </svg>
 
         <p className="mt-8 font-body text-[10px] tracking-[0.25em] text-muted/70">
-          Maple Garden · Buria Road, Jagadhri · August 2026
+          Maple Garden (A Unit of Sukhmani Resort) · Buria Road, Jagadhri · August 2026
         </p>
       </motion.div>
     </footer>

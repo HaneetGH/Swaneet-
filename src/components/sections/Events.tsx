@@ -50,7 +50,7 @@ export function Events() {
         <SectionHeading
           eyebrow="Celebrations"
           title="Wedding Events"
-          subtitle="Join us for these ceremonies at Maple Garden"
+          subtitle="Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri"
         />
 
         <div className="grid gap-6 md:grid-cols-3">

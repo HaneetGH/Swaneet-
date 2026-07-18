@@ -20,7 +20,7 @@ export function Venue() {
         <SectionHeading
           eyebrow="Location"
           title="The Venue"
-          subtitle="Where we gather to celebrate"
+          subtitle="Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri"
         />
 
         <div className="grid items-stretch gap-6 lg:grid-cols-2">

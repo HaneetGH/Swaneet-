@@ -25,7 +25,7 @@ const body = Outfit({
 export const metadata: Metadata = {
   metadataBase: new URL("https://swaneet.wedding"),
   title: `${wedding.couple.groom.name} & ${wedding.couple.bride.name} | ${wedding.hashtag}`,
-  description: `You are cordially invited to the wedding of ${wedding.couple.groom.name} and ${wedding.couple.bride.name} on 12th & 13th August 2026 at Maple Garden, Buria Road, Jagadhri.`,
+  description: `You are cordially invited to the wedding of ${wedding.couple.groom.name} and ${wedding.couple.bride.name} on 12th & 13th August 2026 at Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri.`,
   keywords: [
     "wedding",
     wedding.couple.groom.name,
@@ -38,14 +38,15 @@ export const metadata: Metadata = {
   openGraph: {
     title: `${wedding.couple.groom.firstName} & ${wedding.couple.bride.firstName} — ${wedding.hashtag}`,
     description:
-      "Wedding Dinner on 12th August 2026 · Anand Karaj on 13th August 2026 · Maple Garden, Jagadhri",
+      "Wedding Dinner on 12th August 2026 · Anand Karaj & Brunch on 13th August 2026 · Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri",
     type: "website",
     images: [{ url: "/images/invitation.png" }],
   },
   twitter: {
     card: "summary_large_image",
     title: `${wedding.couple.groom.firstName} & ${wedding.couple.bride.firstName}`,
-    description: "12th & 13th August 2026 · Maple Garden, Jagadhri",
+    description:
+      "12th & 13th August 2026 · Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri",
     images: ["/images/invitation.png"],
   },
   robots: { index: true, follow: true },

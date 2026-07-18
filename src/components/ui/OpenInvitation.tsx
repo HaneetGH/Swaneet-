@@ -209,7 +209,7 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
                         12<sup>th</sup> & 13<sup>th</sup> August 2026
                       </p>
                       <p className="mt-2 font-body text-[11px] text-[#6b1d2a]/60">
-                        Maple Garden · Jagadhri
+                        Maple Garden · Buria Road, Jagadhri
                       </p>
                       <p className="mt-5 font-script text-xl text-[#9a7b2f]">
                         {wedding.hashtag}

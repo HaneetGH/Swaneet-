@@ -35,18 +35,6 @@
       "address": "Buria Road, Jagadhri",
       "description": "Followed by blessings & departure",
       "icon": "sun"
-    },
-    {
-      "id": "event-1784359405831",
-      "name": "Random",
-      "date": "11:11:11",
-      "day": "",
-      "time": "5",
-      "venue": "test",
-      "venueDetail": "test",
-      "address": "test",
-      "description": "",
-      "icon": "heart"
     }
   ],
   "gallery": [],

@@ -72,7 +72,7 @@ export function Family() {
             </div>
             <div className="mt-8 border-t border-gold/15 pt-6">
               <p className="font-body text-[10px] uppercase tracking-[0.25em] text-muted">
-                With blessings from
+                {wedding.grandparents.note}
               </p>
               <p className="mt-2 font-body text-sm leading-relaxed text-gold-soft">
                 {wedding.grandparents.names}
