@@ -136,3 +136,23 @@ export const HOUR_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i + 1));
 export const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) =>
   String(i).padStart(2, "0"),
 );
+
+/** Sort key from display date + time strings (earlier first). */
+export function eventSortKey(date: string, time: string): number {
+  const dateISO = parseDisplayDate(date);
+  const { time: timeISO } = parseDisplayTime(time);
+  if (!dateISO) return Number.MAX_SAFE_INTEGER;
+
+  const [y, m, d] = dateISO.split("-").map(Number);
+  const [hh, mm] = (timeISO || "00:00").split(":").map(Number);
+  const stamp = Date.UTC(y, (m || 1) - 1, d || 1, hh || 0, mm || 0);
+  return Number.isNaN(stamp) ? Number.MAX_SAFE_INTEGER : stamp;
+}
+
+export function sortEventsByDateTime<T extends { date: string; time: string }>(
+  events: T[],
+): T[] {
+  return [...events].sort(
+    (a, b) => eventSortKey(a.date, a.time) - eventSortKey(b.date, b.time),
+  );
+}

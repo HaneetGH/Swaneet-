@@ -15,6 +15,7 @@ import type {
   ManagedEvent,
   RsvpEntry,
 } from "@/lib/types";
+import { sortEventsByDateTime } from "@/lib/datetime";
 import { wedding } from "@/data/wedding";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -49,7 +50,7 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     eventId: image.eventId || "",
   }));
   return {
-    events: raw.events ?? defaults.events,
+    events: sortEventsByDateTime(raw.events ?? defaults.events),
     gallery,
     rsvps: raw.rsvps ?? [],
     adminPinHash: raw.adminPinHash,
@@ -163,7 +164,7 @@ export function getStorageInfo() {
 
 export async function listEvents(): Promise<ManagedEvent[]> {
   const store = await readStore();
-  return store.events;
+  return sortEventsByDateTime(store.events);
 }
 
 export async function listGallery(): Promise<GalleryImage[]> {

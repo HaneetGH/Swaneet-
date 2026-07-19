@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Heart, Moon, Sparkles, Star, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { wedding } from "@/data/wedding";
+import { sortEventsByDateTime } from "@/lib/datetime";
 import type { EventIcon, ManagedEvent } from "@/lib/types";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils";
@@ -16,18 +17,20 @@ const icons: Record<EventIcon, typeof Moon> = {
   sparkles: Sparkles,
 };
 
-const fallbackEvents: ManagedEvent[] = wedding.events.map((event) => ({
-  id: event.id,
-  name: event.name,
-  date: event.date,
-  day: event.day,
-  time: event.time,
-  venue: event.venue,
-  venueDetail: event.venueDetail,
-  address: event.address,
-  description: event.description,
-  icon: event.icon,
-}));
+const fallbackEvents: ManagedEvent[] = sortEventsByDateTime(
+  wedding.events.map((event) => ({
+    id: event.id,
+    name: event.name,
+    date: event.date,
+    day: event.day,
+    time: event.time,
+    venue: event.venue,
+    venueDetail: event.venueDetail,
+    address: event.address,
+    description: event.description,
+    icon: event.icon,
+  })),
+);
 
 export function Events() {
   const [events, setEvents] = useState<ManagedEvent[]>(fallbackEvents);
@@ -37,7 +40,9 @@ export function Events() {
     fetch("/api/events")
       .then((res) => res.json())
       .then((data: { events?: ManagedEvent[] }) => {
-        if (active && data.events?.length) setEvents(data.events);
+        if (active && data.events?.length) {
+          setEvents(sortEventsByDateTime(data.events));
+        }
       })
       .catch(() => undefined);
     return () => {

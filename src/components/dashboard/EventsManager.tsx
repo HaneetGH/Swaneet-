@@ -13,6 +13,7 @@ import {
   parseDisplayDate,
   parseDisplayTime,
   partsToTimeISO,
+  sortEventsByDateTime,
   timeISOToParts,
   type TimeParts,
 } from "@/lib/datetime";
@@ -87,7 +88,9 @@ function eventToForm(event: ManagedEvent): FormState {
 }
 
 export function EventsManager({ initialEvents }: EventsManagerProps) {
-  const [events, setEvents] = useState(initialEvents);
+  const [events, setEvents] = useState(() =>
+    sortEventsByDateTime(initialEvents),
+  );
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -168,10 +171,12 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
       const saved = data.event;
       if (editingId) {
         setEvents((prev) =>
-          prev.map((item) => (item.id === editingId ? saved : item)),
+          sortEventsByDateTime(
+            prev.map((item) => (item.id === editingId ? saved : item)),
+          ),
         );
       } else {
-        setEvents((prev) => [...prev, saved]);
+        setEvents((prev) => sortEventsByDateTime([...prev, saved]));
       }
       reset();
     } catch {

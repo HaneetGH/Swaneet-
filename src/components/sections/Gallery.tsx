@@ -5,22 +5,25 @@ import Image from "next/image";
 import { Images, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { wedding } from "@/data/wedding";
+import { sortEventsByDateTime } from "@/lib/datetime";
 import type { GalleryImage, ManagedEvent } from "@/lib/types";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils";
 
-const fallbackEvents: ManagedEvent[] = wedding.events.map((event) => ({
-  id: event.id,
-  name: event.name,
-  date: event.date,
-  day: event.day,
-  time: event.time,
-  venue: event.venue,
-  venueDetail: event.venueDetail,
-  address: event.address,
-  description: event.description,
-  icon: event.icon,
-}));
+const fallbackEvents: ManagedEvent[] = sortEventsByDateTime(
+  wedding.events.map((event) => ({
+    id: event.id,
+    name: event.name,
+    date: event.date,
+    day: event.day,
+    time: event.time,
+    venue: event.venue,
+    venueDetail: event.venueDetail,
+    address: event.address,
+    description: event.description,
+    icon: event.icon,
+  })),
+);
 
 export function Gallery() {
   const [gallery, setGallery] = useState<GalleryImage[]>([]);
@@ -37,7 +40,9 @@ export function Gallery() {
       .then(([galleryData, eventsData]) => {
         if (!alive) return;
         setGallery(galleryData.gallery ?? []);
-        if (eventsData.events?.length) setEvents(eventsData.events);
+        if (eventsData.events?.length) {
+          setEvents(sortEventsByDateTime(eventsData.events));
+        }
       })
       .catch(() => undefined);
     return () => {
