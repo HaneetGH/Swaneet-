@@ -9,6 +9,7 @@ import { ChangePinForm } from "@/components/dashboard/ChangePinForm";
 import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
 import { RsvpManager } from "@/components/dashboard/RsvpManager";
+import { StorageBanner } from "@/components/dashboard/StorageBanner";
 import { cn } from "@/lib/utils";
 
 type DashboardShellProps = {
@@ -62,6 +63,7 @@ export function DashboardShell({
       </header>
 
       <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
+        <StorageBanner />
         <div className="mb-8 flex flex-wrap gap-2 rounded-full border border-gold/20 bg-[#141018] p-1 w-fit">
           {(
             [

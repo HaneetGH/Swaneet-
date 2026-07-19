@@ -1,7 +1,14 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { readStoreFromBlob, writeStoreToBlob } from "@/lib/blob-store";
 import { readStoreFromDb, writeStoreToDb } from "@/lib/db";
-import { hasDatabase } from "@/lib/env";
+import {
+  canPersistData,
+  hasBlobStorage,
+  hasDatabase,
+  isVercelRuntime,
+  storageMode,
+} from "@/lib/env";
 import type {
   ContentStore,
   GalleryImage,
@@ -12,6 +19,9 @@ import { wedding } from "@/data/wedding";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "content.json");
+
+const STORAGE_ERROR =
+  "Storage is not configured for this deployment. In Vercel → Project → Storage, connect Neon Postgres (DATABASE_URL) or Blob (BLOB_READ_WRITE_TOKEN), then redeploy.";
 
 export function defaultStore(): ContentStore {
   return {
@@ -64,12 +74,22 @@ async function readLocalStore(): Promise<ContentStore> {
 }
 
 async function writeLocalStore(store: ContentStore): Promise<void> {
-  await ensureLocalStore();
-  await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
+  try {
+    await ensureLocalStore();
+    await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err?.code === "EROFS" || err?.code === "EACCES" || isVercelRuntime()) {
+      throw new Error(STORAGE_ERROR);
+    }
+    throw error;
+  }
 }
 
 export async function readStore(): Promise<ContentStore> {
-  if (hasDatabase()) {
+  const mode = storageMode();
+
+  if (mode === "database") {
     const fromDb = await readStoreFromDb();
     if (!fromDb) {
       const seeded = defaultStore();
@@ -79,16 +99,53 @@ export async function readStore(): Promise<ContentStore> {
     return normalizeStore(fromDb);
   }
 
-  return readLocalStore();
+  if (mode === "blob") {
+    const fromBlob = await readStoreFromBlob();
+    if (!fromBlob) {
+      const seeded = defaultStore();
+      await writeStoreToBlob(seeded);
+      return seeded;
+    }
+    return normalizeStore(fromBlob);
+  }
+
+  if (mode === "local") {
+    return readLocalStore();
+  }
+
+  // Vercel without storage: serve defaults read-only
+  return defaultStore();
 }
 
 export async function writeStore(store: ContentStore): Promise<void> {
+  if (!canPersistData()) {
+    throw new Error(STORAGE_ERROR);
+  }
+
   const normalized = normalizeStore(store);
-  if (hasDatabase()) {
+  const mode = storageMode();
+
+  if (mode === "database") {
     await writeStoreToDb(normalized);
     return;
   }
+
+  if (mode === "blob") {
+    await writeStoreToBlob(normalized);
+    return;
+  }
+
   await writeLocalStore(normalized);
+}
+
+export function getStorageInfo() {
+  return {
+    mode: storageMode(),
+    hasDatabase: hasDatabase(),
+    hasBlobStorage: hasBlobStorage(),
+    canPersist: canPersistData(),
+    isVercel: isVercelRuntime(),
+  };
 }
 
 export async function listEvents(): Promise<ManagedEvent[]> {
