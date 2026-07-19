@@ -42,6 +42,7 @@ export function defaultStore(): ContentStore {
     gallery: [],
     rsvps: [],
     accommodations: [],
+    emailOtps: {},
   };
 }
 
@@ -82,6 +83,7 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     gallery,
     rsvps: raw.rsvps ?? [],
     accommodations,
+    emailOtps: raw.emailOtps ?? {},
     adminPinHash: raw.adminPinHash,
   };
 }

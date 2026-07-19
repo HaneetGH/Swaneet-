@@ -67,11 +67,18 @@ export type AccommodationRequest = {
   createdAt: string;
 };
 
+export type EmailOtpEntry = {
+  hash: string;
+  expiresAt: string;
+};
+
 export type ContentStore = {
   events: ManagedEvent[];
   gallery: GalleryImage[];
   rsvps: RsvpEntry[];
   accommodations: AccommodationRequest[];
+  /** Pending email verification codes (hashed) */
+  emailOtps?: Record<string, EmailOtpEntry>;
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */
   adminPinHash?: string;
 };

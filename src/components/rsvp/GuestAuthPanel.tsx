@@ -149,7 +149,8 @@ export function GuestAuthPanel({ onAuthed }: GuestAuthPanelProps) {
         Request accommodation
       </h4>
       <p className="mt-2 font-body text-sm leading-relaxed text-muted">
-        Sign in with Google or your phone number (OTP) to share stay details.
+        Sign in with Google or phone OTP. If we don’t have your email yet,
+        you’ll verify it next so stay confirmations can reach you.
       </p>
 
       {mode === "choose" ? (

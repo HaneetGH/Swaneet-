@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAuthenticated, resolveAccommodationUser } from "@/lib/auth";
+import {
+  isAuthenticated,
+  isEmailVerifiedForRequest,
+  resolveAccommodationUser,
+} from "@/lib/auth";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { addAccommodation, listAccommodations } from "@/lib/store";
 
@@ -46,11 +50,25 @@ export async function POST(request: Request) {
     }
 
     const guest = identity.kind === "guest" ? identity.user : null;
+    const email = parsed.data.email.trim().toLowerCase();
+
+    if (identity.kind === "guest") {
+      const verified = await isEmailVerifiedForRequest(email, guest);
+      if (!verified) {
+        return NextResponse.json(
+          {
+            error:
+              "Please verify your email with the code we sent before submitting.",
+          },
+          { status: 400 },
+        );
+      }
+    }
 
     const requestEntry = await addAccommodation({
       name: parsed.data.name,
       phone: parsed.data.phone || guest?.phone || "",
-      email: parsed.data.email || guest?.email || "",
+      email: email || guest?.email || "",
       people: parsed.data.people,
       rooms: parsed.data.rooms,
       checkIn: parsed.data.checkIn,

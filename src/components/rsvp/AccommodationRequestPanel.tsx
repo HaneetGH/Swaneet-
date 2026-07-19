@@ -30,10 +30,16 @@ export function AccommodationRequestPanel({
   onDone,
 }: AccommodationRequestPanelProps) {
   const [user, setUser] = useState<User | null>(null);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [emailFromAuth, setEmailFromAuth] = useState(false);
 
   const [name, setName] = useState(defaultName);
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState("");
   const [people, setPeople] = useState(defaultPeople);
   const [rooms, setRooms] = useState(1);
   const [checkIn, setCheckIn] = useState("2026-08-12");
@@ -44,15 +50,87 @@ export function AccommodationRequestPanel({
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const onAuthed = useCallback((next: User) => {
-    setUser(next);
-    if (!defaultName && next.displayName) setName(next.displayName);
-    if (next.phoneNumber) setPhone(next.phoneNumber);
-    if (next.email) setEmail(next.email);
-  }, [defaultName]);
+  const resetEmailGate = () => {
+    setEmailVerified(false);
+    setEmailFromAuth(false);
+    setEmailCode("");
+    setCodeSent(false);
+    setEmailError("");
+  };
+
+  const onAuthed = useCallback(
+    (next: User) => {
+      setUser(next);
+      if (!defaultName && next.displayName) setName(next.displayName);
+      if (next.phoneNumber) setPhone(next.phoneNumber);
+      if (next.email) {
+        setEmail(next.email);
+        setEmailVerified(true);
+        setEmailFromAuth(true);
+      } else {
+        resetEmailGate();
+      }
+    },
+    [defaultName],
+  );
+
+  const sendEmailCode = async () => {
+    setEmailBusy(true);
+    setEmailError("");
+    try {
+      const res = await fetch("/api/auth/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setEmailError(data.error || "Could not send verification code");
+        return;
+      }
+      setCodeSent(true);
+    } catch {
+      setEmailError("Could not send verification code");
+    } finally {
+      setEmailBusy(false);
+    }
+  };
+
+  const verifyEmailCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailBusy(true);
+    setEmailError("");
+    try {
+      const res = await fetch("/api/auth/email/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, code: emailCode }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        email?: string;
+      };
+      if (!res.ok) {
+        setEmailError(data.error || "Could not verify email");
+        return;
+      }
+      if (data.email) setEmail(data.email);
+      setEmailVerified(true);
+      setEmailFromAuth(false);
+    } catch {
+      setEmailError("Could not verify email");
+    } finally {
+      setEmailBusy(false);
+    }
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!emailVerified) {
+      setSubmitError("Please verify your email first");
+      return;
+    }
     setSubmitting(true);
     setSubmitError("");
     try {
@@ -69,6 +147,7 @@ export function AccommodationRequestPanel({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({
           name,
           phone,
@@ -104,7 +183,7 @@ export function AccommodationRequestPanel({
       <div className="rounded-2xl border border-gold/25 bg-gold/10 px-5 py-6 text-center">
         <p className="font-display text-2xl text-cream">Stay request received</p>
         <p className="mt-2 font-body text-sm text-muted">
-          The family will confirm accommodation details with you soon.
+          The family will confirm accommodation details by email soon.
         </p>
         {onDone ? (
           <Button type="button" variant="outline" className="mt-5" onClick={onDone}>
@@ -117,6 +196,97 @@ export function AccommodationRequestPanel({
 
   if (!user) {
     return <GuestAuthPanel onAuthed={onAuthed} />;
+  }
+
+  if (!emailVerified) {
+    return (
+      <div className="space-y-4 rounded-2xl border border-gold/25 bg-[#100e14] px-5 py-6">
+        <div>
+          <p className="font-body text-[10px] uppercase tracking-[0.3em] text-gold/70">
+            Signed in · {user.phoneNumber || "Guest"}
+          </p>
+          <h4 className="mt-2 font-display text-2xl text-cream">
+            Add & verify email
+          </h4>
+          <p className="mt-1 font-body text-sm text-muted">
+            We don’t have an email for you yet. Confirm one so stay details can
+            be sent to you.
+          </p>
+        </div>
+
+        <form onSubmit={verifyEmailCode} className="space-y-3">
+          <div>
+            <label className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+              Email
+            </label>
+            <input
+              type="email"
+              className={fieldClass}
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setCodeSent(false);
+                setEmailCode("");
+              }}
+              placeholder="you@example.com"
+              required
+            />
+          </div>
+
+          {!codeSent ? (
+            <Button
+              type="button"
+              className="w-full"
+              disabled={emailBusy || !email.trim()}
+              onClick={sendEmailCode}
+            >
+              {emailBusy ? "Sending…" : "Send verification code"}
+            </Button>
+          ) : (
+            <>
+              <div>
+                <label className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                  Verification code
+                </label>
+                <input
+                  className={fieldClass}
+                  value={emailCode}
+                  onChange={(e) => setEmailCode(e.target.value)}
+                  placeholder="6-digit code from email"
+                  inputMode="numeric"
+                  required
+                />
+              </div>
+              <Button type="submit" disabled={emailBusy} className="w-full">
+                {emailBusy ? "Verifying…" : "Verify email & continue"}
+              </Button>
+              <button
+                type="button"
+                className="w-full font-body text-xs text-gold-soft"
+                disabled={emailBusy}
+                onClick={sendEmailCode}
+              >
+                Resend code
+              </button>
+            </>
+          )}
+        </form>
+
+        {emailError ? <p className="text-xs text-red-300">{emailError}</p> : null}
+
+        <button
+          type="button"
+          className="w-full font-body text-xs text-muted hover:text-cream"
+          onClick={async () => {
+            await signOutGuest();
+            setUser(null);
+            resetEmailGate();
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -132,7 +302,8 @@ export function AccommodationRequestPanel({
           Accommodation details
         </h4>
         <p className="mt-1 font-body text-sm text-muted">
-          {user.email || user.phoneNumber || "Verified guest"} · tell us how many
+          {email}
+          {user.phoneNumber ? ` · ${user.phoneNumber}` : ""} · tell us how many
           people need a stay.
         </p>
       </div>
@@ -164,16 +335,28 @@ export function AccommodationRequestPanel({
 
       <div>
         <label className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-          Email (for stay confirmation)
+          Email (verified)
         </label>
         <input
           type="email"
-          className={fieldClass}
+          className={cn(fieldClass, emailFromAuth && "opacity-80")}
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
+          readOnly
           required
         />
+        {!emailFromAuth ? (
+          <button
+            type="button"
+            className="mt-2 font-body text-xs text-gold-soft"
+            onClick={() => {
+              setEmailVerified(false);
+              setCodeSent(false);
+              setEmailCode("");
+            }}
+          >
+            Use a different email
+          </button>
+        ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -279,6 +462,7 @@ export function AccommodationRequestPanel({
         onClick={async () => {
           await signOutGuest();
           setUser(null);
+          resetEmailGate();
         }}
       >
         Sign out
