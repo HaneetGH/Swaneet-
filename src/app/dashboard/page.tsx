@@ -25,7 +25,7 @@ export default async function DashboardPage() {
   try {
     const [events, gallery, rsvps, accommodations] = await Promise.all([
       listEvents(),
-      listGallery(),
+      listGallery({ includePending: true }),
       listRsvps(),
       listAccommodations(),
     ]);

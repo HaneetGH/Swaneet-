@@ -46,7 +46,9 @@ function mediaKind(file: File): GalleryImage["kind"] {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const eventId = searchParams.get("eventId");
-  const gallery = await listGallery();
+  const wantsAll = searchParams.get("all") === "1";
+  const includePending = wantsAll && (await isAuthenticated());
+  const gallery = await listGallery({ includePending });
   const filtered = eventId
     ? gallery.filter((image) => image.eventId === eventId)
     : gallery;
@@ -82,6 +84,8 @@ async function registerFromJson(request: Request) {
     src: item.src,
     aspect: item.aspect,
     kind: item.kind,
+    status: "approved" as const,
+    source: "admin" as const,
     alt:
       item.alt ||
       `${event.name} ${item.kind === "video" ? "video" : "photo"}${
@@ -201,6 +205,8 @@ async function registerFromFormData(request: Request) {
       src,
       aspect,
       kind: mediaKind(file),
+      status: "approved",
+      source: "admin",
       createdAt: new Date().toISOString(),
     });
   }

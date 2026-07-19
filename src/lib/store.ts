@@ -63,6 +63,11 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
       image.src.includes("video/")
         ? ("video" as const)
         : ("image" as const),
+    status:
+      image.status === "pending" || image.status === "rejected"
+        ? image.status
+        : ("approved" as const),
+    source: image.source === "guest" ? ("guest" as const) : ("admin" as const),
   }));
 
   // Never replace a saved store's events with invitation defaults
@@ -205,9 +210,12 @@ export async function listEvents(): Promise<ManagedEvent[]> {
   return sortEventsByDateTime(store.events);
 }
 
-export async function listGallery(): Promise<GalleryImage[]> {
+export async function listGallery(options?: {
+  includePending?: boolean;
+}): Promise<GalleryImage[]> {
   const store = await readStore();
-  return store.gallery;
+  if (options?.includePending) return store.gallery;
+  return store.gallery.filter((image) => image.status === "approved");
 }
 
 export async function listRsvps(): Promise<RsvpEntry[]> {

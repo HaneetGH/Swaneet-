@@ -2,7 +2,7 @@
 
 import { upload } from "@vercel/blob/client";
 import Image from "next/image";
-import { Film, Images, Trash2, Upload, X } from "lucide-react";
+import { Check, Film, Images, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GalleryImage, ManagedEvent } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
@@ -76,12 +76,18 @@ export function GalleryManager({
     return new Map(events.map((event) => [event.id, event.name]));
   }, [events]);
 
+  const pendingGuest = useMemo(
+    () => gallery.filter((image) => image.status === "pending"),
+    [gallery],
+  );
+
   const filteredGallery = useMemo(() => {
-    if (filterEventId === "all") return gallery;
+    const published = gallery.filter((image) => image.status === "approved");
+    if (filterEventId === "all") return published;
     if (filterEventId === "unassigned") {
-      return gallery.filter((image) => !image.eventId);
+      return published.filter((image) => !image.eventId);
     }
-    return gallery.filter((image) => image.eventId === filterEventId);
+    return published.filter((image) => image.eventId === filterEventId);
   }, [filterEventId, gallery]);
 
   const groupedGallery = useMemo(() => {
@@ -299,6 +305,34 @@ export function GalleryManager({
     if (res.ok) setGallery((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const onModerate = async (
+    id: string,
+    status: "approved" | "rejected",
+    eventIdForApprove?: string,
+  ) => {
+    const res = await fetch(`/api/gallery/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status,
+        ...(status === "approved" && eventIdForApprove
+          ? { eventId: eventIdForApprove }
+          : {}),
+      }),
+    });
+    if (!res.ok) return;
+    if (status === "rejected") {
+      setGallery((prev) => prev.filter((item) => item.id !== id));
+      return;
+    }
+    const data = (await res.json()) as { image?: GalleryImage };
+    if (data.image) {
+      setGallery((prev) =>
+        prev.map((item) => (item.id === id ? data.image! : item)),
+      );
+    }
+  };
+
   return (
     <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
       <form
@@ -513,6 +547,83 @@ export function GalleryManager({
       </form>
 
       <div>
+        {pendingGuest.length > 0 ? (
+          <div className="mb-8 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <h3 className="font-display text-xl text-cream">
+                Guest photos to review
+              </h3>
+              <span className="font-body text-[10px] uppercase tracking-[0.2em] text-amber-100/80">
+                {pendingGuest.length} pending
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              {pendingGuest.map((image) => (
+                <div
+                  key={image.id}
+                  className="overflow-hidden rounded-xl border border-gold/20 bg-[#0d0b10]"
+                >
+                  <div className="relative aspect-square">
+                    <Image
+                      src={image.src}
+                      alt={image.alt}
+                      fill
+                      className="object-cover"
+                      sizes="200px"
+                    />
+                  </div>
+                  <div className="space-y-2 p-2">
+                    <p className="truncate font-body text-[10px] text-muted">
+                      {image.uploadedByName ||
+                        image.uploadedByEmail ||
+                        "Guest"}
+                    </p>
+                    <select
+                      id={`event-${image.id}`}
+                      defaultValue={eventId || events[0]?.id || ""}
+                      className="w-full rounded-lg border border-gold/20 bg-[#141018] px-2 py-1.5 font-body text-[10px] text-cream [color-scheme:dark]"
+                    >
+                      <option value="">No event</option>
+                      {events.map((event) => (
+                        <option key={event.id} value={event.id}>
+                          {event.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-gold/20 py-1.5 font-body text-[10px] uppercase tracking-wider text-gold-soft"
+                        onClick={() => {
+                          const select = document.getElementById(
+                            `event-${image.id}`,
+                          ) as HTMLSelectElement | null;
+                          void onModerate(
+                            image.id,
+                            "approved",
+                            select?.value || "",
+                          );
+                        }}
+                      >
+                        <Check size={12} />
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-red-500/15 py-1.5 font-body text-[10px] uppercase tracking-wider text-red-200"
+                        onClick={() => void onModerate(image.id, "rejected")}
+                      >
+                        <X size={12} />
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-display text-2xl text-cream">Gallery</h3>
           <span className="font-body text-xs text-muted">

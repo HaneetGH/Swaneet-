@@ -6,6 +6,8 @@ import { OurStory } from "@/components/sections/OurStory";
 import { Events } from "@/components/sections/Events";
 import { Venue } from "@/components/sections/Venue";
 import { Gallery } from "@/components/sections/Gallery";
+import { GuestPhotoShare } from "@/components/sections/GuestPhotoShare";
+import { SharePhotosBanner } from "@/components/sections/SharePhotosBanner";
 import { Family } from "@/components/sections/Family";
 import { RSVP } from "@/components/sections/RSVP";
 
@@ -14,6 +16,8 @@ export default function Home() {
     <main className="ambient-bg relative min-h-screen">
       <Navigation />
       <Hero />
+      <SharePhotosBanner />
+      <GuestPhotoShare />
       <Countdown />
       <OurStory />
       <Events />

@@ -16,9 +16,17 @@ import { Button } from "@/components/ui/Button";
 
 type GuestAuthPanelProps = {
   onAuthed: (user: User) => void;
+  title?: string;
+  subtitle?: string;
+  ctaLabel?: string;
 };
 
-export function GuestAuthPanel({ onAuthed }: GuestAuthPanelProps) {
+export function GuestAuthPanel({
+  onAuthed,
+  title = "Request accommodation",
+  subtitle = "Sign in with Google to share stay details. We’ll use your email for confirmation.",
+  ctaLabel = "Continue with Google",
+}: GuestAuthPanelProps) {
   const [configured] = useState(() => isFirebaseClientConfigured());
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -64,12 +72,9 @@ export function GuestAuthPanel({ onAuthed }: GuestAuthPanelProps) {
       <p className="font-body text-[10px] uppercase tracking-[0.3em] text-gold/70">
         Sign in required
       </p>
-      <h4 className="mt-2 font-display text-2xl text-cream">
-        Request accommodation
-      </h4>
+      <h4 className="mt-2 font-display text-2xl text-cream">{title}</h4>
       <p className="mt-2 font-body text-sm leading-relaxed text-muted">
-        Sign in with Google to share stay details. We’ll use your email for
-        confirmation.
+        {subtitle}
       </p>
 
       <div className="mt-5">
@@ -79,7 +84,7 @@ export function GuestAuthPanel({ onAuthed }: GuestAuthPanelProps) {
           disabled={busy}
           onClick={signInGoogle}
         >
-          {busy ? "Opening Google…" : "Continue with Google"}
+          {busy ? "Opening Google…" : ctaLabel}
         </Button>
       </div>
 

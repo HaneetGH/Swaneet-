@@ -113,7 +113,7 @@ export function Gallery() {
             <Images className="mb-4 text-gold/50" size={32} />
             <p className="font-display text-xl text-cream">No photos yet</p>
             <p className="mt-2 font-body text-sm text-muted">
-              Gallery images will appear here once they are added.
+              Share a moment above — approved photos will show up here.
             </p>
           </div>
         ) : (

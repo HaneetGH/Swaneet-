@@ -13,6 +13,8 @@ export type ManagedEvent = {
   icon: EventIcon;
 };
 
+export type GalleryStatus = "approved" | "pending" | "rejected";
+
 export type GalleryImage = {
   id: string;
   /** Managed event this photo/video belongs to */
@@ -21,6 +23,12 @@ export type GalleryImage = {
   src: string;
   aspect: "portrait" | "landscape" | "square";
   kind: "image" | "video";
+  /** Admin uploads are approved; guest shares start pending */
+  status: GalleryStatus;
+  source?: "admin" | "guest";
+  uploadedByUid?: string;
+  uploadedByEmail?: string;
+  uploadedByName?: string;
   createdAt: string;
 };
 
