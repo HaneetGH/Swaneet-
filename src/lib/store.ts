@@ -326,7 +326,7 @@ export async function listAdmins(): Promise<
 
 export async function createAdmin(input: {
   name: string;
-  email?: string;
+  email: string;
   pin: string;
   permissions: AdminPermission[];
 }): Promise<Omit<AdminMember, "pinHash">> {
@@ -334,7 +334,7 @@ export async function createAdmin(input: {
   const member: AdminMember = {
     id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name: input.name.trim(),
-    email: input.email?.trim() || undefined,
+    email: input.email.trim().toLowerCase(),
     pinHash: hashPin(input.pin),
     permissions: normalizePermissions(input.permissions).filter(
       (p) => p !== "team",

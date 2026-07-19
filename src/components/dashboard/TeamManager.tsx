@@ -27,6 +27,7 @@ export function TeamManager() {
   const [pin, setPin] = useState("");
   const [permissions, setPermissions] = useState<AdminPermission[]>(["gallery"]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
@@ -50,21 +51,35 @@ export function TeamManager() {
     e.preventDefault();
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       const res = await fetch("/api/admins", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          email: email || undefined,
+          email: email.trim(),
           pin,
           permissions,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        emailSent?: boolean;
+        emailError?: string;
+      };
       if (!res.ok) {
         setError(data.error || "Could not create member");
         return;
+      }
+      if (data.emailSent) {
+        setNotice(`Member created — access details emailed to ${email.trim()}`);
+      } else {
+        setError(
+          data.emailError
+            ? `Member created, but email failed: ${data.emailError}`
+            : "Member created, but the invite email could not be sent.",
+        );
       }
       setName("");
       setEmail("");
@@ -104,7 +119,8 @@ export function TeamManager() {
           <h2 className="font-display text-2xl text-cream">Add team member</h2>
         </div>
         <p className="mb-5 font-body text-sm text-muted">
-          Create a PIN and choose what they can manage. Master keeps full access.
+          Email is required — they’ll get the dashboard link, PIN, and access
+          list. Master keeps full access.
         </p>
 
         <label className="mb-3 block">
@@ -120,13 +136,15 @@ export function TeamManager() {
         </label>
         <label className="mb-3 block">
           <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-            Email (optional)
+            Email
           </span>
           <input
             type="email"
             className={fieldClass}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            placeholder="teammate@email.com"
+            required
           />
         </label>
         <label className="mb-4 block">
@@ -166,9 +184,10 @@ export function TeamManager() {
         </div>
 
         {error ? <p className="mt-3 text-xs text-red-300">{error}</p> : null}
+        {notice ? <p className="mt-3 text-xs text-gold-soft">{notice}</p> : null}
 
         <Button type="submit" disabled={busy} className="mt-5 w-full">
-          {busy ? "Saving…" : "Create member"}
+          {busy ? "Saving & emailing…" : "Create & email access"}
         </Button>
       </form>
 

@@ -1,4 +1,9 @@
-import type { AccommodationRequest, GalleryImage } from "@/lib/types";
+import type {
+  AccommodationRequest,
+  AdminPermission,
+  GalleryImage,
+} from "@/lib/types";
+import { PERMISSION_LABELS } from "@/lib/roles";
 
 function formatDate(value: string) {
   if (!value) return "—";
@@ -176,6 +181,94 @@ export async function sendGuestPhotoRejectionEmail(
       from,
       to: [to],
       subject: "A note about your #Swaneet photo",
+      text,
+      html,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      message?: string;
+    };
+    return {
+      ok: false,
+      error: body.message || `Email provider error (${response.status})`,
+    };
+  }
+
+  return { ok: true };
+}
+
+export async function sendTeamInviteEmail(input: {
+  name: string;
+  email: string;
+  pin: string;
+  permissions: AdminPermission[];
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  const to = input.email.trim().toLowerCase();
+
+  if (!apiKey || !from) {
+    return {
+      ok: false,
+      error:
+        "Email is not configured. Add RESEND_API_KEY and EMAIL_FROM in Vercel.",
+    };
+  }
+  if (!to) {
+    return { ok: false, error: "Email is required" };
+  }
+
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "https://swaneet.vercel.app");
+  const dashboardUrl = `${siteUrl.replace(/\/$/, "")}/dashboard`;
+  const accessList = input.permissions
+    .map((p) => PERMISSION_LABELS[p] || p)
+    .join(", ");
+
+  const text = [
+    `Dear ${input.name},`,
+    "",
+    "You’ve been added to the #Swaneet wedding dashboard team.",
+    "",
+    `Dashboard: ${dashboardUrl}`,
+    `Your PIN: ${input.pin}`,
+    `Access: ${accessList}`,
+    "",
+    "Please keep this PIN private. You can sign in at the dashboard link above.",
+    "",
+    "With love,",
+    "#Swaneet · Haneet & Swarandeep",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
+      <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
+      <h1 style="font-weight: 400; font-size: 28px;">Dashboard access</h1>
+      <p>Dear ${escapeHtml(input.name)},</p>
+      <p>You’ve been added to the wedding dashboard team.</p>
+      <p><strong>Dashboard:</strong> <a href="${escapeHtml(dashboardUrl)}">${escapeHtml(dashboardUrl)}</a></p>
+      <p><strong>Your PIN:</strong> ${escapeHtml(input.pin)}</p>
+      <p><strong>Access:</strong> ${escapeHtml(accessList)}</p>
+      <p>Please keep this PIN private.</p>
+      <p>With love,<br/>Haneet &amp; Swarandeep</p>
+    </div>
+  `;
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: "Your #Swaneet dashboard access",
       text,
       html,
     }),

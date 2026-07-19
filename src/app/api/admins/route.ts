@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireMaster } from "@/lib/auth";
+import { sendTeamInviteEmail } from "@/lib/email";
 import { createAdmin, listAdmins } from "@/lib/store";
 import type { AdminPermission } from "@/lib/types";
 
@@ -17,7 +18,7 @@ const permissionEnum = z.enum([
 
 const createSchema = z.object({
   name: z.string().trim().min(2, "Name is required"),
-  email: z.string().trim().email().optional().or(z.literal("")),
+  email: z.string().trim().email("A valid email is required"),
   pin: z.string().trim().min(4, "PIN must be at least 4 characters"),
   permissions: z.array(permissionEnum).min(1, "Pick at least one permission"),
 });
@@ -44,14 +45,29 @@ export async function POST(request: Request) {
       );
     }
 
+    const permissions = parsed.data.permissions as AdminPermission[];
     const admin = await createAdmin({
       name: parsed.data.name,
-      email: parsed.data.email || undefined,
+      email: parsed.data.email,
       pin: parsed.data.pin,
-      permissions: parsed.data.permissions as AdminPermission[],
+      permissions,
     });
 
-    return NextResponse.json({ admin }, { status: 201 });
+    const mailed = await sendTeamInviteEmail({
+      name: parsed.data.name,
+      email: parsed.data.email,
+      pin: parsed.data.pin,
+      permissions: admin.permissions,
+    });
+
+    return NextResponse.json(
+      {
+        admin,
+        emailSent: mailed.ok,
+        emailError: mailed.ok ? undefined : mailed.error,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("POST /api/admins failed", error);
     return NextResponse.json(
