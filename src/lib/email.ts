@@ -20,6 +20,19 @@ export function isEmailConfigured() {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 }
 
+/** Make Resend sandbox / domain errors actionable for the dashboard */
+export function friendlyResendError(message: string | undefined, status?: number) {
+  const raw = message || (status ? `Email provider error (${status})` : "Email failed");
+  if (/only send testing emails|verify a domain|resend\.dev/i.test(raw)) {
+    return (
+      "Resend domain is not verified yet. " +
+      "In Resend → Domains, wait until mail.technorapper.com shows Verified, " +
+      "then confirm EMAIL_FROM is Swaneet Wedding <noreply@mail.technorapper.com> on Vercel and redeploy."
+    );
+  }
+  return raw;
+}
+
 export async function sendAccommodationEmail(
   request: AccommodationRequest,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -112,7 +125,7 @@ export async function sendAccommodationEmail(
     };
     return {
       ok: false,
-      error: body.message || `Email provider error (${response.status})`,
+      error: friendlyResendError(body.message, response.status),
     };
   }
 
@@ -192,7 +205,7 @@ export async function sendGuestPhotoRejectionEmail(
     };
     return {
       ok: false,
-      error: body.message || `Email provider error (${response.status})`,
+      error: friendlyResendError(body.message, response.status),
     };
   }
 
@@ -280,7 +293,7 @@ export async function sendTeamInviteEmail(input: {
     };
     return {
       ok: false,
-      error: body.message || `Email provider error (${response.status})`,
+      error: friendlyResendError(body.message, response.status),
     };
   }
 

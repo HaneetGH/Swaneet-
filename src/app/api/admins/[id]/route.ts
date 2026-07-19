@@ -19,7 +19,7 @@ const permissionEnum = z.enum([
 
 const patchSchema = z.object({
   name: z.string().trim().min(2).optional(),
-  email: z.string().trim().email().optional().or(z.literal("")),
+  email: z.string().trim().email("A valid email is required").optional(),
   pin: z.string().trim().min(4).optional(),
   permissions: z.array(permissionEnum).min(1).optional(),
   active: z.boolean().optional(),

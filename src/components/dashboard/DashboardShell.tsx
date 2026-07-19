@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import {
   BedDouble,
   CalendarDays,
+  ClipboardCheck,
   Images,
   KeyRound,
   LogOut,
@@ -25,6 +26,7 @@ import { ChangePinForm } from "@/components/dashboard/ChangePinForm";
 import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
 import { GuestLoginsManager } from "@/components/dashboard/GuestLoginsManager";
+import { GuestPhotoReview } from "@/components/dashboard/GuestPhotoReview";
 import { RsvpManager } from "@/components/dashboard/RsvpManager";
 import { StorageBanner } from "@/components/dashboard/StorageBanner";
 import { TeamManager } from "@/components/dashboard/TeamManager";
@@ -49,7 +51,8 @@ type Tab =
   | "rsvp"
   | "stay"
   | "events"
-  | "gallery"
+  | "upload"
+  | "review"
   | "guests"
   | "team"
   | "settings";
@@ -89,9 +92,15 @@ export function DashboardShell({
     }
     if (can(session, "gallery")) {
       items.push({
-        id: "gallery",
-        label: "Photos & Videos",
+        id: "upload",
+        label: "Upload media",
         Icon: Images,
+        count: 0,
+      });
+      items.push({
+        id: "review",
+        label: "Review photos",
+        Icon: ClipboardCheck,
         count: gallery.filter((g) => g.status === "pending").length,
       });
     }
@@ -187,8 +196,10 @@ export function DashboardShell({
           <AccommodationManager initialAccommodations={accommodations} />
         ) : activeTab === "events" ? (
           <EventsManager initialEvents={events} />
-        ) : activeTab === "gallery" ? (
+        ) : activeTab === "upload" ? (
           <GalleryManager initialGallery={gallery} events={events} />
+        ) : activeTab === "review" ? (
+          <GuestPhotoReview initialGallery={gallery} events={events} />
         ) : activeTab === "guests" ? (
           <GuestLoginsManager />
         ) : activeTab === "team" ? (

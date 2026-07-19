@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Shield, Trash2, UserPlus } from "lucide-react";
+import { Pencil, Shield, Trash2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { PERMISSION_LABELS } from "@/lib/roles";
 import type { AdminMember, AdminPermission } from "@/lib/types";
@@ -22,6 +22,7 @@ const fieldClass =
 
 export function TeamManager() {
   const [admins, setAdmins] = useState<SafeAdmin[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
@@ -29,6 +30,8 @@ export function TeamManager() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const isEditing = Boolean(editingId);
 
   const load = async () => {
     const res = await fetch("/api/admins");
@@ -41,18 +44,80 @@ export function TeamManager() {
     void load();
   }, []);
 
+  const resetForm = () => {
+    setEditingId(null);
+    setName("");
+    setEmail("");
+    setPin("");
+    setPermissions(["gallery"]);
+    setError("");
+  };
+
+  const startEdit = (admin: SafeAdmin) => {
+    setEditingId(admin.id);
+    setName(admin.name);
+    setEmail(admin.email || "");
+    setPin("");
+    setPermissions(
+      admin.permissions.filter((p) => ASSIGNABLE.includes(p)),
+    );
+    setError("");
+    setNotice("");
+  };
+
   const togglePerm = (perm: AdminPermission) => {
     setPermissions((prev) =>
       prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm],
     );
   };
 
-  const onCreate = async (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!permissions.length) {
+      setError("Pick at least one permission");
+      return;
+    }
+    if (!isEditing && pin.trim().length < 4) {
+      setError("PIN must be at least 4 characters");
+      return;
+    }
+    if (isEditing && pin && pin.trim().length < 4) {
+      setError("New PIN must be at least 4 characters");
+      return;
+    }
+
     setBusy(true);
     setError("");
     setNotice("");
     try {
+      if (isEditing && editingId) {
+        const res = await fetch(`/api/admins/${editingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            email: email.trim(),
+            permissions,
+            ...(pin.trim() ? { pin: pin.trim() } : {}),
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (!res.ok) {
+          setError(data.error || "Could not update member");
+          return;
+        }
+        setNotice(
+          pin.trim()
+            ? "Member updated — share the new PIN with them if you changed it"
+            : "Member role and details updated",
+        );
+        resetForm();
+        await load();
+        return;
+      }
+
       const res = await fetch("/api/admins", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -81,13 +146,10 @@ export function TeamManager() {
             : "Member created, but the invite email could not be sent.",
         );
       }
-      setName("");
-      setEmail("");
-      setPin("");
-      setPermissions(["gallery"]);
+      resetForm();
       await load();
     } catch {
-      setError("Could not create member");
+      setError(isEditing ? "Could not update member" : "Could not create member");
     } finally {
       setBusy(false);
     }
@@ -95,6 +157,7 @@ export function TeamManager() {
 
   const onDelete = async (id: string) => {
     if (!confirm("Remove this team member?")) return;
+    if (editingId === id) resetForm();
     const res = await fetch(`/api/admins/${id}`, { method: "DELETE" });
     if (res.ok) await load();
   };
@@ -111,16 +174,35 @@ export function TeamManager() {
   return (
     <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
       <form
-        onSubmit={onCreate}
+        onSubmit={onSubmit}
         className="rounded-2xl border border-gold/20 bg-[#141018] p-5"
       >
-        <div className="mb-2 flex items-center gap-2">
-          <UserPlus size={18} className="text-gold" />
-          <h2 className="font-display text-2xl text-cream">Add team member</h2>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              <Pencil size={18} className="text-gold" />
+            ) : (
+              <UserPlus size={18} className="text-gold" />
+            )}
+            <h2 className="font-display text-2xl text-cream">
+              {isEditing ? "Edit team member" : "Add team member"}
+            </h2>
+          </div>
+          {isEditing ? (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="inline-flex items-center gap-1 rounded-full border border-gold/20 px-3 py-1.5 font-body text-[10px] uppercase tracking-wider text-muted hover:text-cream"
+            >
+              <X size={12} />
+              Cancel
+            </button>
+          ) : null}
         </div>
         <p className="mb-5 font-body text-sm text-muted">
-          Email is required — they’ll get the dashboard link, PIN, and access
-          list. Master keeps full access.
+          {isEditing
+            ? "Update name, email, permissions, or set a new PIN. Leave PIN blank to keep the current one."
+            : "Email is required — they’ll get the dashboard link, PIN, and access list. Uses noreply@mail.technorapper.com once that domain is Verified in Resend."}
         </p>
 
         <label className="mb-3 block">
@@ -149,20 +231,21 @@ export function TeamManager() {
         </label>
         <label className="mb-4 block">
           <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-            Their PIN
+            {isEditing ? "New PIN (optional)" : "Their PIN"}
           </span>
           <input
             type="password"
             className={fieldClass}
             value={pin}
             onChange={(e) => setPin(e.target.value)}
-            minLength={4}
-            required
+            minLength={isEditing ? undefined : 4}
+            required={!isEditing}
+            placeholder={isEditing ? "Leave blank to keep current PIN" : ""}
           />
         </label>
 
         <p className="mb-2 font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-          Permissions
+          Permissions / role
         </p>
         <div className="space-y-2">
           {ASSIGNABLE.map((perm) => (
@@ -187,7 +270,13 @@ export function TeamManager() {
         {notice ? <p className="mt-3 text-xs text-gold-soft">{notice}</p> : null}
 
         <Button type="submit" disabled={busy} className="mt-5 w-full">
-          {busy ? "Saving & emailing…" : "Create & email access"}
+          {busy
+            ? isEditing
+              ? "Saving…"
+              : "Saving & emailing…"
+            : isEditing
+              ? "Save changes"
+              : "Create & email access"}
         </Button>
       </form>
 
@@ -208,6 +297,7 @@ export function TeamManager() {
                 className={cn(
                   "rounded-2xl border border-gold/20 bg-[#141018] p-4",
                   !admin.active && "opacity-60",
+                  editingId === admin.id && "ring-1 ring-gold/40",
                 )}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -226,7 +316,15 @@ export function TeamManager() {
                         .join(" · ")}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(admin)}
+                      className="inline-flex items-center gap-1 rounded-full border border-gold/25 px-3 py-1.5 font-body text-[10px] uppercase tracking-wider text-gold-soft"
+                    >
+                      <Pencil size={12} />
+                      Edit
+                    </button>
                     <button
                       type="button"
                       onClick={() => void onToggleActive(admin)}
