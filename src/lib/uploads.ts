@@ -6,14 +6,25 @@ import { hasBlobStorage } from "@/lib/env";
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 
+function extensionForFile(file: File) {
+  const fromName = file.name.split(".").pop()?.toLowerCase();
+  if (fromName && /^[a-z0-9]{2,5}$/.test(fromName)) return fromName;
+
+  const mime = file.type.toLowerCase();
+  if (mime === "image/jpeg") return "jpg";
+  if (mime === "video/quicktime") return "mov";
+  return mime.split("/")[1] || "bin";
+}
+
 export async function saveUploadedImage(file: File): Promise<string> {
-  const ext = file.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+  const ext = extensionForFile(file);
   const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
 
   if (hasBlobStorage()) {
     const blob = await put(`gallery/${filename}`, file, {
       access: "public",
       addRandomSuffix: false,
+      contentType: file.type || undefined,
     });
     return blob.url;
   }

@@ -75,7 +75,7 @@ export function DashboardShell({
           {(
             [
               ["rsvp", "RSVPs", Users],
-              ["gallery", "Upload Images", Images],
+              ["gallery", "Photos & Videos", Images],
               ["events", "Events", CalendarDays],
               ["settings", "PIN", KeyRound],
             ] as const

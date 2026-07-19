@@ -48,6 +48,12 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
   const gallery = (raw.gallery ?? defaults.gallery).map((image) => ({
     ...image,
     eventId: image.eventId || "",
+    kind:
+      image.kind === "video" ||
+      /\.(mp4|webm|mov)(\?|$)/i.test(image.src) ||
+      image.src.includes("video/")
+        ? ("video" as const)
+        : ("image" as const),
   }));
   return {
     events: sortEventsByDateTime(raw.events ?? defaults.events),

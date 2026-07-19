@@ -15,11 +15,12 @@ export type ManagedEvent = {
 
 export type GalleryImage = {
   id: string;
-  /** Managed event this photo belongs to */
+  /** Managed event this photo/video belongs to */
   eventId: string;
   alt: string;
   src: string;
   aspect: "portrait" | "landscape" | "square";
+  kind: "image" | "video";
   createdAt: string;
 };
 

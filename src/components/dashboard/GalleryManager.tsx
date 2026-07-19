@@ -1,24 +1,37 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import Image from "next/image";
-import { Images, Trash2, Upload, X } from "lucide-react";
+import { Film, Images, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GalleryImage, ManagedEvent } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
 const MAX_FILES = 10;
+const MAX_LOCAL_BYTES = 8 * 1024 * 1024;
+const ACCEPT =
+  "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime";
 
 type PreviewItem = {
   id: string;
   file: File;
   url: string;
+  kind: "image" | "video";
 };
 
 type GalleryManagerProps = {
   initialGallery: GalleryImage[];
   events: ManagedEvent[];
 };
+
+function isVideoFile(file: File) {
+  return file.type.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(file.name);
+}
+
+function safeFilename(name: string) {
+  return name.replace(/[^\w.\-()+ ]+/g, "_").slice(0, 80) || "media";
+}
 
 export function GalleryManager({
   initialGallery,
@@ -35,11 +48,22 @@ export function GalleryManager({
   const [previews, setPreviews] = useState<PreviewItem[]>([]);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [hasBlob, setHasBlob] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!eventId && events[0]?.id) setEventId(events[0].id);
   }, [eventId, events]);
+
+  useEffect(() => {
+    fetch("/api/storage")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { hasBlobStorage?: boolean } | null) => {
+        setHasBlob(Boolean(data?.hasBlobStorage));
+      })
+      .catch(() => setHasBlob(false));
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -49,8 +73,7 @@ export function GalleryManager({
   }, []);
 
   const eventNameById = useMemo(() => {
-    const map = new Map(events.map((event) => [event.id, event.name]));
-    return map;
+    return new Map(events.map((event) => [event.id, event.name]));
   }, [events]);
 
   const filteredGallery = useMemo(() => {
@@ -89,7 +112,6 @@ export function GalleryManager({
       });
     }
 
-    // Any leftover event ids that no longer exist
     for (const [key, images] of byEvent) {
       if (key === "unassigned") continue;
       groups.push({
@@ -105,23 +127,26 @@ export function GalleryManager({
   const addFiles = (list: FileList | File[] | null) => {
     if (!list) return;
 
-    const incoming = Array.from(list).filter((file) =>
-      file.type.startsWith("image/"),
+    const incoming = Array.from(list).filter(
+      (file) =>
+        file.type.startsWith("image/") ||
+        file.type.startsWith("video/") ||
+        /\.(jpe?g|png|webp|gif|mp4|webm|mov)$/i.test(file.name),
     );
     if (!incoming.length) {
-      setError("Please choose image files only");
+      setError("Please choose image or video files only");
       return;
     }
 
     const available = MAX_FILES - previews.length;
     if (available <= 0) {
-      setError(`You can select up to ${MAX_FILES} images at once`);
+      setError(`You can select up to ${MAX_FILES} files at once`);
       return;
     }
 
     const accepted = incoming.slice(0, available);
     if (incoming.length > available) {
-      setError(`Maximum ${MAX_FILES} images — added the first ${available}`);
+      setError(`Maximum ${MAX_FILES} files — added the first ${available}`);
     } else {
       setError("");
     }
@@ -130,6 +155,7 @@ export function GalleryManager({
       id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
       file,
       url: URL.createObjectURL(file),
+      kind: isVideoFile(file) ? ("video" as const) : ("image" as const),
     }));
     setPreviews((prev) => [...prev, ...next]);
     if (inputRef.current) inputRef.current.value = "";
@@ -149,6 +175,72 @@ export function GalleryManager({
     if (inputRef.current) inputRef.current.value = "";
   };
 
+  const uploadViaBlob = async () => {
+    const media: Array<{
+      src: string;
+      alt: string;
+      aspect: GalleryImage["aspect"];
+      kind: GalleryImage["kind"];
+    }> = [];
+
+    for (const [index, item] of previews.entries()) {
+      setProgress(`Uploading ${index + 1} of ${previews.length}…`);
+      const pathname = `gallery/${Date.now()}-${safeFilename(item.file.name)}`;
+      const blob = await upload(pathname, item.file, {
+        access: "public",
+        handleUploadUrl: "/api/gallery/upload",
+        multipart: item.kind === "video" || item.file.size > 4 * 1024 * 1024,
+        contentType: item.file.type || undefined,
+      });
+
+      media.push({
+        src: blob.url,
+        alt:
+          previews.length === 1
+            ? alt
+            : alt
+              ? `${alt} (${index + 1})`
+              : item.file.name.replace(/\.[^.]+$/, ""),
+        aspect,
+        kind: item.kind,
+      });
+    }
+
+    setProgress("Saving to gallery…");
+    const res = await fetch("/api/gallery", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId, media }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Could not save media");
+    return data.images as GalleryImage[];
+  };
+
+  const uploadViaFormData = async () => {
+    if (previews.some((item) => item.kind === "video")) {
+      throw new Error(
+        "Videos need Vercel Blob. Connect Blob in Vercel → Storage, redeploy, then upload again.",
+      );
+    }
+    if (previews.some((item) => item.file.size > MAX_LOCAL_BYTES)) {
+      throw new Error(
+        "Files over 8MB need Vercel Blob. Connect Blob in Storage, then retry.",
+      );
+    }
+
+    const body = new FormData();
+    previews.forEach((item) => body.append("files", item.file));
+    body.append("eventId", eventId);
+    body.append("alt", alt);
+    body.append("aspect", aspect);
+
+    const res = await fetch("/api/gallery", { method: "POST", body });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Upload failed");
+    return data.images as GalleryImage[];
+  };
+
   const onUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventId) {
@@ -156,39 +248,53 @@ export function GalleryManager({
       return;
     }
     if (!previews.length) {
-      setError("Choose at least one image to upload");
+      setError("Choose at least one image or video to upload");
       return;
     }
 
     setUploading(true);
     setError("");
+    setProgress("");
     try {
-      const body = new FormData();
-      previews.forEach((item) => body.append("files", item.file));
-      body.append("eventId", eventId);
-      body.append("alt", alt);
-      body.append("aspect", aspect);
-
-      const res = await fetch("/api/gallery", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Upload failed");
-        return;
-      }
-
-      setGallery((prev) => [...(data.images as GalleryImage[]), ...prev]);
+      const images =
+        hasBlob === false ? await uploadViaFormData() : await uploadViaBlob();
+      setGallery((prev) => [...images, ...prev]);
       setFilterEventId(eventId);
       setAlt("");
       clearPreviews();
-    } catch {
-      setError("Upload failed");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Upload failed";
+      // If Blob route missing, fall back once for small images
+      if (
+        hasBlob !== false &&
+        /Blob storage is not connected|503|not configured/i.test(message) &&
+        previews.every((item) => item.kind === "image")
+      ) {
+        try {
+          const images = await uploadViaFormData();
+          setGallery((prev) => [...images, ...prev]);
+          setFilterEventId(eventId);
+          setAlt("");
+          clearPreviews();
+          setHasBlob(false);
+          return;
+        } catch (fallbackErr) {
+          setError(
+            fallbackErr instanceof Error ? fallbackErr.message : "Upload failed",
+          );
+          return;
+        }
+      }
+      setError(message);
     } finally {
       setUploading(false);
+      setProgress("");
     }
   };
 
   const onDelete = async (id: string) => {
-    if (!confirm("Remove this image from the gallery?")) return;
+    if (!confirm("Remove this item from the gallery?")) return;
     const res = await fetch(`/api/gallery/${id}`, { method: "DELETE" });
     if (res.ok) setGallery((prev) => prev.filter((item) => item.id !== id));
   };
@@ -202,13 +308,21 @@ export function GalleryManager({
         <div className="mb-2 flex items-center gap-2">
           <Images size={18} className="text-gold" />
           <h2 className="font-display text-2xl text-cream">
-            Event photo upload
+            Event media upload
           </h2>
         </div>
         <p className="mb-5 font-body text-sm text-muted">
           Pick an event, then upload up to{" "}
-          <span className="text-gold-soft">{MAX_FILES} images</span> for it.
+          <span className="text-gold-soft">{MAX_FILES} photos or videos</span>.
+          Videos upload directly to Blob (required on Vercel).
         </p>
+
+        {hasBlob === false ? (
+          <p className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 font-body text-xs text-amber-100">
+            Blob is not connected — images under 8MB still work locally. For
+            videos and larger files, connect Blob in Vercel → Storage.
+          </p>
+        ) : null}
 
         <label className="mb-4 block">
           <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
@@ -257,10 +371,10 @@ export function GalleryManager({
         >
           <Upload className="mx-auto mb-3 text-gold/70" size={32} />
           <p className="font-display text-xl text-cream">
-            Drop multiple images here
+            Drop photos or videos here
           </p>
           <p className="mt-2 font-body text-xs text-muted">
-            or use the button below · JPG, PNG, WEBP, GIF · max 8MB each
+            JPG, PNG, WEBP, GIF, MP4, WEBM, MOV · videos up to 100MB with Blob
           </p>
 
           <div className="mt-6 flex flex-col items-center gap-3">
@@ -270,7 +384,7 @@ export function GalleryManager({
               disabled={previews.length >= MAX_FILES || !events.length}
             >
               <Images size={16} />
-              Select multiple images
+              Select files
             </Button>
             <p className="font-body text-xs tracking-wide text-gold-soft">
               {previews.length} of {MAX_FILES} selected
@@ -279,17 +393,17 @@ export function GalleryManager({
 
           <div className="mx-auto mt-5 max-w-md text-left">
             <label
-              htmlFor="multi-image-input"
+              htmlFor="multi-media-input"
               className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted"
             >
-              File picker (multiple enabled)
+              File picker
             </label>
             <input
-              id="multi-image-input"
+              id="multi-media-input"
               ref={inputRef}
               type="file"
               name="files"
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept={ACCEPT}
               multiple
               className="block w-full cursor-pointer rounded-xl border border-gold/25 bg-[#141018] px-3 py-2.5 font-body text-xs text-cream file:mr-3 file:rounded-full file:border-0 file:bg-gold/20 file:px-3 file:py-1.5 file:font-body file:text-xs file:text-gold-soft"
               onChange={(e) => addFiles(e.target.files)}
@@ -317,12 +431,26 @@ export function GalleryManager({
                   key={item.id}
                   className="group relative aspect-square overflow-hidden rounded-xl border border-gold/20 bg-[#0d0b10]"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.url}
-                    alt={item.file.name}
-                    className="h-full w-full object-cover"
-                  />
+                  {item.kind === "video" ? (
+                    <video
+                      src={item.url}
+                      className="h-full w-full object-cover"
+                      muted
+                      playsInline
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.url}
+                      alt={item.file.name}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                  {item.kind === "video" ? (
+                    <span className="absolute left-1 top-1 rounded-full bg-black/70 p-1 text-gold-soft">
+                      <Film size={12} />
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => removePreview(item.id)}
@@ -344,7 +472,7 @@ export function GalleryManager({
           <input
             value={alt}
             onChange={(e) => setAlt(e.target.value)}
-            placeholder="Applied to all selected images"
+            placeholder="Applied to all selected files"
             className="w-full rounded-xl border border-gold/25 bg-[#0d0b10] px-3 py-2.5 font-body text-sm text-cream outline-none focus:border-gold/60"
           />
         </label>
@@ -367,6 +495,9 @@ export function GalleryManager({
         </label>
 
         {error ? <p className="mt-3 text-xs text-red-300">{error}</p> : null}
+        {progress ? (
+          <p className="mt-3 text-xs text-gold-soft">{progress}</p>
+        ) : null}
 
         <Button
           type="submit"
@@ -374,10 +505,10 @@ export function GalleryManager({
           className="mt-5 w-full"
         >
           {uploading
-            ? `Uploading ${previews.length} images…`
+            ? progress || `Uploading ${previews.length} files…`
             : previews.length
-              ? `Upload ${previews.length} image${previews.length === 1 ? "" : "s"}`
-              : "Select images to upload"}
+              ? `Upload ${previews.length} file${previews.length === 1 ? "" : "s"}`
+              : "Select files to upload"}
         </Button>
       </form>
 
@@ -385,7 +516,7 @@ export function GalleryManager({
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-display text-2xl text-cream">Gallery</h3>
           <span className="font-body text-xs text-muted">
-            {filteredGallery.length} images
+            {filteredGallery.length} items
           </span>
         </div>
 
@@ -421,7 +552,7 @@ export function GalleryManager({
 
         {groupedGallery.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-gold/20 p-8 text-center font-body text-sm text-muted">
-            No gallery images yet for this filter.
+            No gallery media yet for this filter.
           </p>
         ) : (
           <div className="space-y-8">
@@ -432,7 +563,7 @@ export function GalleryManager({
                     {group.title}
                   </h4>
                   <span className="font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-                    {group.images.length} photos
+                    {group.images.length} items
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -446,15 +577,26 @@ export function GalleryManager({
                         image.aspect === "square" && "aspect-square",
                       )}
                     >
-                      <Image
-                        src={image.src}
-                        alt={image.alt}
-                        fill
-                        className="object-cover"
-                        sizes="200px"
-                      />
+                      {image.kind === "video" ? (
+                        <video
+                          src={image.src}
+                          className="h-full w-full object-cover"
+                          muted
+                          playsInline
+                          preload="metadata"
+                        />
+                      ) : (
+                        <Image
+                          src={image.src}
+                          alt={image.alt}
+                          fill
+                          className="object-cover"
+                          sizes="200px"
+                        />
+                      )}
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
                         <p className="truncate font-body text-[10px] text-cream/90">
+                          {image.kind === "video" ? "Video · " : ""}
                           {image.alt}
                         </p>
                       </div>

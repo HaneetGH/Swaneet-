@@ -182,16 +182,27 @@ export function Gallery() {
                         )}
                         aria-label={`Open ${photo.alt}`}
                       >
-                        <Image
-                          src={photo.src}
-                          alt={photo.alt}
-                          fill
-                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                          className="object-cover transition duration-700 group-hover:scale-105"
-                        />
+                        {photo.kind === "video" ? (
+                          <video
+                            src={photo.src}
+                            className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                        ) : (
+                          <Image
+                            src={photo.src}
+                            alt={photo.alt}
+                            fill
+                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                            className="object-cover transition duration-700 group-hover:scale-105"
+                          />
+                        )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                         <div className="absolute inset-0 gold-border rounded-2xl" />
                         <span className="absolute bottom-4 left-4 font-body text-[10px] uppercase tracking-[0.25em] text-gold-soft/90">
+                          {photo.kind === "video" ? "Video · " : ""}
                           {photo.alt}
                         </span>
                       </motion.button>
@@ -225,14 +236,24 @@ export function Gallery() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="relative aspect-[4/3] bg-[#100e14]">
-                <Image
-                  src={active.src}
-                  alt={active.alt}
-                  fill
-                  className="object-contain"
-                  sizes="100vw"
-                  priority
-                />
+                {active.kind === "video" ? (
+                  <video
+                    src={active.src}
+                    className="absolute inset-0 h-full w-full object-contain"
+                    controls
+                    playsInline
+                    autoPlay
+                  />
+                ) : (
+                  <Image
+                    src={active.src}
+                    alt={active.alt}
+                    fill
+                    className="object-contain"
+                    sizes="100vw"
+                    priority
+                  />
+                )}
               </div>
               <p className="absolute bottom-3 left-4 font-body text-xs text-cream/90">
                 {active.alt}

@@ -36,9 +36,9 @@ Override with `ADMIN_PIN` in `.env.local`.
 
 1. Push this repo to GitHub (already at `HaneetGH/Swaneet-`).
 2. Import the project in [Vercel](https://vercel.com/new).
-3. **Required for dashboard edits:** In the Vercel project → **Storage**, connect at least one of:
-   - **Neon / Postgres** → sets `DATABASE_URL` / `POSTGRES_URL` (preferred for events & RSVPs)
-   - **Blob** → sets `BLOB_READ_WRITE_TOKEN` (images + can also store content JSON)
+3. **Required for dashboard edits:** In the Vercel project → **Storage**, connect:
+   - **Neon / Postgres** → sets `DATABASE_URL` / `POSTGRES_URL` (events, RSVPs, gallery metadata)
+   - **Blob** → sets `BLOB_READ_WRITE_TOKEN` (**required for photos/videos** — uploads go direct to Blob, bypassing the 4.5MB serverless limit)
 4. Set environment variable:
    - `ADMIN_PIN` = your private dashboard PIN
 5. Redeploy after connecting storage.
