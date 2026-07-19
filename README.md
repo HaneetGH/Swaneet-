@@ -41,10 +41,12 @@ Override with `ADMIN_PIN` in `.env.local`.
    - **Blob** → sets `BLOB_READ_WRITE_TOKEN` (**required for photos/videos** — uploads go direct to Blob, bypassing the 4.5MB serverless limit)
 4. Set environment variables:
    - `ADMIN_PIN` = your private dashboard PIN
-   - Firebase (for accommodation login): see `.env.example`
+   - Firebase web config (`NEXT_PUBLIC_FIREBASE_*`) + `FIREBASE_PROJECT_ID` for accommodation login
 5. In Firebase Console → Authentication, enable **Google** and **Phone**.
 6. Add your Vercel domain under Authentication → Settings → Authorized domains.
 7. Redeploy after connecting storage / Firebase.
+
+Wedding data (events, RSVPs, gallery, stays) lives in Neon / Blob — **deploys never wipe it**. Seed defaults only run when the database is empty.
 
 Without storage on Vercel, the filesystem is read-only and event create/edit/delete will fail.
 

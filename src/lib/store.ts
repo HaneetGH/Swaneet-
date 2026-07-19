@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { readStoreFromBlob, writeStoreToBlob } from "@/lib/blob-store";
-import { readStoreFromDb, writeStoreToDb } from "@/lib/db";
+import { readStoreFromDb, seedStoreIfEmpty, writeStoreToDb } from "@/lib/db";
 import {
   canPersistData,
   hasBlobStorage,
@@ -47,7 +47,13 @@ export function defaultStore(): ContentStore {
 
 function normalizeStore(raw: Partial<ContentStore>): ContentStore {
   const defaults = defaultStore();
-  const gallery = (raw.gallery ?? defaults.gallery).map((image) => ({
+  const hasPersistedShape =
+    raw.events != null ||
+    raw.gallery != null ||
+    raw.rsvps != null ||
+    raw.accommodations != null;
+
+  const gallery = (raw.gallery ?? []).map((image) => ({
     ...image,
     eventId: image.eventId || "",
     kind:
@@ -57,8 +63,16 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
         ? ("video" as const)
         : ("image" as const),
   }));
+
+  // Never replace a saved store's events with invitation defaults
+  const events = Array.isArray(raw.events)
+    ? raw.events
+    : hasPersistedShape
+      ? []
+      : defaults.events;
+
   return {
-    events: sortEventsByDateTime(raw.events ?? defaults.events),
+    events: sortEventsByDateTime(events),
     gallery,
     rsvps: raw.rsvps ?? [],
     accommodations: raw.accommodations ?? [],
@@ -105,21 +119,28 @@ export async function readStore(): Promise<ContentStore> {
 
   try {
     if (mode === "database") {
-      const fromDb = await readStoreFromDb();
+      let fromDb = await readStoreFromDb();
       if (!fromDb) {
-        const seeded = defaultStore();
-        await writeStoreToDb(seeded);
-        return seeded;
+        // Only insert if empty — never overwrite Roka/custom data on deploy
+        await seedStoreIfEmpty(defaultStore());
+        fromDb = await readStoreFromDb();
       }
+      if (!fromDb) return defaultStore();
       return normalizeStore(fromDb);
     }
 
     if (mode === "blob") {
       const fromBlob = await readStoreFromBlob();
       if (!fromBlob) {
-        const seeded = defaultStore();
-        await writeStoreToBlob(seeded);
-        return seeded;
+        // Blob put with allowOverwrite is used elsewhere; seed only when missing
+        try {
+          await writeStoreToBlob(defaultStore());
+        } catch {
+          // Another request may have created it
+        }
+        const again = await readStoreFromBlob();
+        if (again) return normalizeStore(again);
+        return defaultStore();
       }
       return normalizeStore(fromBlob);
     }

@@ -1,10 +1,6 @@
 import { cookies } from "next/headers";
 import { getDefaultAdminPin, verifyPin } from "@/lib/pin";
-import {
-  isFirebaseAdminConfigured,
-  verifyBearerToken,
-  type VerifiedGuest,
-} from "@/lib/firebase/admin";
+import type { VerifiedGuest } from "@/lib/firebase/admin";
 
 export const ADMIN_COOKIE = "swaneet_admin";
 const TOKEN = "authenticated";
@@ -39,6 +35,10 @@ export async function resolveAccommodationUser(
 ): Promise<{ kind: "admin" } | { kind: "guest"; user: VerifiedGuest } | null> {
   if (await isAuthenticated()) return { kind: "admin" };
 
+  // Lazy-load Firebase verify so other API routes never load auth crypto deps
+  const { isFirebaseAdminConfigured, verifyBearerToken } = await import(
+    "@/lib/firebase/admin"
+  );
   if (!isFirebaseAdminConfigured()) return null;
 
   const user = await verifyBearerToken(request);

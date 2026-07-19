@@ -45,6 +45,26 @@ export async function readStoreFromDb(): Promise<ContentStore | null> {
   return raw as ContentStore;
 }
 
+/** Seed defaults only if no row exists — never overwrite existing wedding data. */
+export async function seedStoreIfEmpty(store: ContentStore): Promise<boolean> {
+  await ensureDatabase();
+  const db = sql();
+  const payload = JSON.stringify(store);
+  const result = await db.query(
+    `
+      INSERT INTO content_store (id, data, updated_at)
+      VALUES ($1, $2::jsonb, NOW())
+      ON CONFLICT (id) DO NOTHING
+      RETURNING id
+    `,
+    ["main", payload],
+  );
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: unknown[] })?.rows ?? []);
+  return rows.length > 0;
+}
+
 export async function writeStoreToDb(store: ContentStore): Promise<void> {
   await ensureDatabase();
   const db = sql();

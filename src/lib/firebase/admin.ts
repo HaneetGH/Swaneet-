@@ -1,35 +1,4 @@
-import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
-import { getAuth, type Auth } from "firebase-admin/auth";
-
-export function isFirebaseAdminConfigured() {
-  return Boolean(
-    process.env.FIREBASE_PROJECT_ID &&
-      process.env.FIREBASE_CLIENT_EMAIL &&
-      process.env.FIREBASE_PRIVATE_KEY,
-  );
-}
-
-function getAdminApp(): App {
-  if (!isFirebaseAdminConfigured()) {
-    throw new Error("Firebase Admin is not configured");
-  }
-
-  if (getApps().length) return getApps()[0]!;
-
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
-
-  return initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey,
-    }),
-  });
-}
-
-export function getAdminAuth(): Auth {
-  return getAuth(getAdminApp());
-}
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 export type VerifiedGuest = {
   uid: string;
@@ -38,15 +7,53 @@ export type VerifiedGuest = {
   name?: string;
 };
 
+export function isFirebaseAdminConfigured() {
+  return Boolean(
+    process.env.FIREBASE_PROJECT_ID ||
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  );
+}
+
+function getProjectId() {
+  return (
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+    ""
+  );
+}
+
+const jwks = createRemoteJWKSet(
+  new URL(
+    "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
+  ),
+);
+
 export async function verifyFirebaseIdToken(
   idToken: string,
 ): Promise<VerifiedGuest> {
-  const decoded = await getAdminAuth().verifyIdToken(idToken);
+  const projectId = getProjectId();
+  if (!projectId) {
+    throw new Error("Firebase project id is not configured");
+  }
+
+  const { payload } = await jwtVerify(idToken, jwks, {
+    issuer: `https://securetoken.google.com/${projectId}`,
+    audience: projectId,
+  });
+
+  const uid = typeof payload.user_id === "string" ? payload.user_id : payload.sub;
+  if (!uid || typeof uid !== "string") {
+    throw new Error("Invalid Firebase token");
+  }
+
   return {
-    uid: decoded.uid,
-    email: decoded.email,
-    phone: decoded.phone_number,
-    name: typeof decoded.name === "string" ? decoded.name : undefined,
+    uid,
+    email: typeof payload.email === "string" ? payload.email : undefined,
+    phone:
+      typeof payload.phone_number === "string"
+        ? payload.phone_number
+        : undefined,
+    name: typeof payload.name === "string" ? payload.name : undefined,
   };
 }
 
