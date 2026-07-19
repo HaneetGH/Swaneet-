@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import { Images, Trash2, Upload, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import type { GalleryImage } from "@/lib/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { GalleryImage, ManagedEvent } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -17,11 +17,17 @@ type PreviewItem = {
 
 type GalleryManagerProps = {
   initialGallery: GalleryImage[];
+  events: ManagedEvent[];
 };
 
-export function GalleryManager({ initialGallery }: GalleryManagerProps) {
+export function GalleryManager({
+  initialGallery,
+  events,
+}: GalleryManagerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [gallery, setGallery] = useState(initialGallery);
+  const [eventId, setEventId] = useState(events[0]?.id || "");
+  const [filterEventId, setFilterEventId] = useState<string>("all");
   const [alt, setAlt] = useState("");
   const [aspect, setAspect] = useState<"portrait" | "landscape" | "square">(
     "square",
@@ -32,11 +38,69 @@ export function GalleryManager({ initialGallery }: GalleryManagerProps) {
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
+    if (!eventId && events[0]?.id) setEventId(events[0].id);
+  }, [eventId, events]);
+
+  useEffect(() => {
     return () => {
       previews.forEach((item) => URL.revokeObjectURL(item.url));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const eventNameById = useMemo(() => {
+    const map = new Map(events.map((event) => [event.id, event.name]));
+    return map;
+  }, [events]);
+
+  const filteredGallery = useMemo(() => {
+    if (filterEventId === "all") return gallery;
+    if (filterEventId === "unassigned") {
+      return gallery.filter((image) => !image.eventId);
+    }
+    return gallery.filter((image) => image.eventId === filterEventId);
+  }, [filterEventId, gallery]);
+
+  const groupedGallery = useMemo(() => {
+    const groups: { key: string; title: string; images: GalleryImage[] }[] = [];
+    const byEvent = new Map<string, GalleryImage[]>();
+
+    for (const image of filteredGallery) {
+      const key = image.eventId || "unassigned";
+      const list = byEvent.get(key) || [];
+      list.push(image);
+      byEvent.set(key, list);
+    }
+
+    for (const event of events) {
+      const images = byEvent.get(event.id);
+      if (images?.length) {
+        groups.push({ key: event.id, title: event.name, images });
+        byEvent.delete(event.id);
+      }
+    }
+
+    const unassigned = byEvent.get("unassigned");
+    if (unassigned?.length) {
+      groups.push({
+        key: "unassigned",
+        title: "Unassigned",
+        images: unassigned,
+      });
+    }
+
+    // Any leftover event ids that no longer exist
+    for (const [key, images] of byEvent) {
+      if (key === "unassigned") continue;
+      groups.push({
+        key,
+        title: eventNameById.get(key) || "Other",
+        images,
+      });
+    }
+
+    return groups;
+  }, [events, eventNameById, filteredGallery]);
 
   const addFiles = (list: FileList | File[] | null) => {
     if (!list) return;
@@ -87,6 +151,10 @@ export function GalleryManager({ initialGallery }: GalleryManagerProps) {
 
   const onUpload = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!eventId) {
+      setError("Select an event for these photos");
+      return;
+    }
     if (!previews.length) {
       setError("Choose at least one image to upload");
       return;
@@ -97,6 +165,7 @@ export function GalleryManager({ initialGallery }: GalleryManagerProps) {
     try {
       const body = new FormData();
       previews.forEach((item) => body.append("files", item.file));
+      body.append("eventId", eventId);
       body.append("alt", alt);
       body.append("aspect", aspect);
 
@@ -108,6 +177,7 @@ export function GalleryManager({ initialGallery }: GalleryManagerProps) {
       }
 
       setGallery((prev) => [...(data.images as GalleryImage[]), ...prev]);
+      setFilterEventId(eventId);
       setAlt("");
       clearPreviews();
     } catch {
@@ -132,13 +202,35 @@ export function GalleryManager({ initialGallery }: GalleryManagerProps) {
         <div className="mb-2 flex items-center gap-2">
           <Images size={18} className="text-gold" />
           <h2 className="font-display text-2xl text-cream">
-            Multi-image upload
+            Event photo upload
           </h2>
         </div>
         <p className="mb-5 font-body text-sm text-muted">
-          Choose up to <span className="text-gold-soft">{MAX_FILES} images</span>{" "}
-          at once, then upload them together.
+          Pick an event, then upload up to{" "}
+          <span className="text-gold-soft">{MAX_FILES} images</span> for it.
         </p>
+
+        <label className="mb-4 block">
+          <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+            Event
+          </span>
+          <select
+            value={eventId}
+            onChange={(e) => setEventId(e.target.value)}
+            required
+            className="w-full rounded-xl border border-gold/25 bg-[#0d0b10] px-3 py-2.5 font-body text-sm text-cream outline-none [color-scheme:dark] focus:border-gold/60"
+          >
+            {events.length === 0 ? (
+              <option value="">No events yet — create one first</option>
+            ) : (
+              events.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.name}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
 
         <div
           onDragEnter={(e) => {
@@ -175,7 +267,7 @@ export function GalleryManager({ initialGallery }: GalleryManagerProps) {
             <Button
               type="button"
               onClick={() => inputRef.current?.click()}
-              disabled={previews.length >= MAX_FILES}
+              disabled={previews.length >= MAX_FILES || !events.length}
             >
               <Images size={16} />
               Select multiple images
@@ -185,7 +277,6 @@ export function GalleryManager({ initialGallery }: GalleryManagerProps) {
             </p>
           </div>
 
-          {/* Visible native multi-file control for clarity */}
           <div className="mx-auto mt-5 max-w-md text-left">
             <label
               htmlFor="multi-image-input"
@@ -279,7 +370,7 @@ export function GalleryManager({ initialGallery }: GalleryManagerProps) {
 
         <Button
           type="submit"
-          disabled={uploading || !previews.length}
+          disabled={uploading || !previews.length || !eventId}
           className="mt-5 w-full"
         >
           {uploading
@@ -291,49 +382,97 @@ export function GalleryManager({ initialGallery }: GalleryManagerProps) {
       </form>
 
       <div>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-display text-2xl text-cream">Gallery</h3>
-          <span className="font-body text-xs text-muted">{gallery.length} images</span>
+          <span className="font-body text-xs text-muted">
+            {filteredGallery.length} images
+          </span>
         </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-          {gallery.map((image) => (
-            <div
-              key={image.id}
+
+        <div className="mb-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setFilterEventId("all")}
+            className={cn(
+              "rounded-full border px-3 py-1.5 font-body text-[10px] uppercase tracking-[0.18em] transition",
+              filterEventId === "all"
+                ? "border-gold bg-gold/15 text-gold-soft"
+                : "border-gold/20 text-muted hover:text-cream",
+            )}
+          >
+            All
+          </button>
+          {events.map((event) => (
+            <button
+              key={event.id}
+              type="button"
+              onClick={() => setFilterEventId(event.id)}
               className={cn(
-                "group relative overflow-hidden rounded-xl border border-gold/20 bg-[#0d0b10]",
-                image.aspect === "portrait" && "aspect-[3/4]",
-                image.aspect === "landscape" && "aspect-[4/3]",
-                image.aspect === "square" && "aspect-square",
+                "rounded-full border px-3 py-1.5 font-body text-[10px] uppercase tracking-[0.18em] transition",
+                filterEventId === event.id
+                  ? "border-gold bg-gold/15 text-gold-soft"
+                  : "border-gold/20 text-muted hover:text-cream",
               )}
             >
-              <Image
-                src={image.src}
-                alt={image.alt}
-                fill
-                className="object-cover"
-                sizes="200px"
-              />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                <p className="truncate font-body text-[10px] text-cream/90">
-                  {image.alt}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => onDelete(image.id)}
-                className="absolute right-2 top-2 rounded-full bg-black/60 p-2 text-red-200 opacity-0 transition group-hover:opacity-100"
-                aria-label={`Delete ${image.alt}`}
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
+              {event.name}
+            </button>
           ))}
         </div>
-        {gallery.length === 0 ? (
+
+        {groupedGallery.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-gold/20 p-8 text-center font-body text-sm text-muted">
-            No gallery images yet.
+            No gallery images yet for this filter.
           </p>
-        ) : null}
+        ) : (
+          <div className="space-y-8">
+            {groupedGallery.map((group) => (
+              <div key={group.key}>
+                <div className="mb-3 flex items-baseline justify-between gap-3">
+                  <h4 className="font-display text-xl text-cream">
+                    {group.title}
+                  </h4>
+                  <span className="font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                    {group.images.length} photos
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                  {group.images.map((image) => (
+                    <div
+                      key={image.id}
+                      className={cn(
+                        "group relative overflow-hidden rounded-xl border border-gold/20 bg-[#0d0b10]",
+                        image.aspect === "portrait" && "aspect-[3/4]",
+                        image.aspect === "landscape" && "aspect-[4/3]",
+                        image.aspect === "square" && "aspect-square",
+                      )}
+                    >
+                      <Image
+                        src={image.src}
+                        alt={image.alt}
+                        fill
+                        className="object-cover"
+                        sizes="200px"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                        <p className="truncate font-body text-[10px] text-cream/90">
+                          {image.alt}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onDelete(image.id)}
+                        className="absolute right-2 top-2 rounded-full bg-black/60 p-2 text-red-200 opacity-0 transition group-hover:opacity-100"
+                        aria-label={`Delete ${image.alt}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

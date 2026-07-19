@@ -107,7 +107,7 @@ export function DashboardShell({
         ) : tab === "events" ? (
           <EventsManager initialEvents={events} />
         ) : tab === "gallery" ? (
-          <GalleryManager initialGallery={gallery} />
+          <GalleryManager initialGallery={gallery} events={events} />
         ) : (
           <ChangePinForm />
         )}

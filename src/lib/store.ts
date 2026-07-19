@@ -44,9 +44,13 @@ export function defaultStore(): ContentStore {
 
 function normalizeStore(raw: Partial<ContentStore>): ContentStore {
   const defaults = defaultStore();
+  const gallery = (raw.gallery ?? defaults.gallery).map((image) => ({
+    ...image,
+    eventId: image.eventId || "",
+  }));
   return {
     events: raw.events ?? defaults.events,
-    gallery: raw.gallery ?? defaults.gallery,
+    gallery,
     rsvps: raw.rsvps ?? [],
     adminPinHash: raw.adminPinHash,
   };

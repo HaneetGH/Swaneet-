@@ -64,6 +64,10 @@ export async function DELETE(_request: Request, { params }: Params) {
     }
 
     store.events = next;
+    // Keep photos, but clear the deleted event link
+    store.gallery = store.gallery.map((image) =>
+      image.eventId === id ? { ...image, eventId: "" } : image,
+    );
     await writeStore(store);
     return NextResponse.json({ ok: true });
   } catch (error) {

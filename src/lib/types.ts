@@ -15,6 +15,8 @@ export type ManagedEvent = {
 
 export type GalleryImage = {
   id: string;
+  /** Managed event this photo belongs to */
+  eventId: string;
   alt: string;
   src: string;
   aspect: "portrait" | "landscape" | "square";
