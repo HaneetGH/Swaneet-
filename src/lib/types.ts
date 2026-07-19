@@ -37,10 +37,14 @@ export type RsvpEntry = {
   createdAt: string;
 };
 
+export type AccommodationStatus = "pending" | "confirmed" | "declined";
+
 export type AccommodationRequest = {
   id: string;
   name: string;
   phone: string;
+  /** Contact email for confirmation messages */
+  email: string;
   people: number;
   rooms: number;
   checkIn: string;
@@ -52,6 +56,14 @@ export type AccommodationRequest = {
   authUid?: string;
   authEmail?: string;
   authPhone?: string;
+  status: AccommodationStatus;
+  /** What the family can provide */
+  hotelName?: string;
+  hotelAddress?: string;
+  roomDetails?: string;
+  adminNotes?: string;
+  confirmedAt?: string;
+  emailSentAt?: string;
   createdAt: string;
 };
 

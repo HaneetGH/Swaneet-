@@ -71,11 +71,17 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
       ? []
       : defaults.events;
 
+  const accommodations = (raw.accommodations ?? []).map((item) => ({
+    ...item,
+    email: item.email || item.authEmail || "",
+    status: item.status || ("pending" as const),
+  }));
+
   return {
     events: sortEventsByDateTime(events),
     gallery,
     rsvps: raw.rsvps ?? [],
-    accommodations: raw.accommodations ?? [],
+    accommodations,
     adminPinHash: raw.adminPinHash,
   };
 }
@@ -236,17 +242,38 @@ export async function listAccommodations(): Promise<AccommodationRequest[]> {
 }
 
 export async function addAccommodation(
-  entry: Omit<AccommodationRequest, "id" | "createdAt">,
+  entry: Omit<AccommodationRequest, "id" | "createdAt" | "status"> & {
+    status?: AccommodationRequest["status"];
+  },
 ): Promise<AccommodationRequest> {
   const store = await readStore();
   const request: AccommodationRequest = {
     ...entry,
+    status: entry.status || "pending",
+    email: entry.email || entry.authEmail || "",
     id: `stay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString(),
   };
   store.accommodations = [request, ...store.accommodations];
   await writeStore(store);
   return request;
+}
+
+export async function updateAccommodation(
+  id: string,
+  patch: Partial<AccommodationRequest>,
+): Promise<AccommodationRequest | null> {
+  const store = await readStore();
+  const index = store.accommodations.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+
+  store.accommodations[index] = {
+    ...store.accommodations[index],
+    ...patch,
+    id,
+  };
+  await writeStore(store);
+  return store.accommodations[index];
 }
 
 export async function deleteAccommodation(id: string): Promise<boolean> {

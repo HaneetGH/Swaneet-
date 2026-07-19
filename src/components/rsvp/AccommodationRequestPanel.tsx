@@ -33,6 +33,7 @@ export function AccommodationRequestPanel({
 
   const [name, setName] = useState(defaultName);
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [people, setPeople] = useState(defaultPeople);
   const [rooms, setRooms] = useState(1);
   const [checkIn, setCheckIn] = useState("2026-08-12");
@@ -47,6 +48,7 @@ export function AccommodationRequestPanel({
     setUser(next);
     if (!defaultName && next.displayName) setName(next.displayName);
     if (next.phoneNumber) setPhone(next.phoneNumber);
+    if (next.email) setEmail(next.email);
   }, [defaultName]);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -70,6 +72,7 @@ export function AccommodationRequestPanel({
         body: JSON.stringify({
           name,
           phone,
+          email,
           people,
           rooms,
           checkIn,
@@ -155,6 +158,20 @@ export function AccommodationRequestPanel({
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="+91 …"
+          required
+        />
+      </div>
+
+      <div>
+        <label className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+          Email (for stay confirmation)
+        </label>
+        <input
+          type="email"
+          className={fieldClass}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
           required
         />
       </div>

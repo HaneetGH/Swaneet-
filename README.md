@@ -45,6 +45,7 @@ Override with `ADMIN_PIN` in `.env.local`.
 5. In Firebase Console → Authentication, enable **Google** and **Phone**.
 6. Add your Vercel domain under Authentication → Settings → Authorized domains.
 7. Redeploy after connecting storage / Firebase.
+8. Optional email for stay confirmations: create a [Resend](https://resend.com) API key, set `RESEND_API_KEY` + `EMAIL_FROM`, then use **Save & email guest** in Dashboard → Stay.
 
 Wedding data (events, RSVPs, gallery, stays) lives in Neon / Blob — **deploys never wipe it**. Seed defaults only run when the database is empty.
 

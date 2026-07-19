@@ -2,16 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isAuthenticated, resolveAccommodationUser } from "@/lib/auth";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
-import {
-  addAccommodation,
-  listAccommodations,
-} from "@/lib/store";
+import { addAccommodation, listAccommodations } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 const schema = z.object({
   name: z.string().trim().min(2, "Name is required"),
   phone: z.string().trim().min(7, "Phone number is required"),
+  email: z.string().trim().email("A valid email is required for confirmation"),
   people: z.number().min(1).max(30),
   rooms: z.number().min(1).max(15),
   checkIn: z.string().trim().min(1, "Check-in date is required"),
@@ -52,6 +50,7 @@ export async function POST(request: Request) {
     const requestEntry = await addAccommodation({
       name: parsed.data.name,
       phone: parsed.data.phone || guest?.phone || "",
+      email: parsed.data.email || guest?.email || "",
       people: parsed.data.people,
       rooms: parsed.data.rooms,
       checkIn: parsed.data.checkIn,
@@ -62,6 +61,7 @@ export async function POST(request: Request) {
       authUid: guest?.uid,
       authEmail: guest?.email,
       authPhone: guest?.phone,
+      status: "pending",
     });
 
     return NextResponse.json({ accommodation: requestEntry }, { status: 201 });
