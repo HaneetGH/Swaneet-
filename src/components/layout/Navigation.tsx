@@ -11,10 +11,10 @@ const links = [
   { href: "#story", label: "Story" },
   { href: "#events", label: "Events" },
   { href: "#venue", label: "Venue" },
-  { href: "#share-photos", label: "Share" },
   { href: "#gallery", label: "Gallery" },
   { href: "#family", label: "Family" },
   { href: "#rsvp", label: "RSVP" },
+  { href: "#share-photos", label: "Share" },
 ];
 
 export function Navigation() {

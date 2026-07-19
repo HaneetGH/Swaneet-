@@ -17,7 +17,6 @@ export default function Home() {
       <Navigation />
       <Hero />
       <SharePhotosBanner />
-      <GuestPhotoShare />
       <Countdown />
       <OurStory />
       <Events />
@@ -25,6 +24,7 @@ export default function Home() {
       <Gallery />
       <Family />
       <RSVP />
+      <GuestPhotoShare />
       <Footer />
     </main>
   );
