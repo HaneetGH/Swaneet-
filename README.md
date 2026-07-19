@@ -42,7 +42,7 @@ Override with `ADMIN_PIN` in `.env.local`.
 4. Set environment variables:
    - `ADMIN_PIN` = your private dashboard PIN
    - Firebase web config (`NEXT_PUBLIC_FIREBASE_*`) + `FIREBASE_PROJECT_ID` for accommodation login
-5. In Firebase Console → Authentication, enable **Google** and **Phone**.
+5. In Firebase Console → Authentication, enable **Google**.
 6. Add your Vercel domain under Authentication → Settings → Authorized domains.
 7. Redeploy after connecting storage / Firebase.
 8. Optional email for stay confirmations: create a [Resend](https://resend.com) API key, set `RESEND_API_KEY` + `EMAIL_FROM`, then use **Save & email guest** in Dashboard → Stay.

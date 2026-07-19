@@ -36,7 +36,7 @@ export async function getVerifiedEmailCookie() {
   return value.trim().toLowerCase() || null;
 }
 
-/** Admin dashboard session OR verified Google/phone Firebase user */
+/** Admin dashboard session OR verified Google Firebase user */
 export async function resolveAccommodationUser(
   request: Request,
 ): Promise<{ kind: "admin" } | { kind: "guest"; user: VerifiedGuest } | null> {

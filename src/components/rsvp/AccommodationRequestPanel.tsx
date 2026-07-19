@@ -203,7 +203,7 @@ export function AccommodationRequestPanel({
       <div className="space-y-4 rounded-2xl border border-gold/25 bg-[#100e14] px-5 py-6">
         <div>
           <p className="font-body text-[10px] uppercase tracking-[0.3em] text-gold/70">
-            Signed in · {user.phoneNumber || "Guest"}
+            Signed in
           </p>
           <h4 className="mt-2 font-display text-2xl text-cream">
             Add & verify email
@@ -302,9 +302,7 @@ export function AccommodationRequestPanel({
           Accommodation details
         </h4>
         <p className="mt-1 font-body text-sm text-muted">
-          {email}
-          {user.phoneNumber ? ` · ${user.phoneNumber}` : ""} · tell us how many
-          people need a stay.
+          {email} · tell us how many people need a stay.
         </p>
       </div>
 

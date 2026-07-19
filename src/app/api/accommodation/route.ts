@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const identity = await resolveAccommodationUser(request);
     if (!identity) {
       const hint = isFirebaseAdminConfigured()
-        ? "Please sign in with Google or phone OTP to request a stay"
+        ? "Please sign in with Google to request a stay"
         : "Sign-in is not configured yet. Add Firebase env vars on Vercel.";
       return NextResponse.json({ error: hint }, { status: 401 });
     }
