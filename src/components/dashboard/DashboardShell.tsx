@@ -2,17 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   BedDouble,
   CalendarDays,
   Images,
   KeyRound,
   LogOut,
+  Shield,
+  UserRound,
   Users,
 } from "lucide-react";
 import type {
   AccommodationRequest,
+  AdminPermission,
   GalleryImage,
   ManagedEvent,
   RsvpEntry,
@@ -21,11 +24,20 @@ import { AccommodationManager } from "@/components/dashboard/AccommodationManage
 import { ChangePinForm } from "@/components/dashboard/ChangePinForm";
 import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
+import { GuestLoginsManager } from "@/components/dashboard/GuestLoginsManager";
 import { RsvpManager } from "@/components/dashboard/RsvpManager";
 import { StorageBanner } from "@/components/dashboard/StorageBanner";
+import { TeamManager } from "@/components/dashboard/TeamManager";
 import { cn } from "@/lib/utils";
 
+export type DashboardSession = {
+  kind: "master" | "member";
+  name: string;
+  permissions: AdminPermission[];
+};
+
 type DashboardShellProps = {
+  session: DashboardSession;
   events: ManagedEvent[];
   gallery: GalleryImage[];
   rsvps: RsvpEntry[];
@@ -33,9 +45,22 @@ type DashboardShellProps = {
   loadError?: string;
 };
 
-type Tab = "rsvp" | "stay" | "events" | "gallery" | "settings";
+type Tab =
+  | "rsvp"
+  | "stay"
+  | "events"
+  | "gallery"
+  | "guests"
+  | "team"
+  | "settings";
+
+function can(session: DashboardSession, permission: AdminPermission) {
+  if (session.kind === "master") return true;
+  return session.permissions.includes(permission);
+}
 
 export function DashboardShell({
+  session,
   events,
   gallery,
   rsvps,
@@ -43,7 +68,49 @@ export function DashboardShell({
   loadError,
 }: DashboardShellProps) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("rsvp");
+
+  const tabs = useMemo(() => {
+    const items: Array<{
+      id: Tab;
+      label: string;
+      Icon: typeof Users;
+      count: number;
+    }> = [];
+    if (can(session, "rsvp")) {
+      items.push({ id: "rsvp", label: "RSVPs", Icon: Users, count: rsvps.length });
+    }
+    if (can(session, "stay")) {
+      items.push({
+        id: "stay",
+        label: "Stay",
+        Icon: BedDouble,
+        count: accommodations.length,
+      });
+    }
+    if (can(session, "gallery")) {
+      items.push({
+        id: "gallery",
+        label: "Photos & Videos",
+        Icon: Images,
+        count: gallery.filter((g) => g.status === "pending").length,
+      });
+    }
+    if (can(session, "events")) {
+      items.push({ id: "events", label: "Events", Icon: CalendarDays, count: 0 });
+    }
+    if (can(session, "guests")) {
+      items.push({ id: "guests", label: "Guests", Icon: UserRound, count: 0 });
+    }
+    if (session.kind === "master") {
+      items.push({ id: "team", label: "Team", Icon: Shield, count: 0 });
+      items.push({ id: "settings", label: "Master PIN", Icon: KeyRound, count: 0 });
+    }
+    return items;
+  }, [session, rsvps.length, accommodations.length, gallery]);
+
+  const [tab, setTab] = useState<Tab>(tabs[0]?.id || "rsvp");
+
+  const activeTab = tabs.some((t) => t.id === tab) ? tab : tabs[0]?.id;
 
   const logout = async () => {
     await fetch("/api/auth", { method: "DELETE" });
@@ -59,6 +126,10 @@ export function DashboardShell({
               #Swaneet
             </p>
             <h1 className="font-display text-2xl text-cream">Wedding Dashboard</h1>
+            <p className="mt-1 font-body text-xs text-muted">
+              Signed in as {session.name}
+              {session.kind === "master" ? " · Master" : " · Team"}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <Link
@@ -85,24 +156,16 @@ export function DashboardShell({
             {loadError}
           </div>
         ) : null}
-        <StorageBanner />
-        <div className="mb-8 flex flex-wrap gap-2 rounded-full border border-gold/20 bg-[#141018] p-1 w-fit">
-          {(
-            [
-              ["rsvp", "RSVPs", Users, rsvps.length],
-              ["stay", "Stay", BedDouble, accommodations.length],
-              ["gallery", "Photos & Videos", Images, 0],
-              ["events", "Events", CalendarDays, 0],
-              ["settings", "PIN", KeyRound, 0],
-            ] as const
-          ).map(([id, label, Icon, count]) => (
+        {session.kind === "master" ? <StorageBanner /> : null}
+        <div className="mb-8 flex w-fit flex-wrap gap-2 rounded-full border border-gold/20 bg-[#141018] p-1">
+          {tabs.map(({ id, label, Icon, count }) => (
             <button
               key={id}
               type="button"
               onClick={() => setTab(id)}
               className={cn(
                 "inline-flex items-center gap-2 rounded-full px-5 py-2.5 font-body text-xs uppercase tracking-[0.18em] transition",
-                tab === id
+                activeTab === id
                   ? "bg-gradient-to-r from-gold-deep via-gold to-gold-soft text-[#1a1208]"
                   : "text-muted hover:text-cream",
               )}
@@ -118,16 +181,24 @@ export function DashboardShell({
           ))}
         </div>
 
-        {tab === "rsvp" ? (
+        {activeTab === "rsvp" ? (
           <RsvpManager initialRsvps={rsvps} />
-        ) : tab === "stay" ? (
+        ) : activeTab === "stay" ? (
           <AccommodationManager initialAccommodations={accommodations} />
-        ) : tab === "events" ? (
+        ) : activeTab === "events" ? (
           <EventsManager initialEvents={events} />
-        ) : tab === "gallery" ? (
+        ) : activeTab === "gallery" ? (
           <GalleryManager initialGallery={gallery} events={events} />
-        ) : (
+        ) : activeTab === "guests" ? (
+          <GuestLoginsManager />
+        ) : activeTab === "team" ? (
+          <TeamManager />
+        ) : activeTab === "settings" ? (
           <ChangePinForm />
+        ) : (
+          <p className="font-body text-sm text-muted">
+            No permissions assigned. Ask Master to update your role.
+          </p>
         )}
       </div>
     </div>

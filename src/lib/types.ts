@@ -80,6 +80,36 @@ export type EmailOtpEntry = {
   expiresAt: string;
 };
 
+/** Dashboard permissions for team members (master always has all) */
+export type AdminPermission =
+  | "rsvp"
+  | "stay"
+  | "gallery"
+  | "events"
+  | "guests"
+  | "team";
+
+export type AdminMember = {
+  id: string;
+  name: string;
+  email?: string;
+  pinHash: string;
+  permissions: AdminPermission[];
+  active: boolean;
+  createdAt: string;
+};
+
+/** Guests who signed in (stay / photo share) */
+export type GuestLogin = {
+  uid: string;
+  email?: string;
+  name?: string;
+  phone?: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  sources: Array<"stay" | "photos">;
+};
+
 export type ContentStore = {
   events: ManagedEvent[];
   gallery: GalleryImage[];
@@ -87,6 +117,10 @@ export type ContentStore = {
   accommodations: AccommodationRequest[];
   /** Pending email verification codes (hashed) */
   emailOtps?: Record<string, EmailOtpEntry>;
+  /** Team admins created by master (not including master PIN) */
+  admins?: AdminMember[];
+  /** Firebase guests who used stay or photo share */
+  guestLogins?: GuestLogin[];
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */
   adminPinHash?: string;
 };

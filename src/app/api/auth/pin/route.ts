@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAuthenticated, verifyAdminPin } from "@/lib/auth";
+import { requireMaster, verifyMasterPin } from "@/lib/auth";
 import { hashPin } from "@/lib/pin";
 import { updateAdminPinHash } from "@/lib/store";
 
@@ -14,8 +14,11 @@ const schema = z.object({
 });
 
 export async function PUT(request: Request) {
-  if (!(await isAuthenticated())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await requireMaster())) {
+    return NextResponse.json(
+      { error: "Only master can change the master PIN" },
+      { status: 403 },
+    );
   }
 
   const parsed = schema.safeParse(await request.json());
@@ -42,8 +45,11 @@ export async function PUT(request: Request) {
     );
   }
 
-  if (!(await verifyAdminPin(currentPin))) {
-    return NextResponse.json({ error: "Current PIN is incorrect" }, { status: 401 });
+  if (!(await verifyMasterPin(currentPin))) {
+    return NextResponse.json(
+      { error: "Current PIN is incorrect" },
+      { status: 401 },
+    );
   }
 
   await updateAdminPinHash(hashPin(newPin));

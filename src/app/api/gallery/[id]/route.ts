@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAuthenticated } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
+import { sendGuestPhotoRejectionEmail } from "@/lib/email";
 import { readStore, writeStore } from "@/lib/store";
 import { deleteUploadedImage } from "@/lib/uploads";
 
 type Params = { params: Promise<{ id: string }> };
 
 const patchSchema = z.object({
-  status: z.enum(["approved", "rejected"]),
+  status: z.enum(["approved", "rejected"]).optional(),
   eventId: z.string().optional(),
+}).refine((data) => data.status != null || data.eventId !== undefined, {
+  message: "Provide status and/or eventId",
 });
 
 export async function PATCH(request: Request, { params }: Params) {
-  if (!(await isAuthenticated())) {
+  if (!(await requirePermission("gallery"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -36,13 +39,29 @@ export async function PATCH(request: Request, { params }: Params) {
     store.gallery = store.gallery.filter((item) => item.id !== id);
     await writeStore(store);
     await deleteUploadedImage(image.src);
-    return NextResponse.json({ ok: true, deleted: true });
+
+    let emailSent = false;
+    let emailError: string | undefined;
+    if (image.uploadedByEmail) {
+      const mailed = await sendGuestPhotoRejectionEmail(image);
+      emailSent = mailed.ok;
+      if (!mailed.ok) emailError = mailed.error;
+    } else {
+      emailError = "No guest email on this upload";
+    }
+
+    return NextResponse.json({
+      ok: true,
+      deleted: true,
+      emailSent,
+      emailError,
+    });
   }
 
   const image = store.gallery[index];
   store.gallery[index] = {
     ...image,
-    status: "approved",
+    ...(parsed.data.status === "approved" ? { status: "approved" as const } : {}),
     eventId:
       parsed.data.eventId !== undefined
         ? parsed.data.eventId
@@ -54,7 +73,7 @@ export async function PATCH(request: Request, { params }: Params) {
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
-  if (!(await isAuthenticated())) {
+  if (!(await requirePermission("gallery"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

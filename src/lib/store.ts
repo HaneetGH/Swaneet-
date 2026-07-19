@@ -11,13 +11,19 @@ import {
 } from "@/lib/env";
 import type {
   AccommodationRequest,
+  AdminMember,
+  AdminPermission,
   ContentStore,
   GalleryImage,
+  GuestLogin,
   ManagedEvent,
   RsvpEntry,
 } from "@/lib/types";
 import { sortEventsByDateTime } from "@/lib/datetime";
 import { wedding } from "@/data/wedding";
+import { hashPin } from "@/lib/pin";
+import { normalizePermissions } from "@/lib/roles";
+import type { VerifiedGuest } from "@/lib/firebase/admin";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "content.json");
@@ -43,6 +49,8 @@ export function defaultStore(): ContentStore {
     rsvps: [],
     accommodations: [],
     emailOtps: {},
+    admins: [],
+    guestLogins: [],
   };
 }
 
@@ -83,12 +91,26 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     status: item.status || ("pending" as const),
   }));
 
+  const admins = (raw.admins ?? []).map((admin) => ({
+    ...admin,
+    permissions: Array.isArray(admin.permissions) ? admin.permissions : [],
+    active: admin.active !== false,
+    email: admin.email || undefined,
+  }));
+
+  const guestLogins = (raw.guestLogins ?? []).map((login) => ({
+    ...login,
+    sources: Array.isArray(login.sources) ? login.sources : [],
+  }));
+
   return {
     events: sortEventsByDateTime(events),
     gallery,
     rsvps: raw.rsvps ?? [],
     accommodations,
     emailOtps: raw.emailOtps ?? {},
+    admins,
+    guestLogins,
     adminPinHash: raw.adminPinHash,
   };
 }
@@ -293,4 +315,123 @@ export async function deleteAccommodation(id: string): Promise<boolean> {
   store.accommodations = next;
   await writeStore(store);
   return true;
+}
+
+export async function listAdmins(): Promise<
+  Omit<AdminMember, "pinHash">[]
+> {
+  const store = await readStore();
+  return (store.admins || []).map(({ pinHash: _pin, ...rest }) => rest);
+}
+
+export async function createAdmin(input: {
+  name: string;
+  email?: string;
+  pin: string;
+  permissions: AdminPermission[];
+}): Promise<Omit<AdminMember, "pinHash">> {
+  const store = await readStore();
+  const member: AdminMember = {
+    id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: input.name.trim(),
+    email: input.email?.trim() || undefined,
+    pinHash: hashPin(input.pin),
+    permissions: normalizePermissions(input.permissions).filter(
+      (p) => p !== "team",
+    ),
+    active: true,
+    createdAt: new Date().toISOString(),
+  };
+  store.admins = [...(store.admins || []), member];
+  await writeStore(store);
+  const { pinHash: _pin, ...safe } = member;
+  return safe;
+}
+
+export async function updateAdmin(
+  id: string,
+  patch: {
+    name?: string;
+    email?: string;
+    pin?: string;
+    permissions?: AdminPermission[];
+    active?: boolean;
+  },
+): Promise<Omit<AdminMember, "pinHash"> | null> {
+  const store = await readStore();
+  const index = (store.admins || []).findIndex((item) => item.id === id);
+  if (index < 0) return null;
+
+  const current = store.admins![index];
+  const next: AdminMember = {
+    ...current,
+    name: patch.name?.trim() || current.name,
+    email:
+      patch.email !== undefined
+        ? patch.email.trim() || undefined
+        : current.email,
+    permissions:
+      patch.permissions !== undefined
+        ? normalizePermissions(patch.permissions).filter((p) => p !== "team")
+        : current.permissions,
+    active: patch.active !== undefined ? patch.active : current.active,
+    pinHash: patch.pin ? hashPin(patch.pin) : current.pinHash,
+  };
+  store.admins![index] = next;
+  await writeStore(store);
+  const { pinHash: _pin, ...safe } = next;
+  return safe;
+}
+
+export async function deleteAdmin(id: string): Promise<boolean> {
+  const store = await readStore();
+  const next = (store.admins || []).filter((item) => item.id !== id);
+  if (next.length === (store.admins || []).length) return false;
+  store.admins = next;
+  await writeStore(store);
+  return true;
+}
+
+export async function listGuestLogins(): Promise<GuestLogin[]> {
+  const store = await readStore();
+  return [...(store.guestLogins || [])].sort(
+    (a, b) =>
+      new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime(),
+  );
+}
+
+export async function recordGuestLogin(
+  guest: VerifiedGuest,
+  source: "stay" | "photos",
+): Promise<void> {
+  const store = await readStore();
+  const now = new Date().toISOString();
+  const list = [...(store.guestLogins || [])];
+  const index = list.findIndex((item) => item.uid === guest.uid);
+  if (index >= 0) {
+    const current = list[index];
+    const sources = current.sources.includes(source)
+      ? current.sources
+      : [...current.sources, source];
+    list[index] = {
+      ...current,
+      email: guest.email || current.email,
+      name: guest.name || current.name,
+      phone: guest.phone || current.phone,
+      lastSeenAt: now,
+      sources,
+    };
+  } else {
+    list.push({
+      uid: guest.uid,
+      email: guest.email,
+      name: guest.name,
+      phone: guest.phone,
+      firstSeenAt: now,
+      lastSeenAt: now,
+      sources: [source],
+    });
+  }
+  store.guestLogins = list;
+  await writeStore(store);
 }

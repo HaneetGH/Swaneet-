@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAuthenticated } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { sendAccommodationEmail } from "@/lib/email";
 import { deleteAccommodation, updateAccommodation } from "@/lib/store";
 
@@ -20,7 +20,7 @@ const updateSchema = z.object({
 
 export async function PUT(request: Request, { params }: Params) {
   try {
-    if (!(await isAuthenticated())) {
+    if (!(await requirePermission("stay"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -75,7 +75,7 @@ export async function PUT(request: Request, { params }: Params) {
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
-  if (!(await isAuthenticated())) {
+  if (!(await requirePermission("stay"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

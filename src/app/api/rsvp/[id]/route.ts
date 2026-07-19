@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { isAuthenticated } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { deleteRsvp } from "@/lib/store";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function DELETE(_request: Request, { params }: Params) {
-  if (!(await isAuthenticated())) {
+  if (!(await requirePermission("rsvp"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

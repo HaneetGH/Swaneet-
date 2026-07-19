@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  isAuthenticated,
   isEmailVerifiedForRequest,
+  requirePermission,
   resolveAccommodationUser,
 } from "@/lib/auth";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
-import { addAccommodation, listAccommodations } from "@/lib/store";
+import {
+  addAccommodation,
+  listAccommodations,
+  recordGuestLogin,
+} from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +28,7 @@ const schema = z.object({
 });
 
 export async function GET() {
-  if (!(await isAuthenticated())) {
+  if (!(await requirePermission("stay"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const accommodations = await listAccommodations();
@@ -81,6 +85,10 @@ export async function POST(request: Request) {
       authPhone: guest?.phone,
       status: "pending",
     });
+
+    if (guest) {
+      await recordGuestLogin(guest, "stay").catch(() => undefined);
+    }
 
     return NextResponse.json({ accommodation: requestEntry }, { status: 201 });
   } catch (error) {

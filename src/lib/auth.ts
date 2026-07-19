@@ -1,19 +1,76 @@
+import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { getDefaultAdminPin, verifyPin } from "@/lib/pin";
+import { ALL_PERMISSIONS, normalizePermissions } from "@/lib/roles";
+import type { AdminMember, AdminPermission } from "@/lib/types";
 import type { VerifiedGuest } from "@/lib/firebase/admin";
 
 export const ADMIN_COOKIE = "swaneet_admin";
 export const VERIFIED_EMAIL_COOKIE = "swaneet_email_verified";
-const TOKEN = "authenticated";
+
+/** Legacy cookie value — treated as master */
+const LEGACY_TOKEN = "authenticated";
+
+export type AdminSession =
+  | {
+      kind: "master";
+      name: string;
+      permissions: AdminPermission[];
+    }
+  | {
+      kind: "member";
+      id: string;
+      name: string;
+      permissions: AdminPermission[];
+    };
+
+function sessionSecret() {
+  return (
+    process.env.ADMIN_SESSION_SECRET ||
+    process.env.ADMIN_PIN ||
+    "swaneet-admin-session"
+  );
+}
+
+function sign(payload: string) {
+  return createHmac("sha256", sessionSecret())
+    .update(payload)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+function safeEqual(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+}
+
+export function encodeAdminCookie(session: AdminSession) {
+  if (session.kind === "master") {
+    const payload = "v1.master";
+    return `${payload}.${sign(payload)}`;
+  }
+  const payload = `v1.member.${session.id}`;
+  return `${payload}.${sign(payload)}`;
+}
+
+/** @deprecated use encodeAdminCookie — kept for older imports */
+export function authCookieValue() {
+  return encodeAdminCookie({
+    kind: "master",
+    name: "Master",
+    permissions: [...ALL_PERMISSIONS],
+  });
+}
 
 export async function getStoredPinHash() {
-  // Lazy import avoids circular dependency with store/auth
   const { readStore } = await import("@/lib/store");
   const store = await readStore();
   return store.adminPinHash || null;
 }
 
-export async function verifyAdminPin(pin: string) {
+export async function verifyMasterPin(pin: string) {
   const storedHash = await getStoredPinHash();
   if (storedHash) {
     return verifyPin(pin, storedHash);
@@ -21,13 +78,110 @@ export async function verifyAdminPin(pin: string) {
   return pin === getDefaultAdminPin();
 }
 
-export async function isAuthenticated() {
-  const jar = await cookies();
-  return jar.get(ADMIN_COOKIE)?.value === TOKEN;
+/** @deprecated prefer verifyMasterPin / loginWithPin */
+export async function verifyAdminPin(pin: string) {
+  return verifyMasterPin(pin);
 }
 
-export function authCookieValue() {
-  return TOKEN;
+export async function loginWithPin(
+  pin: string,
+): Promise<AdminSession | null> {
+  if (await verifyMasterPin(pin)) {
+    return {
+      kind: "master",
+      name: "Master",
+      permissions: [...ALL_PERMISSIONS],
+    };
+  }
+
+  const { readStore } = await import("@/lib/store");
+  const store = await readStore();
+  const members = store.admins || [];
+  for (const member of members) {
+    if (!member.active) continue;
+    if (verifyPin(pin, member.pinHash)) {
+      return {
+        kind: "member",
+        id: member.id,
+        name: member.name,
+        permissions: normalizePermissions(member.permissions),
+      };
+    }
+  }
+  return null;
+}
+
+export async function getAdminSession(): Promise<AdminSession | null> {
+  const jar = await cookies();
+  const raw = jar.get(ADMIN_COOKIE)?.value || "";
+  if (!raw) return null;
+
+  if (raw === LEGACY_TOKEN) {
+    return {
+      kind: "master",
+      name: "Master",
+      permissions: [...ALL_PERMISSIONS],
+    };
+  }
+
+  const parts = raw.split(".");
+  if (parts[0] !== "v1") return null;
+
+  if (parts[1] === "master" && parts.length === 3) {
+    const payload = "v1.master";
+    if (!safeEqual(parts[2], sign(payload))) return null;
+    return {
+      kind: "master",
+      name: "Master",
+      permissions: [...ALL_PERMISSIONS],
+    };
+  }
+
+  if (parts[1] === "member" && parts.length === 4) {
+    const id = parts[2];
+    const payload = `v1.member.${id}`;
+    if (!safeEqual(parts[3], sign(payload))) return null;
+
+    const { readStore } = await import("@/lib/store");
+    const store = await readStore();
+    const member = (store.admins || []).find(
+      (item: AdminMember) => item.id === id && item.active,
+    );
+    if (!member) return null;
+    return {
+      kind: "member",
+      id: member.id,
+      name: member.name,
+      permissions: normalizePermissions(member.permissions),
+    };
+  }
+
+  return null;
+}
+
+export async function isAuthenticated() {
+  return Boolean(await getAdminSession());
+}
+
+export function sessionHasPermission(
+  session: AdminSession | null,
+  permission: AdminPermission,
+) {
+  if (!session) return false;
+  if (session.kind === "master") return true;
+  return session.permissions.includes(permission);
+}
+
+export async function requirePermission(permission: AdminPermission) {
+  const session = await getAdminSession();
+  if (!sessionHasPermission(session, permission)) return null;
+  return session;
+}
+
+export async function requireMaster() {
+  const session = await getAdminSession();
+  if (!session || session.kind !== "master") return null;
+  return session;
 }
 
 export async function getVerifiedEmailCookie() {
@@ -52,11 +206,6 @@ export async function resolveAccommodationUser(
   return { kind: "guest", user };
 }
 
-/**
- * Email is verified when:
- * - Firebase Google login already has that email, or
- * - Guest completed email OTP (cookie matches)
- */
 export async function isEmailVerifiedForRequest(
   email: string,
   guest: VerifiedGuest | null,

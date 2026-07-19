@@ -1,6 +1,6 @@
 import { LoginForm } from "@/components/dashboard/LoginForm";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { isAuthenticated } from "@/lib/auth";
+import { getAdminSession, sessionHasPermission } from "@/lib/auth";
 import {
   defaultStore,
   listAccommodations,
@@ -12,9 +12,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const authed = await isAuthenticated();
+  const session = await getAdminSession();
 
-  if (!authed) {
+  if (!session) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#07060a] px-5">
         <LoginForm />
@@ -22,16 +22,32 @@ export default async function DashboardPage() {
     );
   }
 
+  const publicSession = {
+    kind: session.kind,
+    name: session.name,
+    permissions: session.permissions,
+  };
+
   try {
     const [events, gallery, rsvps, accommodations] = await Promise.all([
-      listEvents(),
-      listGallery({ includePending: true }),
-      listRsvps(),
-      listAccommodations(),
+      sessionHasPermission(session, "events") ||
+      sessionHasPermission(session, "gallery")
+        ? listEvents()
+        : Promise.resolve([]),
+      sessionHasPermission(session, "gallery")
+        ? listGallery({ includePending: true })
+        : Promise.resolve([]),
+      sessionHasPermission(session, "rsvp")
+        ? listRsvps()
+        : Promise.resolve([]),
+      sessionHasPermission(session, "stay")
+        ? listAccommodations()
+        : Promise.resolve([]),
     ]);
 
     return (
       <DashboardShell
+        session={publicSession}
         events={events}
         gallery={gallery}
         rsvps={rsvps}
@@ -48,6 +64,7 @@ export default async function DashboardPage() {
 
     return (
       <DashboardShell
+        session={publicSession}
         events={fallback.events}
         gallery={fallback.gallery}
         rsvps={fallback.rsvps}

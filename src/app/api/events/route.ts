@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAuthenticated } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { listEvents, readStore, writeStore } from "@/lib/store";
 import type { ManagedEvent } from "@/lib/types";
 
@@ -33,7 +33,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    if (!(await isAuthenticated())) {
+    if (!(await requirePermission("events"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

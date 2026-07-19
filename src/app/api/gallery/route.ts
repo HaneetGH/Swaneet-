@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAuthenticated } from "@/lib/auth";
+import { requirePermission, sessionHasPermission, getAdminSession } from "@/lib/auth";
 import { listGallery, readStore, writeStore } from "@/lib/store";
 import type { GalleryImage } from "@/lib/types";
 import { saveUploadedImage } from "@/lib/uploads";
@@ -47,7 +47,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const eventId = searchParams.get("eventId");
   const wantsAll = searchParams.get("all") === "1";
-  const includePending = wantsAll && (await isAuthenticated());
+  const session = await getAdminSession();
+  const includePending =
+    wantsAll && sessionHasPermission(session, "gallery");
   const gallery = await listGallery({ includePending });
   const filtered = eventId
     ? gallery.filter((image) => image.eventId === eventId)
@@ -57,7 +59,7 @@ export async function GET(request: Request) {
 
 /** Register media already uploaded to Blob (preferred for videos / large files). */
 async function registerFromJson(request: Request) {
-  if (!(await isAuthenticated())) {
+  if (!(await requirePermission("gallery"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -102,7 +104,7 @@ async function registerFromJson(request: Request) {
 
 /** Local / small-image fallback through FormData (not suitable for videos on Vercel). */
 async function registerFromFormData(request: Request) {
-  if (!(await isAuthenticated())) {
+  if (!(await requirePermission("gallery"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

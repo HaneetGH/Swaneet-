@@ -35,11 +35,12 @@ function safeFilename(name: string) {
 
 export function GalleryManager({
   initialGallery,
-  events,
+  events: initialEvents,
 }: GalleryManagerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [gallery, setGallery] = useState(initialGallery);
-  const [eventId, setEventId] = useState(events[0]?.id || "");
+  const [events, setEvents] = useState(initialEvents);
+  const [eventId, setEventId] = useState(initialEvents[0]?.id || "");
   const [filterEventId, setFilterEventId] = useState<string>("all");
   const [alt, setAlt] = useState("");
   const [aspect, setAspect] = useState<"portrait" | "landscape" | "square">(
@@ -51,10 +52,18 @@ export function GalleryManager({
   const [progress, setProgress] = useState("");
   const [dragging, setDragging] = useState(false);
   const [hasBlob, setHasBlob] = useState<boolean | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkEventId, setBulkEventId] = useState(initialEvents[0]?.id || "");
+  const [moderating, setModerating] = useState(false);
+
+  useEffect(() => {
+    setEvents(initialEvents);
+  }, [initialEvents]);
 
   useEffect(() => {
     if (!eventId && events[0]?.id) setEventId(events[0].id);
-  }, [eventId, events]);
+    if (!bulkEventId && events[0]?.id) setBulkEventId(events[0].id);
+  }, [eventId, bulkEventId, events]);
 
   useEffect(() => {
     fetch("/api/storage")
@@ -80,6 +89,23 @@ export function GalleryManager({
     () => gallery.filter((image) => image.status === "pending"),
     [gallery],
   );
+
+  const selectedPending = useMemo(
+    () => selectedIds.filter((id) => pendingGuest.some((img) => img.id === id)),
+    [selectedIds, pendingGuest],
+  );
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
+  };
+
+  const selectAllPending = () => {
+    setSelectedIds(pendingGuest.map((image) => image.id));
+  };
+
+  const clearSelection = () => setSelectedIds([]);
 
   const filteredGallery = useMemo(() => {
     const published = gallery.filter((image) => image.status === "approved");
@@ -305,31 +331,69 @@ export function GalleryManager({
     if (res.ok) setGallery((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const onModerate = async (
-    id: string,
-    status: "approved" | "rejected",
-    eventIdForApprove?: string,
-  ) => {
-    const res = await fetch(`/api/gallery/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status,
-        ...(status === "approved" && eventIdForApprove
-          ? { eventId: eventIdForApprove }
-          : {}),
-      }),
-    });
-    if (!res.ok) return;
-    if (status === "rejected") {
-      setGallery((prev) => prev.filter((item) => item.id !== id));
+  const onBulkModerate = async (action: "approve" | "reject" | "assign") => {
+    const ids = selectedPending.length
+      ? selectedPending
+      : pendingGuest.length === 1
+        ? [pendingGuest[0].id]
+        : [];
+    if (!ids.length) {
+      setError("Select at least one guest photo");
       return;
     }
-    const data = (await res.json()) as { image?: GalleryImage };
-    if (data.image) {
-      setGallery((prev) =>
-        prev.map((item) => (item.id === id ? data.image! : item)),
-      );
+    if ((action === "approve" || action === "assign") && !bulkEventId) {
+      setError("Choose an event first");
+      return;
+    }
+
+    setModerating(true);
+    setError("");
+    setProgress("");
+    try {
+      const res = await fetch("/api/gallery/moderate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids,
+          action,
+          eventId: bulkEventId || "",
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        count?: number;
+        emailed?: number;
+        emailFailed?: number;
+        images?: GalleryImage[];
+      };
+      if (!res.ok) {
+        setError(data.error || "Could not update photos");
+        return;
+      }
+
+      if (action === "reject") {
+        setGallery((prev) => prev.filter((item) => !ids.includes(item.id)));
+        setProgress(
+          `Rejected ${data.count ?? ids.length} · emailed ${data.emailed ?? 0}${
+            data.emailFailed ? ` · ${data.emailFailed} email failed` : ""
+          }`,
+        );
+      } else if (data.images) {
+        const map = new Map(data.images.map((image) => [image.id, image]));
+        setGallery((prev) =>
+          prev.map((item) => map.get(item.id) || item),
+        );
+        setProgress(
+          action === "approve"
+            ? `Approved ${data.count ?? ids.length} photo(s)`
+            : `Assigned ${data.count ?? ids.length} photo(s) to event`,
+        );
+      }
+      clearSelection();
+    } catch {
+      setError("Could not update photos");
+    } finally {
+      setModerating(false);
     }
   };
 
@@ -549,77 +613,136 @@ export function GalleryManager({
       <div>
         {pendingGuest.length > 0 ? (
           <div className="mb-8 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4">
-            <div className="mb-3 flex items-baseline justify-between gap-3">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
               <h3 className="font-display text-xl text-cream">
                 Guest photos to review
               </h3>
               <span className="font-body text-[10px] uppercase tracking-[0.2em] text-amber-100/80">
-                {pendingGuest.length} pending
+                {pendingGuest.length} pending · {selectedPending.length} selected
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-              {pendingGuest.map((image) => (
-                <div
-                  key={image.id}
-                  className="overflow-hidden rounded-xl border border-gold/20 bg-[#0d0b10]"
+
+            <div className="mb-4 space-y-3 rounded-xl border border-gold/15 bg-[#0d0b10]/80 p-3">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={selectAllPending}
+                  className="rounded-full border border-gold/25 px-3 py-1.5 font-body text-[10px] uppercase tracking-[0.18em] text-gold-soft"
                 >
-                  <div className="relative aspect-square">
-                    <Image
-                      src={image.src}
-                      alt={image.alt}
-                      fill
-                      className="object-cover"
-                      sizes="200px"
-                    />
-                  </div>
-                  <div className="space-y-2 p-2">
-                    <p className="truncate font-body text-[10px] text-muted">
-                      {image.uploadedByName ||
-                        image.uploadedByEmail ||
-                        "Guest"}
-                    </p>
-                    <select
-                      id={`event-${image.id}`}
-                      defaultValue={eventId || events[0]?.id || ""}
-                      className="w-full rounded-lg border border-gold/20 bg-[#141018] px-2 py-1.5 font-body text-[10px] text-cream [color-scheme:dark]"
-                    >
-                      <option value="">No event</option>
-                      {events.map((event) => (
-                        <option key={event.id} value={event.id}>
-                          {event.name}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-gold/20 py-1.5 font-body text-[10px] uppercase tracking-wider text-gold-soft"
-                        onClick={() => {
-                          const select = document.getElementById(
-                            `event-${image.id}`,
-                          ) as HTMLSelectElement | null;
-                          void onModerate(
-                            image.id,
-                            "approved",
-                            select?.value || "",
-                          );
-                        }}
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="rounded-full border border-gold/15 px-3 py-1.5 font-body text-[10px] uppercase tracking-[0.18em] text-muted"
+                >
+                  Clear
+                </button>
+              </div>
+              <label className="block">
+                <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                  Event for selected
+                </span>
+                <select
+                  value={bulkEventId}
+                  onChange={(e) => setBulkEventId(e.target.value)}
+                  className="w-full rounded-lg border border-gold/20 bg-[#141018] px-2 py-2 font-body text-xs text-cream [color-scheme:dark]"
+                >
+                  {events.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {event.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={moderating || !selectedPending.length}
+                  onClick={() => void onBulkModerate("approve")}
+                  className="flex-1 min-w-[7rem]"
+                >
+                  <Check size={14} />
+                  Approve
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={moderating || !selectedPending.length}
+                  onClick={() => void onBulkModerate("assign")}
+                  className="flex-1 min-w-[7rem]"
+                >
+                  Assign event
+                </Button>
+                <button
+                  type="button"
+                  disabled={moderating || !selectedPending.length}
+                  onClick={() => {
+                    if (
+                      confirm(
+                        `Reject ${selectedPending.length} photo(s)? Guests will get a sorry email.`,
+                      )
+                    ) {
+                      void onBulkModerate("reject");
+                    }
+                  }}
+                  className="flex flex-1 min-w-[7rem] items-center justify-center gap-1 rounded-full border border-red-400/30 bg-red-500/10 px-4 py-2.5 font-body text-xs uppercase tracking-[0.18em] text-red-200 disabled:opacity-50"
+                >
+                  <X size={14} />
+                  Reject
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              {pendingGuest.map((image) => {
+                const selected = selectedIds.includes(image.id);
+                const assignedName =
+                  eventNameById.get(image.eventId) || "No event";
+                return (
+                  <button
+                    key={image.id}
+                    type="button"
+                    onClick={() => toggleSelected(image.id)}
+                    className={cn(
+                      "overflow-hidden rounded-xl border bg-[#0d0b10] text-left transition",
+                      selected
+                        ? "border-gold ring-1 ring-gold/40"
+                        : "border-gold/20",
+                    )}
+                  >
+                    <div className="relative aspect-square">
+                      <Image
+                        src={image.src}
+                        alt={image.alt}
+                        fill
+                        className="object-cover"
+                        sizes="200px"
+                      />
+                      <span
+                        className={cn(
+                          "absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded border text-[10px]",
+                          selected
+                            ? "border-gold bg-gold text-[#1a1208]"
+                            : "border-cream/40 bg-black/50 text-cream",
+                        )}
                       >
-                        <Check size={12} />
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-red-500/15 py-1.5 font-body text-[10px] uppercase tracking-wider text-red-200"
-                        onClick={() => void onModerate(image.id, "rejected")}
-                      >
-                        <X size={12} />
-                        Reject
-                      </button>
+                        {selected ? "✓" : ""}
+                      </span>
                     </div>
-                  </div>
-                </div>
-              ))}
+                    <div className="space-y-1 p-2">
+                      <p className="truncate font-body text-[10px] text-muted">
+                        {image.uploadedByName ||
+                          image.uploadedByEmail ||
+                          "Guest"}
+                      </p>
+                      <p className="truncate font-body text-[10px] text-gold-soft">
+                        {assignedName}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : null}

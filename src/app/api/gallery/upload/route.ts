@@ -1,6 +1,6 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
-import { isAuthenticated } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { hasBlobStorage } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ const ALLOWED = [
 
 export async function POST(request: Request) {
   try {
-    if (!(await isAuthenticated())) {
+    if (!(await requirePermission("gallery"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

@@ -42,7 +42,7 @@ export function LoginForm() {
       </p>
       <h1 className="mt-3 font-display text-3xl text-cream">Dashboard</h1>
       <p className="mt-2 font-body text-sm text-muted">
-        Enter your PIN to manage events and gallery images.
+        Enter the master PIN or your team PIN. Access depends on your role.
       </p>
 
       <label htmlFor="pin" className="mt-8 block font-body text-xs uppercase tracking-[0.2em] text-muted">

@@ -2,25 +2,34 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyBearerToken } from "@/lib/firebase/admin";
-import { readStore, writeStore } from "@/lib/store";
+import { resolveGuestEvent } from "@/lib/guest-event";
+import { readStore, recordGuestLogin, writeStore } from "@/lib/store";
 import type { GalleryImage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const MAX_FILES = 5;
 
-const schema = z.object({
-  media: z
-    .array(
-      z.object({
-        src: z.string().trim().url(),
-        alt: z.string().optional().default(""),
-        aspect: z.enum(["portrait", "landscape", "square"]).default("square"),
-      }),
-    )
-    .min(1)
-    .max(MAX_FILES),
-});
+const schema = z
+  .object({
+    eventId: z.string().trim().optional().default(""),
+    newEventName: z.string().trim().max(80).optional().default(""),
+    media: z
+      .array(
+        z.object({
+          src: z.string().trim().url(),
+          alt: z.string().optional().default(""),
+          aspect: z
+            .enum(["portrait", "landscape", "square"])
+            .default("square"),
+        }),
+      )
+      .min(1)
+      .max(MAX_FILES),
+  })
+  .refine((data) => Boolean(data.eventId || data.newEventName), {
+    message: "Choose an event or create a new one",
+  });
 
 export async function POST(request: Request) {
   try {
@@ -40,10 +49,33 @@ export async function POST(request: Request) {
       );
     }
 
-    const store = await readStore();
+    let store = await readStore();
+    let eventId = "";
+    let createdEvent = undefined as ReturnType<
+      typeof resolveGuestEvent
+    >["created"];
+
+    try {
+      const resolved = resolveGuestEvent(store, {
+        eventId: parsed.data.eventId,
+        newEventName: parsed.data.newEventName,
+      });
+      store = resolved.store;
+      eventId = resolved.eventId;
+      createdEvent = resolved.created;
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error:
+            err instanceof Error ? err.message : "Could not assign event",
+        },
+        { status: 400 },
+      );
+    }
+
     const images: GalleryImage[] = parsed.data.media.map((item, index) => ({
       id: randomUUID(),
-      eventId: "",
+      eventId,
       src: item.src,
       aspect: item.aspect,
       kind: "image" as const,
@@ -62,8 +94,12 @@ export async function POST(request: Request) {
 
     store.gallery = [...images, ...store.gallery];
     await writeStore(store);
+    await recordGuestLogin(guest, "photos").catch(() => undefined);
 
-    return NextResponse.json({ images, pending: true }, { status: 201 });
+    return NextResponse.json(
+      { images, pending: true, eventId, createdEvent },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("POST /api/gallery/guest failed", error);
     return NextResponse.json(

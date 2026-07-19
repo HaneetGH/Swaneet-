@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAuthenticated } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { addRsvp, listRsvps } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ const rsvpSchema = z.object({
 
 export async function GET() {
   try {
-    if (!(await isAuthenticated())) {
+    if (!(await requirePermission("rsvp"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

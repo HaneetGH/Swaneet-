@@ -3,7 +3,7 @@
 import { upload } from "@vercel/blob/client";
 import type { User } from "firebase/auth";
 import { Camera, Check, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   GuestAuthPanel,
   getGuestIdToken,
@@ -11,10 +11,14 @@ import {
 } from "@/components/rsvp/GuestAuthPanel";
 import { Button } from "@/components/ui/Button";
 import { SectionHeading } from "@/components/ui/SectionHeading";
+import type { ManagedEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const MAX_FILES = 5;
 const ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
+
+const fieldClass =
+  "w-full rounded-xl border border-gold/25 bg-[#141018] px-4 py-3 font-body text-sm text-cream outline-none transition focus:border-gold/60 [color-scheme:dark]";
 
 type PreviewItem = {
   id: string;
@@ -29,6 +33,10 @@ function safeFilename(name: string) {
 export function GuestPhotoShare() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [events, setEvents] = useState<ManagedEvent[]>([]);
+  const [eventMode, setEventMode] = useState<"existing" | "new">("existing");
+  const [eventId, setEventId] = useState("");
+  const [newEventName, setNewEventName] = useState("");
   const [previews, setPreviews] = useState<PreviewItem[]>([]);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
@@ -37,6 +45,21 @@ export function GuestPhotoShare() {
 
   const onAuthed = useCallback((next: User) => {
     setUser(next);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/events")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { events?: ManagedEvent[] } | null) => {
+        if (!alive || !data?.events?.length) return;
+        setEvents(data.events);
+        setEventId((prev) => prev || data.events![0]?.id || "");
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const clearPreviews = () => {
@@ -84,6 +107,14 @@ export function GuestPhotoShare() {
       setError("Choose at least one photo");
       return;
     }
+    if (eventMode === "existing" && !eventId) {
+      setError("Choose an event for these photos");
+      return;
+    }
+    if (eventMode === "new" && newEventName.trim().length < 2) {
+      setError("Enter a name for the new event");
+      return;
+    }
 
     setUploading(true);
     setError("");
@@ -120,12 +151,27 @@ export function GuestPhotoShare() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ media }),
+        body: JSON.stringify({
+          media,
+          ...(eventMode === "existing"
+            ? { eventId }
+            : { newEventName: newEventName.trim() }),
+        }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        createdEvent?: ManagedEvent;
+      };
       if (!res.ok) {
         setError(data.error || "Could not share photos");
         return;
+      }
+
+      if (data.createdEvent) {
+        setEvents((prev) => [...prev, data.createdEvent!]);
+        setEventId(data.createdEvent.id);
+        setEventMode("existing");
+        setNewEventName("");
       }
 
       clearPreviews();
@@ -139,12 +185,15 @@ export function GuestPhotoShare() {
   };
 
   return (
-    <section id="share-photos" className="section-pad relative scroll-mt-24 pt-10 sm:pt-14">
+    <section
+      id="share-photos"
+      className="section-pad relative scroll-mt-24 pt-10 sm:pt-14"
+    >
       <div className="mx-auto max-w-xl">
         <SectionHeading
           eyebrow="Share"
           title="Add a photo"
-          subtitle="Quick upload — we’ll review before it appears in the gallery"
+          subtitle="Pick an event (or create one), then upload — we’ll review before it appears"
         />
 
         {done ? (
@@ -178,6 +227,65 @@ export function GuestPhotoShare() {
             <p className="font-body text-[10px] uppercase tracking-[0.3em] text-gold/70">
               Signed in · {user.email || user.displayName || "Guest"}
             </p>
+
+            <div className="mt-4 space-y-3">
+              <p className="font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                Event
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEventMode("existing")}
+                  className={cn(
+                    "flex-1 rounded-full border px-3 py-2 font-body text-[10px] uppercase tracking-[0.18em] transition",
+                    eventMode === "existing"
+                      ? "border-gold bg-gold/15 text-gold-soft"
+                      : "border-gold/20 text-muted hover:text-cream",
+                  )}
+                >
+                  Existing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEventMode("new")}
+                  className={cn(
+                    "flex-1 rounded-full border px-3 py-2 font-body text-[10px] uppercase tracking-[0.18em] transition",
+                    eventMode === "new"
+                      ? "border-gold bg-gold/15 text-gold-soft"
+                      : "border-gold/20 text-muted hover:text-cream",
+                  )}
+                >
+                  Create new
+                </button>
+              </div>
+
+              {eventMode === "existing" ? (
+                <select
+                  className={fieldClass}
+                  value={eventId}
+                  onChange={(e) => setEventId(e.target.value)}
+                  required
+                >
+                  {events.length === 0 ? (
+                    <option value="">No events yet — create one</option>
+                  ) : (
+                    events.map((event) => (
+                      <option key={event.id} value={event.id}>
+                        {event.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              ) : (
+                <input
+                  className={fieldClass}
+                  value={newEventName}
+                  onChange={(e) => setNewEventName(e.target.value)}
+                  placeholder="e.g. Mehndi at home"
+                  required
+                />
+              )}
+            </div>
 
             <div
               className={cn(

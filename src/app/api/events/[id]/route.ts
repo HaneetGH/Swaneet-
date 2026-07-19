@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAuthenticated } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { readStore, writeStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function PUT(request: Request, { params }: Params) {
   try {
-    if (!(await isAuthenticated())) {
+    if (!(await requirePermission("events"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -52,7 +52,7 @@ export async function PUT(request: Request, { params }: Params) {
 
 export async function DELETE(_request: Request, { params }: Params) {
   try {
-    if (!(await isAuthenticated())) {
+    if (!(await requirePermission("events"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
