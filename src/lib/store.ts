@@ -89,32 +89,41 @@ async function writeLocalStore(store: ContentStore): Promise<void> {
 export async function readStore(): Promise<ContentStore> {
   const mode = storageMode();
 
-  if (mode === "database") {
-    const fromDb = await readStoreFromDb();
-    if (!fromDb) {
-      const seeded = defaultStore();
-      await writeStoreToDb(seeded);
-      return seeded;
+  try {
+    if (mode === "database") {
+      const fromDb = await readStoreFromDb();
+      if (!fromDb) {
+        const seeded = defaultStore();
+        await writeStoreToDb(seeded);
+        return seeded;
+      }
+      return normalizeStore(fromDb);
     }
-    return normalizeStore(fromDb);
-  }
 
-  if (mode === "blob") {
-    const fromBlob = await readStoreFromBlob();
-    if (!fromBlob) {
-      const seeded = defaultStore();
-      await writeStoreToBlob(seeded);
-      return seeded;
+    if (mode === "blob") {
+      const fromBlob = await readStoreFromBlob();
+      if (!fromBlob) {
+        const seeded = defaultStore();
+        await writeStoreToBlob(seeded);
+        return seeded;
+      }
+      return normalizeStore(fromBlob);
     }
-    return normalizeStore(fromBlob);
-  }
 
-  if (mode === "local") {
-    return readLocalStore();
-  }
+    if (mode === "local") {
+      return readLocalStore();
+    }
 
-  // Vercel without storage: serve defaults read-only
-  return defaultStore();
+    // Vercel without storage: serve defaults read-only
+    return defaultStore();
+  } catch (error) {
+    console.error("readStore failed", error);
+    // Prefer serving invitation defaults over crashing the page
+    if (mode === "database" || mode === "blob") {
+      throw error;
+    }
+    return defaultStore();
+  }
 }
 
 export async function writeStore(store: ContentStore): Promise<void> {

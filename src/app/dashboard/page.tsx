@@ -1,7 +1,7 @@
 import { LoginForm } from "@/components/dashboard/LoginForm";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { isAuthenticated } from "@/lib/auth";
-import { listEvents, listGallery, listRsvps } from "@/lib/store";
+import { defaultStore, listEvents, listGallery, listRsvps } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +16,29 @@ export default async function DashboardPage() {
     );
   }
 
-  const [events, gallery, rsvps] = await Promise.all([
-    listEvents(),
-    listGallery(),
-    listRsvps(),
-  ]);
+  try {
+    const [events, gallery, rsvps] = await Promise.all([
+      listEvents(),
+      listGallery(),
+      listRsvps(),
+    ]);
 
-  return <DashboardShell events={events} gallery={gallery} rsvps={rsvps} />;
+    return <DashboardShell events={events} gallery={gallery} rsvps={rsvps} />;
+  } catch (error) {
+    console.error("Dashboard load failed", error);
+    const fallback = defaultStore();
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Could not load dashboard data. Check Neon storage in Vercel.";
+
+    return (
+      <DashboardShell
+        events={fallback.events}
+        gallery={fallback.gallery}
+        rsvps={fallback.rsvps}
+        loadError={message}
+      />
+    );
+  }
 }

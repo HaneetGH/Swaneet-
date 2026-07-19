@@ -48,13 +48,7 @@ body {
   color: var(--text);
   font-family: var(--font-body), Georgia, serif;
   overflow-x: hidden;
-  cursor: none;
-}
-
-@media (pointer: coarse) {
-  body {
-    cursor: auto;
-  }
+  cursor: auto;
 }
 
 ::selection {

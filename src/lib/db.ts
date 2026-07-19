@@ -28,13 +28,17 @@ export async function ensureDatabase() {
 export async function readStoreFromDb(): Promise<ContentStore | null> {
   await ensureDatabase();
   const db = sql();
-  const rows = await db.query(
+  const result = await db.query(
     `SELECT data FROM content_store WHERE id = $1 LIMIT 1`,
     ["main"],
   );
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: Array<{ data: unknown }> })?.rows ?? []);
   if (!rows.length) return null;
 
-  const raw = rows[0].data;
+  const raw = rows[0]?.data;
+  if (raw == null) return null;
   if (typeof raw === "string") {
     return JSON.parse(raw) as ContentStore;
   }
