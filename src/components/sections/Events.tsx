@@ -1,11 +1,12 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { Heart, Moon, Sparkles, Star, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { wedding } from "@/data/wedding";
 import type { EventIcon, ManagedEvent } from "@/lib/types";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-import { GlassCard } from "@/components/ui/GlassCard";
+import { cn } from "@/lib/utils";
 
 const icons: Record<EventIcon, typeof Moon> = {
   moon: Moon,
@@ -45,71 +46,200 @@ export function Events() {
   }, []);
 
   return (
-    <section id="events" className="section-pad relative">
-      <div className="mx-auto max-w-6xl">
+    <section id="events" className="section-pad relative overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-gold/20 to-transparent opacity-40 md:opacity-60"
+      />
+
+      <div className="relative mx-auto max-w-5xl">
         <SectionHeading
           eyebrow="Celebrations"
           title="Wedding Events"
           subtitle="Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri"
         />
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <ol className="relative mx-auto max-w-4xl">
+          {/* Timeline spine */}
+          <div
+            aria-hidden
+            className="absolute bottom-2 left-[1.15rem] top-2 w-px bg-gradient-to-b from-gold/50 via-gold/25 to-gold/10 md:left-1/2 md:-translate-x-1/2"
+          />
+
           {events.map((event, i) => {
             const Icon = icons[event.icon] || Heart;
+            const isLeft = i % 2 === 0;
+
             return (
-              <GlassCard
+              <li
                 key={event.id}
-                glow
-                transition={{
-                  duration: 0.7,
-                  delay: i * 0.1,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-                className="flex flex-col"
+                className="relative grid grid-cols-[2.3rem_1fr] gap-x-5 pb-12 last:pb-0 md:grid-cols-[1fr_2.5rem_1fr] md:gap-x-8 md:pb-16"
               >
-                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-gold/30 bg-gold/10 text-gold">
-                  <Icon size={20} aria-hidden />
-                </div>
-                <div className="mb-4 inline-flex self-start rounded-sm border border-gold/40 bg-maroon/40 px-3 py-1">
-                  <span className="font-display text-sm tracking-wide text-gold-soft">
-                    {event.name}
-                  </span>
-                </div>
-                {event.day ? (
-                  <p className="font-body text-xs uppercase tracking-[0.25em] text-muted">
-                    {event.day}
-                  </p>
-                ) : null}
-                <p className="mt-2 font-display text-xl text-cream">
-                  {event.date}
-                </p>
-                <p className="mt-1 font-body text-sm text-gold-soft">
-                  {event.time}
-                </p>
-                <div className="my-5 h-px w-full bg-gradient-to-r from-gold/40 via-gold/10 to-transparent" />
-                <p className="font-display text-base text-cream">
-                  {event.venue}
-                </p>
-                {event.venueDetail ? (
-                  <p className="mt-1 font-body text-xs text-muted">
-                    {event.venueDetail}
-                  </p>
-                ) : null}
-                {event.address ? (
-                  <p className="mt-1 font-body text-xs text-muted">
-                    {event.address}
-                  </p>
-                ) : null}
-                {event.description ? (
-                  <p className="mt-5 font-body text-sm leading-relaxed text-muted">
-                    {event.description}
-                  </p>
-                ) : null}
-              </GlassCard>
+                {/* Desktop left content */}
+                <motion.div
+                  initial={{ opacity: 0, x: -28 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true, margin: "-60px" }}
+                  transition={{
+                    duration: 0.7,
+                    delay: i * 0.08,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className={cn(
+                    "hidden md:block",
+                    isLeft ? "col-start-1 row-start-1 text-right" : "invisible",
+                  )}
+                >
+                  {isLeft ? <EventDetails event={event} align="right" /> : null}
+                </motion.div>
+
+                {/* Node */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.6 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true, margin: "-60px" }}
+                  transition={{
+                    duration: 0.5,
+                    delay: i * 0.08 + 0.1,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className="relative z-10 col-start-1 row-start-1 flex justify-center self-start md:col-start-2"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-gold/45 bg-[#0d0b10] text-gold shadow-[0_0_24px_-4px_rgba(212,175,55,0.55)]">
+                    <Icon size={16} aria-hidden />
+                  </div>
+                </motion.div>
+
+                {/* Mobile always + desktop right content */}
+                <motion.div
+                  initial={{ opacity: 0, x: 28 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true, margin: "-60px" }}
+                  transition={{
+                    duration: 0.7,
+                    delay: i * 0.08,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className={cn(
+                    "col-start-2 row-start-1 md:col-start-3",
+                    isLeft && "md:invisible",
+                  )}
+                >
+                  <div className="md:hidden">
+                    <EventDetails event={event} align="left" />
+                  </div>
+                  <div className="hidden md:block">
+                    {!isLeft ? (
+                      <EventDetails event={event} align="left" />
+                    ) : null}
+                  </div>
+                </motion.div>
+              </li>
             );
           })}
-        </div>
+        </ol>
       </div>
     </section>
+  );
+}
+
+function EventDetails({
+  event,
+  align,
+}: {
+  event: ManagedEvent;
+  align: "left" | "right";
+}) {
+  return (
+    <article
+      className={cn(
+        "relative",
+        align === "right" ? "md:pr-2" : "md:pl-2",
+      )}
+    >
+      {event.day ? (
+        <p
+          className={cn(
+            "font-body text-[10px] uppercase tracking-[0.3em] text-gold/70",
+            align === "right" && "md:text-right",
+          )}
+        >
+          {event.day}
+        </p>
+      ) : null}
+
+      <h3
+        className={cn(
+          "mt-2 font-display text-2xl tracking-wide text-cream sm:text-3xl",
+          align === "right" && "md:text-right",
+        )}
+      >
+        {event.name}
+      </h3>
+
+      <p
+        className={cn(
+          "mt-2 font-display text-lg text-gold-soft",
+          align === "right" && "md:text-right",
+        )}
+      >
+        {event.date}
+      </p>
+
+      <p
+        className={cn(
+          "mt-1 font-body text-sm tracking-wide text-cream/80",
+          align === "right" && "md:text-right",
+        )}
+      >
+        {event.time}
+      </p>
+
+      <div
+        className={cn(
+          "my-4 h-px w-16 bg-gradient-to-r from-gold/50 to-transparent",
+          align === "right" && "md:ml-auto md:bg-gradient-to-l",
+        )}
+      />
+
+      <p
+        className={cn(
+          "font-display text-base text-cream",
+          align === "right" && "md:text-right",
+        )}
+      >
+        {event.venue}
+      </p>
+      {event.venueDetail ? (
+        <p
+          className={cn(
+            "mt-1 font-body text-xs text-muted",
+            align === "right" && "md:text-right",
+          )}
+        >
+          {event.venueDetail}
+        </p>
+      ) : null}
+      {event.address ? (
+        <p
+          className={cn(
+            "mt-1 font-body text-xs text-muted",
+            align === "right" && "md:text-right",
+          )}
+        >
+          {event.address}
+        </p>
+      ) : null}
+      {event.description ? (
+        <p
+          className={cn(
+            "mt-4 font-body text-sm leading-relaxed text-muted",
+            align === "right" && "md:text-right",
+          )}
+        >
+          {event.description}
+        </p>
+      ) : null}
+    </article>
   );
 }
