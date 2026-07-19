@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  canRequestAccommodation,
-  isAuthenticated,
-} from "@/lib/auth";
+import { isAuthenticated, resolveAccommodationUser } from "@/lib/auth";
+import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import {
   addAccommodation,
   listAccommodations,
@@ -33,11 +31,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    if (!(await canRequestAccommodation())) {
-      return NextResponse.json(
-        { error: "Please sign in with the guest code to request a stay" },
-        { status: 401 },
-      );
+    const identity = await resolveAccommodationUser(request);
+    if (!identity) {
+      const hint = isFirebaseAdminConfigured()
+        ? "Please sign in with Google or phone OTP to request a stay"
+        : "Sign-in is not configured yet. Add Firebase env vars on Vercel.";
+      return NextResponse.json({ error: hint }, { status: 401 });
     }
 
     const parsed = schema.safeParse(await request.json());
@@ -48,9 +47,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const guest = identity.kind === "guest" ? identity.user : null;
+
     const requestEntry = await addAccommodation({
       name: parsed.data.name,
-      phone: parsed.data.phone,
+      phone: parsed.data.phone || guest?.phone || "",
       people: parsed.data.people,
       rooms: parsed.data.rooms,
       checkIn: parsed.data.checkIn,
@@ -58,6 +59,9 @@ export async function POST(request: Request) {
       notes: parsed.data.notes?.trim() || undefined,
       contactFamily: parsed.data.contactFamily?.trim() || undefined,
       rsvpId: parsed.data.rsvpId,
+      authUid: guest?.uid,
+      authEmail: guest?.email,
+      authPhone: guest?.phone,
     });
 
     return NextResponse.json({ accommodation: requestEntry }, { status: 201 });

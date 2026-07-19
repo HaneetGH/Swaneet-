@@ -44,7 +44,7 @@ export function AccommodationManager({
           <h2 className="font-display text-2xl text-cream">Accommodation</h2>
         </div>
         <p className="mt-1 font-body text-sm text-muted">
-          Stay requests submitted after guest sign-in
+          Stay requests submitted after Google or phone OTP sign-in
         </p>
       </div>
 
@@ -86,6 +86,10 @@ export function AccommodationManager({
                 <p className="mt-1 font-body text-sm text-muted">
                   {item.phone}
                   {item.contactFamily ? ` · via ${item.contactFamily}` : ""}
+                  {item.authEmail ? ` · ${item.authEmail}` : ""}
+                  {item.authPhone && item.authPhone !== item.phone
+                    ? ` · login ${item.authPhone}`
+                    : ""}
                 </p>
                 {item.notes ? (
                   <p className="mt-2 font-body text-sm leading-relaxed text-muted">

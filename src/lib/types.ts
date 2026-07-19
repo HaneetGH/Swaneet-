@@ -48,6 +48,10 @@ export type AccommodationRequest = {
   notes?: string;
   contactFamily?: string;
   rsvpId?: string;
+  /** Firebase Auth identity used to submit the request */
+  authUid?: string;
+  authEmail?: string;
+  authPhone?: string;
   createdAt: string;
 };
 

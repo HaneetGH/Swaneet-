@@ -312,8 +312,8 @@ export function RSVP() {
                   </select>
                   {needsAccommodation === "yes" ? (
                     <p className="mt-2 font-body text-xs leading-relaxed text-gold-soft/90">
-                      After RSVP, you’ll sign in with the family guest code to
-                      share how many people need rooms and for which nights.
+                      After RSVP, sign in with Google or phone OTP to share how
+                      many people need rooms and for which nights.
                     </p>
                   ) : null}
                 </div>

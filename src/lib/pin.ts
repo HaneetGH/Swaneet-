@@ -27,8 +27,3 @@ export function verifyPin(pin: string, stored: string) {
 export function getDefaultAdminPin() {
   return process.env.ADMIN_PIN || "swaneet10";
 }
-
-/** Shared family code for guests requesting accommodation */
-export function getDefaultGuestPin() {
-  return process.env.GUEST_PIN || "swaneetstay";
-}

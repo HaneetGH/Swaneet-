@@ -41,8 +41,10 @@ Override with `ADMIN_PIN` in `.env.local`.
    - **Blob** → sets `BLOB_READ_WRITE_TOKEN` (**required for photos/videos** — uploads go direct to Blob, bypassing the 4.5MB serverless limit)
 4. Set environment variables:
    - `ADMIN_PIN` = your private dashboard PIN
-   - `GUEST_PIN` = shared code for guests requesting accommodation (default `swaneetstay`)
-5. Redeploy after connecting storage.
+   - Firebase (for accommodation login): see `.env.example`
+5. In Firebase Console → Authentication, enable **Google** and **Phone**.
+6. Add your Vercel domain under Authentication → Settings → Authorized domains.
+7. Redeploy after connecting storage / Firebase.
 
 Without storage on Vercel, the filesystem is read-only and event create/edit/delete will fail.
 

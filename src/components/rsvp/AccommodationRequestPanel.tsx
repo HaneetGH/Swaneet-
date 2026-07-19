@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import type { User } from "firebase/auth";
+import { useCallback, useState } from "react";
 import { wedding } from "@/data/wedding";
+import {
+  GuestAuthPanel,
+  getGuestIdToken,
+  signOutGuest,
+} from "@/components/rsvp/GuestAuthPanel";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -23,10 +29,7 @@ export function AccommodationRequestPanel({
   rsvpId,
   onDone,
 }: AccommodationRequestPanelProps) {
-  const [authed, setAuthed] = useState<boolean | null>(null);
-  const [pin, setPin] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [loggingIn, setLoggingIn] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
   const [name, setName] = useState(defaultName);
   const [phone, setPhone] = useState("");
@@ -40,46 +43,30 @@ export function AccommodationRequestPanel({
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/auth/guest")
-      .then((res) => res.json())
-      .then((data: { authenticated?: boolean }) => {
-        setAuthed(Boolean(data.authenticated));
-      })
-      .catch(() => setAuthed(false));
-  }, []);
-
-  const onLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoggingIn(true);
-    setLoginError("");
-    try {
-      const res = await fetch("/api/auth/guest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin }),
-      });
-      if (!res.ok) {
-        setLoginError("Incorrect guest code. Please ask the family.");
-        return;
-      }
-      setAuthed(true);
-      setPin("");
-    } catch {
-      setLoginError("Could not sign in. Please try again.");
-    } finally {
-      setLoggingIn(false);
-    }
-  };
+  const onAuthed = useCallback((next: User) => {
+    setUser(next);
+    if (!defaultName && next.displayName) setName(next.displayName);
+    if (next.phoneNumber) setPhone(next.phoneNumber);
+  }, [defaultName]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setSubmitError("");
     try {
+      const token = await getGuestIdToken();
+      if (!token) {
+        setSubmitError("Please sign in again to continue");
+        setUser(null);
+        return;
+      }
+
       const res = await fetch("/api/accommodation", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           name,
           phone,
@@ -95,7 +82,10 @@ export function AccommodationRequestPanel({
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         setSubmitError(data.error || "Could not send accommodation request");
-        if (res.status === 401) setAuthed(false);
+        if (res.status === 401) {
+          await signOutGuest();
+          setUser(null);
+        }
         return;
       }
       setSuccess(true);
@@ -105,12 +95,6 @@ export function AccommodationRequestPanel({
       setSubmitting(false);
     }
   };
-
-  if (authed === null) {
-    return (
-      <p className="font-body text-sm text-muted">Checking sign-in…</p>
-    );
-  }
 
   if (success) {
     return (
@@ -128,45 +112,8 @@ export function AccommodationRequestPanel({
     );
   }
 
-  if (!authed) {
-    return (
-      <form
-        onSubmit={onLogin}
-        className="rounded-2xl border border-gold/25 bg-[#100e14] px-5 py-6"
-      >
-        <p className="font-body text-[10px] uppercase tracking-[0.3em] text-gold/70">
-          Guest sign-in required
-        </p>
-        <h4 className="mt-2 font-display text-2xl text-cream">
-          Request accommodation
-        </h4>
-        <p className="mt-2 font-body text-sm leading-relaxed text-muted">
-          Enter the guest code shared by the family to submit stay details
-          (people, rooms, and dates).
-        </p>
-
-        <label className="mt-5 block">
-          <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-            Guest code
-          </span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            className={fieldClass}
-            placeholder="••••••••"
-            required
-          />
-        </label>
-        {loginError ? (
-          <p className="mt-2 text-xs text-red-300">{loginError}</p>
-        ) : null}
-        <Button type="submit" disabled={loggingIn} className="mt-4 w-full">
-          {loggingIn ? "Checking…" : "Continue"}
-        </Button>
-      </form>
-    );
+  if (!user) {
+    return <GuestAuthPanel onAuthed={onAuthed} />;
   }
 
   return (
@@ -182,7 +129,8 @@ export function AccommodationRequestPanel({
           Accommodation details
         </h4>
         <p className="mt-1 font-body text-sm text-muted">
-          Tell us how many people need a stay and for which nights.
+          {user.email || user.phoneNumber || "Verified guest"} · tell us how many
+          people need a stay.
         </p>
       </div>
 
@@ -307,6 +255,17 @@ export function AccommodationRequestPanel({
       <Button type="submit" disabled={submitting} className="w-full">
         {submitting ? "Sending…" : "Submit stay request"}
       </Button>
+
+      <button
+        type="button"
+        className="w-full font-body text-xs text-muted hover:text-cream"
+        onClick={async () => {
+          await signOutGuest();
+          setUser(null);
+        }}
+      >
+        Sign out
+      </button>
     </form>
   );
 }
