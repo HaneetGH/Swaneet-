@@ -32,6 +32,22 @@ export type RsvpEntry = {
   meal?: "vegetarian" | "non-vegetarian" | "no-preference";
   notes?: string;
   contactFamily?: string;
+  /** Guest indicated they may need a stay */
+  needsAccommodation?: boolean;
+  createdAt: string;
+};
+
+export type AccommodationRequest = {
+  id: string;
+  name: string;
+  phone: string;
+  people: number;
+  rooms: number;
+  checkIn: string;
+  checkOut: string;
+  notes?: string;
+  contactFamily?: string;
+  rsvpId?: string;
   createdAt: string;
 };
 
@@ -39,6 +55,7 @@ export type ContentStore = {
   events: ManagedEvent[];
   gallery: GalleryImage[];
   rsvps: RsvpEntry[];
+  accommodations: AccommodationRequest[];
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */
   adminPinHash?: string;
 };

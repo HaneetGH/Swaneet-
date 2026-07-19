@@ -10,6 +10,7 @@ const rsvpSchema = z.object({
   meal: z.enum(["vegetarian", "non-vegetarian", "no-preference"]).optional(),
   notes: z.string().max(500).optional(),
   contactFamily: z.string().optional(),
+  needsAccommodation: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
     meal: parsed.data.meal,
     notes: parsed.data.notes?.trim() || undefined,
     contactFamily: parsed.data.contactFamily?.trim() || undefined,
+    needsAccommodation: parsed.data.needsAccommodation ?? false,
   });
 
   return NextResponse.json({ rsvp }, { status: 201 });

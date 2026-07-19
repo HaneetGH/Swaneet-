@@ -137,6 +137,7 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
                     ? ` · ${rsvp.meal.replace("-", " ")}`
                     : ""}
                   {rsvp.contactFamily ? ` · via ${rsvp.contactFamily}` : ""}
+                  {rsvp.needsAccommodation ? " · needs stay" : ""}
                 </p>
                 {rsvp.notes ? (
                   <p className="mt-2 font-body text-sm leading-relaxed text-muted">

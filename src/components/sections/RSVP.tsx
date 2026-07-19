@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { wedding } from "@/data/wedding";
+import { AccommodationRequestPanel } from "@/components/rsvp/AccommodationRequestPanel";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +25,7 @@ const schema = z.object({
   meal: z.enum(["vegetarian", "non-vegetarian", "no-preference"]).optional(),
   notes: z.string().max(500).optional(),
   contactFamily: z.string().optional(),
+  needsAccommodation: z.enum(["yes", "no"]),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -79,9 +81,18 @@ export function RSVP() {
   const [success, setSuccess] = useState(false);
   const [message, setMessage] = useState<ThankYouMessage | null>(null);
   const [submitError, setSubmitError] = useState("");
+  const [needsStayFlow, setNeedsStayFlow] = useState(false);
+  const [savedRsvp, setSavedRsvp] = useState<{
+    id: string;
+    name: string;
+    guests: number;
+    contactFamily?: string;
+  } | null>(null);
+
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<FormValues>({
@@ -90,8 +101,11 @@ export function RSVP() {
       attendance: "yes",
       meal: "no-preference",
       guests: 1,
+      needsAccommodation: "no",
     },
   });
+
+  const needsAccommodation = watch("needsAccommodation");
 
   const familyList = useMemo(
     () => wedding.rsvpFamilies.map((f) => f.name).join(", "),
@@ -104,14 +118,32 @@ export function RSVP() {
       const res = await fetch("/api/rsvp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          needsAccommodation: data.needsAccommodation === "yes",
+        }),
       });
+      const payload = (await res.json().catch(() => ({}))) as {
+        rsvp?: { id: string; name: string; guests: number; contactFamily?: string };
+      };
       if (!res.ok) {
         setSubmitError("Could not send your RSVP. Please try again.");
         return;
       }
       setMessage(pickMessage(data.attendance));
       setSuccess(true);
+      if (data.needsAccommodation === "yes" && payload.rsvp) {
+        setNeedsStayFlow(true);
+        setSavedRsvp({
+          id: payload.rsvp.id,
+          name: payload.rsvp.name,
+          guests: payload.rsvp.guests,
+          contactFamily: payload.rsvp.contactFamily,
+        });
+      } else {
+        setNeedsStayFlow(false);
+        setSavedRsvp(null);
+      }
       reset();
     } catch {
       setSubmitError("Could not send your RSVP. Please try again.");
@@ -136,7 +168,7 @@ export function RSVP() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex flex-col items-center py-10 text-center"
+                className="flex flex-col items-center py-8 text-center"
               >
                 <motion.div
                   initial={{ scale: 0 }}
@@ -155,17 +187,37 @@ export function RSVP() {
                 <p className="mt-4 max-w-sm font-body text-sm leading-relaxed text-muted">
                   {message.body}
                 </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-8"
-                  onClick={() => {
-                    setSuccess(false);
-                    setMessage(null);
-                  }}
-                >
-                  Submit another
-                </Button>
+
+                {needsStayFlow && savedRsvp ? (
+                  <div className="mt-8 w-full text-left">
+                    <AccommodationRequestPanel
+                      defaultName={savedRsvp.name}
+                      defaultPeople={savedRsvp.guests}
+                      defaultFamily={savedRsvp.contactFamily || ""}
+                      rsvpId={savedRsvp.id}
+                      onDone={() => {
+                        setNeedsStayFlow(false);
+                        setSuccess(false);
+                        setMessage(null);
+                        setSavedRsvp(null);
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-8"
+                    onClick={() => {
+                      setSuccess(false);
+                      setMessage(null);
+                      setNeedsStayFlow(false);
+                      setSavedRsvp(null);
+                    }}
+                  >
+                    Submit another
+                  </Button>
+                )}
               </motion.div>
             ) : (
               <motion.form
@@ -241,6 +293,29 @@ export function RSVP() {
                     <option value="vegetarian">Vegetarian</option>
                     <option value="non-vegetarian">Non-vegetarian</option>
                   </select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="needsAccommodation"
+                    className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
+                  >
+                    Need accommodation?
+                  </label>
+                  <select
+                    id="needsAccommodation"
+                    className={cn(fieldClass, "appearance-none")}
+                    {...register("needsAccommodation")}
+                  >
+                    <option value="no">No, we have our own stay</option>
+                    <option value="yes">Yes, please help with stay</option>
+                  </select>
+                  {needsAccommodation === "yes" ? (
+                    <p className="mt-2 font-body text-xs leading-relaxed text-gold-soft/90">
+                      After RSVP, you’ll sign in with the family guest code to
+                      share how many people need rooms and for which nights.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div>

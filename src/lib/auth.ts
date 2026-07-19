@@ -1,7 +1,12 @@
 import { cookies } from "next/headers";
-import { getDefaultAdminPin, verifyPin } from "@/lib/pin";
+import {
+  getDefaultAdminPin,
+  getDefaultGuestPin,
+  verifyPin,
+} from "@/lib/pin";
 
 export const ADMIN_COOKIE = "swaneet_admin";
+export const GUEST_COOKIE = "swaneet_guest";
 const TOKEN = "authenticated";
 
 export async function getStoredPinHash() {
@@ -19,9 +24,23 @@ export async function verifyAdminPin(pin: string) {
   return pin === getDefaultAdminPin();
 }
 
+export function verifyGuestPin(pin: string) {
+  return pin === getDefaultGuestPin();
+}
+
 export async function isAuthenticated() {
   const jar = await cookies();
   return jar.get(ADMIN_COOKIE)?.value === TOKEN;
+}
+
+export async function isGuestAuthenticated() {
+  const jar = await cookies();
+  return jar.get(GUEST_COOKIE)?.value === TOKEN;
+}
+
+/** Admin or guest session — for accommodation requests */
+export async function canRequestAccommodation() {
+  return (await isAuthenticated()) || (await isGuestAuthenticated());
 }
 
 export function authCookieValue() {

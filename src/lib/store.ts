@@ -10,6 +10,7 @@ import {
   storageMode,
 } from "@/lib/env";
 import type {
+  AccommodationRequest,
   ContentStore,
   GalleryImage,
   ManagedEvent,
@@ -40,6 +41,7 @@ export function defaultStore(): ContentStore {
     })),
     gallery: [],
     rsvps: [],
+    accommodations: [],
   };
 }
 
@@ -59,6 +61,7 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     events: sortEventsByDateTime(raw.events ?? defaults.events),
     gallery,
     rsvps: raw.rsvps ?? [],
+    accommodations: raw.accommodations ?? [],
     adminPinHash: raw.adminPinHash,
   };
 }
@@ -202,6 +205,34 @@ export async function deleteRsvp(id: string): Promise<boolean> {
   const next = store.rsvps.filter((item) => item.id !== id);
   if (next.length === store.rsvps.length) return false;
   store.rsvps = next;
+  await writeStore(store);
+  return true;
+}
+
+export async function listAccommodations(): Promise<AccommodationRequest[]> {
+  const store = await readStore();
+  return store.accommodations;
+}
+
+export async function addAccommodation(
+  entry: Omit<AccommodationRequest, "id" | "createdAt">,
+): Promise<AccommodationRequest> {
+  const store = await readStore();
+  const request: AccommodationRequest = {
+    ...entry,
+    id: `stay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+  };
+  store.accommodations = [request, ...store.accommodations];
+  await writeStore(store);
+  return request;
+}
+
+export async function deleteAccommodation(id: string): Promise<boolean> {
+  const store = await readStore();
+  const next = store.accommodations.filter((item) => item.id !== id);
+  if (next.length === store.accommodations.length) return false;
+  store.accommodations = next;
   await writeStore(store);
   return true;
 }

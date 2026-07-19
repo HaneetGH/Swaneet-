@@ -39,8 +39,9 @@ Override with `ADMIN_PIN` in `.env.local`.
 3. **Required for dashboard edits:** In the Vercel project → **Storage**, connect:
    - **Neon / Postgres** → sets `DATABASE_URL` / `POSTGRES_URL` (events, RSVPs, gallery metadata)
    - **Blob** → sets `BLOB_READ_WRITE_TOKEN` (**required for photos/videos** — uploads go direct to Blob, bypassing the 4.5MB serverless limit)
-4. Set environment variable:
+4. Set environment variables:
    - `ADMIN_PIN` = your private dashboard PIN
+   - `GUEST_PIN` = shared code for guests requesting accommodation (default `swaneetstay`)
 5. Redeploy after connecting storage.
 
 Without storage on Vercel, the filesystem is read-only and event create/edit/delete will fail.

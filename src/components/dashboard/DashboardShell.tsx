@@ -3,8 +3,21 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CalendarDays, Images, KeyRound, LogOut, Users } from "lucide-react";
-import type { GalleryImage, ManagedEvent, RsvpEntry } from "@/lib/types";
+import {
+  BedDouble,
+  CalendarDays,
+  Images,
+  KeyRound,
+  LogOut,
+  Users,
+} from "lucide-react";
+import type {
+  AccommodationRequest,
+  GalleryImage,
+  ManagedEvent,
+  RsvpEntry,
+} from "@/lib/types";
+import { AccommodationManager } from "@/components/dashboard/AccommodationManager";
 import { ChangePinForm } from "@/components/dashboard/ChangePinForm";
 import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
@@ -16,15 +29,17 @@ type DashboardShellProps = {
   events: ManagedEvent[];
   gallery: GalleryImage[];
   rsvps: RsvpEntry[];
+  accommodations: AccommodationRequest[];
   loadError?: string;
 };
 
-type Tab = "rsvp" | "events" | "gallery" | "settings";
+type Tab = "rsvp" | "stay" | "events" | "gallery" | "settings";
 
 export function DashboardShell({
   events,
   gallery,
   rsvps,
+  accommodations,
   loadError,
 }: DashboardShellProps) {
   const router = useRouter();
@@ -74,12 +89,13 @@ export function DashboardShell({
         <div className="mb-8 flex flex-wrap gap-2 rounded-full border border-gold/20 bg-[#141018] p-1 w-fit">
           {(
             [
-              ["rsvp", "RSVPs", Users],
-              ["gallery", "Photos & Videos", Images],
-              ["events", "Events", CalendarDays],
-              ["settings", "PIN", KeyRound],
+              ["rsvp", "RSVPs", Users, rsvps.length],
+              ["stay", "Stay", BedDouble, accommodations.length],
+              ["gallery", "Photos & Videos", Images, 0],
+              ["events", "Events", CalendarDays, 0],
+              ["settings", "PIN", KeyRound, 0],
             ] as const
-          ).map(([id, label, Icon]) => (
+          ).map(([id, label, Icon, count]) => (
             <button
               key={id}
               type="button"
@@ -93,9 +109,9 @@ export function DashboardShell({
             >
               <Icon size={14} />
               {label}
-              {id === "rsvp" && rsvps.length > 0 ? (
+              {count > 0 ? (
                 <span className="rounded-full bg-black/20 px-1.5 py-0.5 text-[10px]">
-                  {rsvps.length}
+                  {count}
                 </span>
               ) : null}
             </button>
@@ -104,6 +120,8 @@ export function DashboardShell({
 
         {tab === "rsvp" ? (
           <RsvpManager initialRsvps={rsvps} />
+        ) : tab === "stay" ? (
+          <AccommodationManager initialAccommodations={accommodations} />
         ) : tab === "events" ? (
           <EventsManager initialEvents={events} />
         ) : tab === "gallery" ? (
