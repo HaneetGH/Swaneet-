@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, Great_Vibes, Outfit } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/layout/Providers";
 import { wedding } from "@/data/wedding";
 import "./globals.css";
@@ -69,6 +70,7 @@ export default function RootLayout({
         className={`${display.variable} ${script.variable} ${body.variable} antialiased`}
       >
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );
