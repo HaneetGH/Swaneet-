@@ -202,7 +202,7 @@ export function TeamManager() {
         <p className="mb-5 font-body text-sm text-muted">
           {isEditing
             ? "Update name, email, permissions, or set a new PIN. Leave PIN blank to keep the current one."
-            : "Email is required — they’ll get the dashboard link, PIN, and access list. Uses noreply@mail.technorapper.com once that domain is Verified in Resend."}
+            : "Email is required — they’ll get the dashboard link, PIN, and access list from Swaneet Wedding <noreply@mail.technorapper.com>."}
         </p>
 
         <label className="mb-3 block">

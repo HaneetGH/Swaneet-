@@ -1,5 +1,9 @@
 import { createHash, randomInt, timingSafeEqual } from "crypto";
-import { isEmailConfigured } from "@/lib/email";
+import {
+  friendlyResendError,
+  getEmailFrom,
+  isEmailConfigured,
+} from "@/lib/email";
 import { readStore, writeStore } from "@/lib/store";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -16,8 +20,7 @@ export async function createAndSendEmailOtp(email: string) {
   if (!isEmailConfigured()) {
     return {
       ok: false as const,
-      error:
-        "Email is not configured. Add RESEND_API_KEY and EMAIL_FROM in Vercel.",
+      error: "Email is not configured. Add RESEND_API_KEY in Vercel.",
     };
   }
 
@@ -37,7 +40,7 @@ export async function createAndSendEmailOtp(email: string) {
   await writeStore(store);
 
   const apiKey = process.env.RESEND_API_KEY!;
-  const from = process.env.EMAIL_FROM!;
+  const from = getEmailFrom();
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -68,7 +71,10 @@ export async function createAndSendEmailOtp(email: string) {
     };
     return {
       ok: false as const,
-      error: body.message || `Could not send verification email (${response.status})`,
+      error: friendlyResendError(
+        body.message,
+        response.status,
+      ),
     };
   }
 

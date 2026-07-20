@@ -16,18 +16,25 @@ function formatDate(value: string) {
   });
 }
 
-export function isEmailConfigured() {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+/** Default From for stay confirms, team invites, OTP, photo notes */
+export const DEFAULT_EMAIL_FROM =
+  "Swaneet Wedding <noreply@mail.technorapper.com>";
+
+export function getEmailFrom() {
+  return process.env.EMAIL_FROM?.trim() || DEFAULT_EMAIL_FROM;
 }
 
-/** Make Resend sandbox / domain errors actionable for the dashboard */
+export function isEmailConfigured() {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
+/** Make Resend domain / sandbox errors actionable for the dashboard */
 export function friendlyResendError(message: string | undefined, status?: number) {
   const raw = message || (status ? `Email provider error (${status})` : "Email failed");
   if (/only send testing emails|verify a domain|resend\.dev/i.test(raw)) {
     return (
-      "Resend domain is not verified yet. " +
-      "In Resend → Domains, wait until mail.technorapper.com shows Verified, " +
-      "then confirm EMAIL_FROM is Swaneet Wedding <noreply@mail.technorapper.com> on Vercel and redeploy."
+      "Email domain mail.technorapper.com is not ready in Resend yet. " +
+      "Wait until it shows Verified at resend.com/domains, then try again."
     );
   }
   return raw;
@@ -37,14 +44,13 @@ export async function sendAccommodationEmail(
   request: AccommodationRequest,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
+  const from = getEmailFrom();
   const to = request.email || request.authEmail;
 
-  if (!apiKey || !from) {
+  if (!apiKey) {
     return {
       ok: false,
-      error:
-        "Email is not configured. Add RESEND_API_KEY and EMAIL_FROM in Vercel.",
+      error: "Email is not configured. Add RESEND_API_KEY in Vercel.",
     };
   }
   if (!to) {
@@ -139,14 +145,13 @@ export async function sendGuestPhotoRejectionEmail(
   >,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
+  const from = getEmailFrom();
   const to = image.uploadedByEmail?.trim();
 
-  if (!apiKey || !from) {
+  if (!apiKey) {
     return {
       ok: false,
-      error:
-        "Email is not configured. Add RESEND_API_KEY and EMAIL_FROM in Vercel.",
+      error: "Email is not configured. Add RESEND_API_KEY in Vercel.",
     };
   }
   if (!to) {
@@ -219,14 +224,13 @@ export async function sendTeamInviteEmail(input: {
   permissions: AdminPermission[];
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
+  const from = getEmailFrom();
   const to = input.email.trim().toLowerCase();
 
-  if (!apiKey || !from) {
+  if (!apiKey) {
     return {
       ok: false,
-      error:
-        "Email is not configured. Add RESEND_API_KEY and EMAIL_FROM in Vercel.",
+      error: "Email is not configured. Add RESEND_API_KEY in Vercel.",
     };
   }
   if (!to) {
