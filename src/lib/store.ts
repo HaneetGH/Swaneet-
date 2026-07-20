@@ -89,6 +89,19 @@ function eventsNeedVenuePersist(
   });
 }
 
+/** Clear stale `done: false` flags that blocked auto Done on past events. */
+function eventsNeedDonePersist(
+  before: ManagedEvent[] | undefined,
+  after: ManagedEvent[],
+): boolean {
+  if (!before?.length) return false;
+  const beforeById = new Map(before.map((event) => [event.id, event]));
+  return after.some((event) => {
+    const prev = beforeById.get(event.id);
+    return prev?.done === false && event.done !== false;
+  });
+}
+
 function normalizeStore(raw: Partial<ContentStore>): ContentStore {
   const defaults = defaultStore();
   const hasPersistedShape =
@@ -123,7 +136,8 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     ).map((event) => {
       const base = {
         ...event,
-        done: typeof event.done === "boolean" ? event.done : undefined,
+        // Only persist explicit Done; false was an API default that broke auto-past
+        done: event.done === true ? true : undefined,
       };
       // Anand Karaj + Brunch are at the Gurudwara (keep dinner at Maple Garden)
       const isCeremony =
@@ -316,9 +330,12 @@ export async function readStore(): Promise<ContentStore> {
       const normalized = normalizeStore(fromDb);
       // Persist one-time venue fixes (e.g. Gurudwara) into Neon so the DB
       // stays the source of truth — not data/content.json.
-      if (eventsNeedVenuePersist(fromDb.events, normalized.events)) {
+      if (
+        eventsNeedVenuePersist(fromDb.events, normalized.events) ||
+        eventsNeedDonePersist(fromDb.events, normalized.events)
+      ) {
         await writeStoreToDb(normalized).catch((error) =>
-          console.error("persist venue migration failed", error),
+          console.error("persist event migration failed", error),
         );
       }
       return normalized;

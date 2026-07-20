@@ -169,14 +169,17 @@ export function isEventInPast(event: { date: string; time: string }): boolean {
   return eventMs < Date.now();
 }
 
-/** Done if explicitly marked, otherwise when the scheduled time has passed. */
+/**
+ * Done if the scheduled time has passed (IST), or if manually marked done.
+ * Note: `done: false` must not block past events — older saves wrote false by
+ * default and incorrectly hid the Done state on the timeline.
+ */
 export function isEventDone(event: {
   date: string;
   time: string;
   done?: boolean;
 }): boolean {
   if (event.done === true) return true;
-  if (event.done === false) return false;
   return isEventInPast(event);
 }
 

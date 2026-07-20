@@ -16,7 +16,7 @@ const eventSchema = z.object({
   address: z.string().optional().default(""),
   description: z.string().optional().default(""),
   icon: z.enum(["moon", "heart", "sun", "star", "sparkles"]).default("heart"),
-  done: z.boolean().optional().default(false),
+  done: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     const event: ManagedEvent = {
       id: `event-${Date.now()}`,
       ...parsed.data,
+      done: parsed.data.done === true ? true : undefined,
     };
     store.events.push(event);
     await writeStore(store);

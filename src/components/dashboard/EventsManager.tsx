@@ -193,7 +193,12 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
 
   const onToggleDone = async (event: ManagedEvent) => {
     setError("");
-    const markDone = !isEventDone(event);
+    const currentlyDone = isEventDone(event);
+    // Past events stay Done automatically — only future events can be unmarked
+    if (currentlyDone && isEventInPast(event)) {
+      return;
+    }
+    const markDone = !currentlyDone;
 
     try {
       const res = await fetch(`/api/events/${encodeURIComponent(event.id)}`, {
@@ -209,7 +214,7 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
           address: event.address,
           description: event.description,
           icon: event.icon,
-          done: markDone,
+          done: markDone ? true : undefined,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -226,7 +231,7 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
         ),
       );
       if (editingId === event.id) {
-        setForm((f) => ({ ...f, done: Boolean(data.event?.done) }));
+        setForm((f) => ({ ...f, done: data.event?.done === true }));
       }
     } catch {
       setError("Could not update event status");
@@ -306,18 +311,27 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
                   <button
                     type="button"
                     onClick={() => onToggleDone(event)}
+                    disabled={done && isEventInPast(event)}
                     className={cn(
-                      "rounded-full border p-2 hover:bg-gold/10",
+                      "rounded-full border p-2 hover:bg-gold/10 disabled:cursor-default disabled:opacity-60",
                       done
                         ? "border-emerald-400/40 text-emerald-200"
                         : "border-gold/25 text-gold-soft",
                     )}
                     aria-label={
                       done
-                        ? `Mark ${event.name} as upcoming`
+                        ? isEventInPast(event)
+                          ? `${event.name} is done (date passed)`
+                          : `Mark ${event.name} as upcoming`
                         : `Mark ${event.name} as done`
                     }
-                    title={done ? "Mark as upcoming" : "Mark as done"}
+                    title={
+                      done
+                        ? isEventInPast(event)
+                          ? "Done automatically after the event time"
+                          : "Mark as upcoming"
+                        : "Mark as done"
+                    }
                   >
                     <Check size={14} />
                   </button>
@@ -586,6 +600,9 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
             />
             <span className="font-body text-sm text-cream">
               Mark as done on the timeline
+            </span>
+            <span className="font-body text-xs text-muted">
+              (Past events show as Done automatically)
             </span>
           </label>
         </div>

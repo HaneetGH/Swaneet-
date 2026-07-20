@@ -15,7 +15,7 @@ const eventSchema = z.object({
   address: z.string().optional().default(""),
   description: z.string().optional().default(""),
   icon: z.enum(["moon", "heart", "sun", "star", "sparkles"]).default("heart"),
-  done: z.boolean().optional().default(false),
+  done: z.boolean().optional(),
 });
 
 type Params = { params: Promise<{ id: string }> };
@@ -40,7 +40,11 @@ export async function PUT(request: Request, { params }: Params) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    store.events[index] = { id, ...parsed.data };
+    store.events[index] = {
+      id,
+      ...parsed.data,
+      done: parsed.data.done === true ? true : undefined,
+    };
     await writeStore(store);
     return NextResponse.json({ event: store.events[index] });
   } catch (error) {
