@@ -28,8 +28,8 @@ export function canPersistData() {
 }
 
 export function storageMode(): "database" | "blob" | "local" | "none" {
+  // Neon is the source of truth for wedding content whenever DATABASE_URL is set.
   if (hasDatabase()) return "database";
-  if (!isVercelRuntime() && hasBlobStorage()) return "blob";
   if (!isVercelRuntime()) return "local";
   return "none";
 }

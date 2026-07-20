@@ -38,8 +38,8 @@ yarn-error.log*
 /public/uploads/*
 !/public/uploads/.gitkeep
 
-# local content store can be committed; ignore if preferred
-# /data/content.json
+# local filesystem content store — Neon is the source of truth
+/data/content.json
 
 # vercel
 .vercel
@@ -47,3 +47,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# IDE
+.idea/

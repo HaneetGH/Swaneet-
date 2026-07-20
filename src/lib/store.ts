@@ -44,7 +44,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "content.json");
 
 const STORAGE_ERROR =
-  "Storage is not configured for this deployment. In Vercel → Project → Storage, connect Neon Postgres (DATABASE_URL), then redeploy. Stays, RSVPs, and events must live in the database so deploys never wipe them.";
+  "Neon database is not configured. In Vercel → Storage, connect Neon (DATABASE_URL), then redeploy. Wedding content (events, stays, RSVPs) must live in the database — not data/content.json.";
 
 export function defaultStore(): ContentStore {
   return {
@@ -72,6 +72,19 @@ export function defaultStore(): ContentStore {
 }
 
 const MAX_EMAIL_LOGS = 150;
+
+function eventsNeedVenuePersist(
+  before: ManagedEvent[] | undefined,
+  after: ManagedEvent[],
+): boolean {
+  if (!before?.length) return false;
+  const beforeById = new Map(before.map((event) => [event.id, event]));
+  return after.some((event) => {
+    const prev = beforeById.get(event.id);
+    if (!prev) return false;
+    return prev.venue !== event.venue || prev.venueDetail !== event.venueDetail;
+  });
+}
 
 function normalizeStore(raw: Partial<ContentStore>): ContentStore {
   const defaults = defaultStore();
@@ -261,18 +274,26 @@ export async function readStore(): Promise<ContentStore> {
     if (mode === "database") {
       let fromDb = await readStoreFromDb();
       if (!fromDb) {
-        // Only insert if empty — never overwrite Roka/custom data on deploy
+        // Only insert if empty — never overwrite wedding data on deploy
         await seedStoreIfEmpty(defaultStore());
         fromDb = await readStoreFromDb();
       }
       if (!fromDb) return defaultStore();
-      return normalizeStore(fromDb);
+
+      const normalized = normalizeStore(fromDb);
+      // Persist one-time venue fixes (e.g. Gurudwara) into Neon so the DB
+      // stays the source of truth — not data/content.json.
+      if (eventsNeedVenuePersist(fromDb.events, normalized.events)) {
+        await writeStoreToDb(normalized).catch((error) =>
+          console.error("persist venue migration failed", error),
+        );
+      }
+      return normalized;
     }
 
     if (mode === "blob") {
       const fromBlob = await readStoreFromBlob();
       if (!fromBlob) {
-        // Blob put with allowOverwrite is used elsewhere; seed only when missing
         try {
           await writeStoreToBlob(defaultStore());
         } catch {
@@ -286,6 +307,10 @@ export async function readStore(): Promise<ContentStore> {
     }
 
     if (mode === "local") {
+      // Local-only fallback when DATABASE_URL is missing. Prefer Neon.
+      console.warn(
+        "[swaneet] Using local data/content.json — set DATABASE_URL so content comes from Neon.",
+      );
       return readLocalStore();
     }
 
@@ -293,7 +318,6 @@ export async function readStore(): Promise<ContentStore> {
     return defaultStore();
   } catch (error) {
     console.error("readStore failed", error);
-    // Prefer serving invitation defaults over crashing the page
     if (mode === "database" || mode === "blob") {
       throw error;
     }

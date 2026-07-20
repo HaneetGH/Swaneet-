@@ -18,12 +18,15 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Locally (without cloud env vars), data is stored in:
+Locally (without `DATABASE_URL`), invitation defaults come from `src/data/wedding.ts`.
+With Neon connected, **all wedding content lives in Postgres** — not in a repo JSON file.
 
 | Content | Storage |
 | --- | --- |
-| Events, RSVPs, gallery metadata | `data/content.json` |
-| Uploaded images | `public/uploads/` |
+| Events, gallery metadata, team, room pool | Neon `content_store` |
+| RSVPs & stay requests | Neon `rsvps` / `accommodations` tables |
+| Email status | Neon `email_logs` |
+| Uploaded images/videos | Vercel Blob |
 
 ## Dashboard
 
@@ -47,17 +50,17 @@ Override with `ADMIN_PIN` in `.env.local`.
 7. Redeploy after connecting storage / Firebase.
 8. Email (stay confirms, team invites, photo OTP): set `RESEND_API_KEY` (Resend domain `mail.technorapper.com` → From `noreply@mail.technorapper.com`). Optional override: `EMAIL_FROM="Swaneet Wedding <noreply@mail.technorapper.com>"`.
 
-Wedding data (events, RSVPs, gallery, stays) lives in Neon / Blob — **deploys never wipe it**. Seed defaults only run when the database is empty.
+Wedding data (events, RSVPs, gallery, stays) lives in **Neon Postgres** — **deploys never wipe it**. Seed defaults only run when the database is empty.
 
-Without storage on Vercel, the filesystem is read-only and event create/edit/delete will fail.
+Without `DATABASE_URL` on Vercel, the dashboard cannot save.
 
 On Vercel, the app automatically uses:
 
-- **Neon Postgres** (if connected) for events, RSVPs, gallery metadata, PIN
-- **Vercel Blob** for uploaded images (and content backup if no database)
-- Local `data/content.json` only in local development
+- **Neon Postgres** for events, RSVPs, stays, gallery metadata, team, PIN
+- **Vercel Blob** for uploaded images/videos
+- Invitation defaults from `src/data/wedding.ts` only to seed an empty database
 
-No code changes needed between local and production — it switches based on env vars.
+No `data/content.json` in production — that file is local-dev only and ignored by git.
 
 ### Env vars
 

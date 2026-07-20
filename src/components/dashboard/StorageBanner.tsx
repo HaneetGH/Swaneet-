@@ -27,9 +27,9 @@ export function StorageBanner() {
       <div className="font-body text-sm leading-relaxed">
         <p className="font-medium text-amber-50">Storage not connected</p>
         <p className="mt-1 text-amber-100/80">
-          Stays, RSVPs, and events won&apos;t survive deploys until you connect{" "}
-          <strong>Neon Postgres</strong> in the Vercel project Storage tab, then
-          redeploy.
+          Wedding content must live in <strong>Neon Postgres</strong>. Connect
+          it in the Vercel project Storage tab, then redeploy. Do not rely on{" "}
+          <code className="text-amber-50">data/content.json</code>.
         </p>
       </div>
     </div>
