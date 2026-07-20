@@ -27,9 +27,9 @@ export function StorageBanner() {
       <div className="font-body text-sm leading-relaxed">
         <p className="font-medium text-amber-50">Storage not connected</p>
         <p className="mt-1 text-amber-100/80">
-          Event edits can&apos;t be saved on Vercel until you connect{" "}
-          <strong>Neon Postgres</strong> or <strong>Blob</strong> in the Vercel
-          project Storage tab, then redeploy.
+          Stays, RSVPs, and events won&apos;t survive deploys until you connect{" "}
+          <strong>Neon Postgres</strong> in the Vercel project Storage tab, then
+          redeploy.
         </p>
       </div>
     </div>

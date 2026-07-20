@@ -21,12 +21,15 @@ export function isVercelRuntime() {
 }
 
 export function canPersistData() {
-  return hasDatabase() || hasBlobStorage() || !isVercelRuntime();
+  // Production must use Neon so stays/RSVPs/events survive deploys.
+  // Blob alone is only for media files, not the wedding content store.
+  if (isVercelRuntime()) return hasDatabase();
+  return true;
 }
 
 export function storageMode(): "database" | "blob" | "local" | "none" {
   if (hasDatabase()) return "database";
-  if (hasBlobStorage()) return "blob";
+  if (!isVercelRuntime() && hasBlobStorage()) return "blob";
   if (!isVercelRuntime()) return "local";
   return "none";
 }

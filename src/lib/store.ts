@@ -2,10 +2,16 @@ import { promises as fs } from "fs";
 import path from "path";
 import { readStoreFromBlob, writeStoreToBlob } from "@/lib/blob-store";
 import {
+  deleteAccommodationFromDb,
+  deleteRsvpFromDb,
   insertEmailLogToDb,
+  listAccommodationsFromDb,
   listEmailLogsFromDb,
+  listRsvpsFromDb,
   readStoreFromDb,
   seedStoreIfEmpty,
+  upsertAccommodationToDb,
+  upsertRsvpToDb,
   writeStoreToDb,
 } from "@/lib/db";
 import {
@@ -37,7 +43,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "content.json");
 
 const STORAGE_ERROR =
-  "Storage is not configured for this deployment. In Vercel → Project → Storage, connect Neon Postgres (DATABASE_URL) or Blob (BLOB_READ_WRITE_TOKEN), then redeploy.";
+  "Storage is not configured for this deployment. In Vercel → Project → Storage, connect Neon Postgres (DATABASE_URL), then redeploy. Stays, RSVPs, and events must live in the database so deploys never wipe them.";
 
 export function defaultStore(): ContentStore {
   return {
@@ -307,6 +313,9 @@ export async function listGallery(options?: {
 }
 
 export async function listRsvps(): Promise<RsvpEntry[]> {
+  if (hasDatabase()) {
+    return listRsvpsFromDb();
+  }
   const store = await readStore();
   return store.rsvps;
 }
@@ -314,18 +323,27 @@ export async function listRsvps(): Promise<RsvpEntry[]> {
 export async function addRsvp(
   entry: Omit<RsvpEntry, "id" | "createdAt">,
 ): Promise<RsvpEntry> {
-  const store = await readStore();
   const rsvp: RsvpEntry = {
     ...entry,
     id: `rsvp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString(),
   };
+
+  if (hasDatabase()) {
+    await upsertRsvpToDb(rsvp);
+    return rsvp;
+  }
+
+  const store = await readStore();
   store.rsvps = [rsvp, ...store.rsvps];
   await writeStore(store);
   return rsvp;
 }
 
 export async function deleteRsvp(id: string): Promise<boolean> {
+  if (hasDatabase()) {
+    return deleteRsvpFromDb(id);
+  }
   const store = await readStore();
   const next = store.rsvps.filter((item) => item.id !== id);
   if (next.length === store.rsvps.length) return false;
@@ -335,6 +353,9 @@ export async function deleteRsvp(id: string): Promise<boolean> {
 }
 
 export async function listAccommodations(): Promise<AccommodationRequest[]> {
+  if (hasDatabase()) {
+    return listAccommodationsFromDb();
+  }
   const store = await readStore();
   return store.accommodations;
 }
@@ -344,7 +365,6 @@ export async function addAccommodation(
     status?: AccommodationRequest["status"];
   },
 ): Promise<AccommodationRequest> {
-  const store = await readStore();
   const request: AccommodationRequest = {
     ...entry,
     status: entry.status || "pending",
@@ -352,6 +372,13 @@ export async function addAccommodation(
     id: `stay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString(),
   };
+
+  if (hasDatabase()) {
+    await upsertAccommodationToDb(request);
+    return request;
+  }
+
+  const store = await readStore();
   store.accommodations = [request, ...store.accommodations];
   await writeStore(store);
   return request;
@@ -361,6 +388,20 @@ export async function updateAccommodation(
   id: string,
   patch: Partial<AccommodationRequest>,
 ): Promise<AccommodationRequest | null> {
+  if (hasDatabase()) {
+    const existing = (await listAccommodationsFromDb()).find(
+      (item) => item.id === id,
+    );
+    if (!existing) return null;
+    const updated: AccommodationRequest = {
+      ...existing,
+      ...patch,
+      id,
+    };
+    await upsertAccommodationToDb(updated);
+    return updated;
+  }
+
   const store = await readStore();
   const index = store.accommodations.findIndex((item) => item.id === id);
   if (index === -1) return null;
@@ -375,6 +416,9 @@ export async function updateAccommodation(
 }
 
 export async function deleteAccommodation(id: string): Promise<boolean> {
+  if (hasDatabase()) {
+    return deleteAccommodationFromDb(id);
+  }
   const store = await readStore();
   const next = store.accommodations.filter((item) => item.id !== id);
   if (next.length === store.accommodations.length) return false;

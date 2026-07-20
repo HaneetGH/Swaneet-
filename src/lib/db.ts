@@ -1,9 +1,15 @@
 import { neon } from "@neondatabase/serverless";
 import { getDatabaseUrl, hasDatabase } from "@/lib/env";
-import type { ContentStore, EmailLogEntry } from "@/lib/types";
+import type {
+  AccommodationRequest,
+  ContentStore,
+  EmailLogEntry,
+  RsvpEntry,
+} from "@/lib/types";
 
 let ensured = false;
 let ensurePromise: Promise<void> | null = null;
+let guestDataMigrated = false;
 
 function sql() {
   const url = getDatabaseUrl();
@@ -21,6 +27,16 @@ function isSchemaRaceError(error: unknown): boolean {
     message.includes("already exists") ||
     /duplicate key value violates unique constraint/i.test(message)
   );
+}
+
+function asRows<T extends Record<string, unknown>>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  return ((result as { rows?: T[] })?.rows ?? []) as T[];
+}
+
+function parseJsonb<T>(raw: unknown): T {
+  if (typeof raw === "string") return JSON.parse(raw) as T;
+  return raw as T;
 }
 
 async function runSchemaEnsure() {
@@ -48,6 +64,28 @@ async function runSchemaEnsure() {
       CREATE INDEX IF NOT EXISTS email_logs_created_at_idx
       ON email_logs (created_at DESC)
     `,
+    `
+      CREATE TABLE IF NOT EXISTS accommodations (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
+    `
+      CREATE INDEX IF NOT EXISTS accommodations_created_at_idx
+      ON accommodations (created_at DESC)
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS rsvps (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
+    `
+      CREATE INDEX IF NOT EXISTS rsvps_created_at_idx
+      ON rsvps (created_at DESC)
+    `,
   ];
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -58,7 +96,6 @@ async function runSchemaEnsure() {
       return;
     } catch (error) {
       if (!isSchemaRaceError(error) || attempt === 2) throw error;
-      // Another serverless instance won the CREATE race — retry briefly.
       await new Promise((resolve) => setTimeout(resolve, 80 * (attempt + 1)));
     }
   }
@@ -79,31 +116,109 @@ export async function ensureDatabase() {
   await ensurePromise;
 }
 
-export async function readStoreFromDb(): Promise<ContentStore | null> {
+/**
+ * One-time: move stays/RSVPs out of the shared JSON blob into their own tables
+ * so concurrent gallery/event writes cannot wipe them, and deploys never touch them.
+ */
+async function migrateGuestRowsFromContentStore() {
+  if (guestDataMigrated) return;
   await ensureDatabase();
   const db = sql();
   const result = await db.query(
     `SELECT data FROM content_store WHERE id = $1 LIMIT 1`,
     ["main"],
   );
-  const rows = Array.isArray(result)
-    ? result
-    : ((result as { rows?: Array<{ data: unknown }> })?.rows ?? []);
+  const rows = asRows<{ data: unknown }>(result);
+  if (!rows.length) {
+    guestDataMigrated = true;
+    return;
+  }
+
+  const store = parseJsonb<ContentStore>(rows[0].data);
+  const stays = Array.isArray(store.accommodations) ? store.accommodations : [];
+  const rsvps = Array.isArray(store.rsvps) ? store.rsvps : [];
+
+  if (!stays.length && !rsvps.length) {
+    guestDataMigrated = true;
+    return;
+  }
+
+  for (const stay of stays) {
+    if (!stay?.id) continue;
+    await db.query(
+      `
+        INSERT INTO accommodations (id, data, created_at)
+        VALUES ($1, $2::jsonb, $3::timestamptz)
+        ON CONFLICT (id) DO NOTHING
+      `,
+      [stay.id, JSON.stringify(stay), stay.createdAt || new Date().toISOString()],
+    );
+  }
+
+  for (const rsvp of rsvps) {
+    if (!rsvp?.id) continue;
+    await db.query(
+      `
+        INSERT INTO rsvps (id, data, created_at)
+        VALUES ($1, $2::jsonb, $3::timestamptz)
+        ON CONFLICT (id) DO NOTHING
+      `,
+      [rsvp.id, JSON.stringify(rsvp), rsvp.createdAt || new Date().toISOString()],
+    );
+  }
+
+  const next: ContentStore = {
+    ...store,
+    accommodations: [],
+    rsvps: [],
+    emailLogs: [],
+  };
+  await db.query(
+    `
+      UPDATE content_store
+      SET data = $2::jsonb, updated_at = NOW()
+      WHERE id = $1
+    `,
+    ["main", JSON.stringify(next)],
+  );
+  guestDataMigrated = true;
+}
+
+export async function readStoreFromDb(): Promise<ContentStore | null> {
+  await ensureDatabase();
+  await migrateGuestRowsFromContentStore();
+  const db = sql();
+  const result = await db.query(
+    `SELECT data FROM content_store WHERE id = $1 LIMIT 1`,
+    ["main"],
+  );
+  const rows = asRows<{ data: unknown }>(result);
   if (!rows.length) return null;
 
-  const raw = rows[0]?.data;
-  if (raw == null) return null;
-  if (typeof raw === "string") {
-    return JSON.parse(raw) as ContentStore;
-  }
-  return raw as ContentStore;
+  const store = parseJsonb<ContentStore>(rows[0].data);
+  const [accommodations, rsvps] = await Promise.all([
+    listAccommodationsFromDb(),
+    listRsvpsFromDb(),
+  ]);
+  return {
+    ...store,
+    accommodations,
+    rsvps,
+    emailLogs: [],
+  };
 }
 
 /** Seed defaults only if no row exists — never overwrite existing wedding data. */
 export async function seedStoreIfEmpty(store: ContentStore): Promise<boolean> {
   await ensureDatabase();
   const db = sql();
-  const payload = JSON.stringify(store);
+  const { emailLogs: _e, accommodations: _a, rsvps: _r, ...rest } = store;
+  const payload = JSON.stringify({
+    ...rest,
+    accommodations: [],
+    rsvps: [],
+    emailLogs: [],
+  });
   const result = await db.query(
     `
       INSERT INTO content_store (id, data, updated_at)
@@ -113,19 +228,26 @@ export async function seedStoreIfEmpty(store: ContentStore): Promise<boolean> {
     `,
     ["main", payload],
   );
-  const rows = Array.isArray(result)
-    ? result
-    : ((result as { rows?: unknown[] })?.rows ?? []);
-  return rows.length > 0;
+  return asRows(result).length > 0;
 }
 
 export async function writeStoreToDb(store: ContentStore): Promise<void> {
   await ensureDatabase();
   const db = sql();
-  // Keep wedding content in content_store; email logs live in email_logs table
-  // so concurrent RSVP/gallery writes cannot wipe the send history.
-  const { emailLogs: _ignored, ...rest } = store;
-  const payload = JSON.stringify({ ...rest, emailLogs: [] });
+  // Guest stays/RSVPs/email logs live in their own tables — never embed them
+  // in content_store, or concurrent writes will wipe them on deploy races.
+  const {
+    emailLogs: _emailLogs,
+    accommodations: _accommodations,
+    rsvps: _rsvps,
+    ...rest
+  } = store;
+  const payload = JSON.stringify({
+    ...rest,
+    accommodations: [],
+    rsvps: [],
+    emailLogs: [],
+  });
 
   await db.query(
     `
@@ -161,7 +283,6 @@ export async function insertEmailLogToDb(
       entry.createdAt,
     ],
   );
-  // Keep table bounded
   await db.query(`
     DELETE FROM email_logs
     WHERE id IN (
@@ -183,9 +304,7 @@ export async function listEmailLogsFromDb(): Promise<EmailLogEntry[]> {
       LIMIT 150
     `,
   );
-  const rows = Array.isArray(result)
-    ? result
-    : ((result as { rows?: Array<Record<string, unknown>> })?.rows ?? []);
+  const rows = asRows<Record<string, unknown>>(result);
 
   return rows.map((row) => ({
     id: String(row.id),
@@ -199,4 +318,92 @@ export async function listEmailLogsFromDb(): Promise<EmailLogEntry[]> {
         ? row.created_at.toISOString()
         : String(row.created_at),
   }));
+}
+
+export async function listAccommodationsFromDb(): Promise<
+  AccommodationRequest[]
+> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `
+      SELECT data FROM accommodations
+      ORDER BY created_at DESC
+    `,
+  );
+  return asRows<{ data: unknown }>(result).map((row) =>
+    parseJsonb<AccommodationRequest>(row.data),
+  );
+}
+
+export async function upsertAccommodationToDb(
+  entry: AccommodationRequest,
+): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(
+    `
+      INSERT INTO accommodations (id, data, created_at)
+      VALUES ($1, $2::jsonb, $3::timestamptz)
+      ON CONFLICT (id)
+      DO UPDATE SET data = EXCLUDED.data
+    `,
+    [
+      entry.id,
+      JSON.stringify(entry),
+      entry.createdAt || new Date().toISOString(),
+    ],
+  );
+}
+
+export async function deleteAccommodationFromDb(id: string): Promise<boolean> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `DELETE FROM accommodations WHERE id = $1 RETURNING id`,
+    [id],
+  );
+  return asRows(result).length > 0;
+}
+
+export async function listRsvpsFromDb(): Promise<RsvpEntry[]> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `
+      SELECT data FROM rsvps
+      ORDER BY created_at DESC
+    `,
+  );
+  return asRows<{ data: unknown }>(result).map((row) =>
+    parseJsonb<RsvpEntry>(row.data),
+  );
+}
+
+export async function upsertRsvpToDb(entry: RsvpEntry): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(
+    `
+      INSERT INTO rsvps (id, data, created_at)
+      VALUES ($1, $2::jsonb, $3::timestamptz)
+      ON CONFLICT (id)
+      DO UPDATE SET data = EXCLUDED.data
+    `,
+    [
+      entry.id,
+      JSON.stringify(entry),
+      entry.createdAt || new Date().toISOString(),
+    ],
+  );
+}
+
+export async function deleteRsvpFromDb(id: string): Promise<boolean> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `DELETE FROM rsvps WHERE id = $1 RETURNING id`,
+    [id],
+  );
+  return asRows(result).length > 0;
 }
