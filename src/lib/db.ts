@@ -3,6 +3,7 @@ import { getDatabaseUrl, hasDatabase } from "@/lib/env";
 import type { ContentStore, EmailLogEntry } from "@/lib/types";
 
 let ensured = false;
+let ensurePromise: Promise<void> | null = null;
 
 function sql() {
   const url = getDatabaseUrl();
@@ -12,32 +13,70 @@ function sql() {
   return neon(url);
 }
 
+/** Concurrent CREATE TABLE IF NOT EXISTS can race on pg_type in Postgres/Neon. */
+function isSchemaRaceError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("pg_type_typname_nsp_index") ||
+    message.includes("already exists") ||
+    /duplicate key value violates unique constraint/i.test(message)
+  );
+}
+
+async function runSchemaEnsure() {
+  const db = sql();
+  const statements = [
+    `
+      CREATE TABLE IF NOT EXISTS content_store (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS email_logs (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        recipient TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
+    `
+      CREATE INDEX IF NOT EXISTS email_logs_created_at_idx
+      ON email_logs (created_at DESC)
+    `,
+  ];
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      for (const statement of statements) {
+        await db.query(statement);
+      }
+      return;
+    } catch (error) {
+      if (!isSchemaRaceError(error) || attempt === 2) throw error;
+      // Another serverless instance won the CREATE race — retry briefly.
+      await new Promise((resolve) => setTimeout(resolve, 80 * (attempt + 1)));
+    }
+  }
+}
+
 export async function ensureDatabase() {
   if (!hasDatabase() || ensured) return;
-  const db = sql();
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS content_store (
-      id TEXT PRIMARY KEY,
-      data JSONB NOT NULL,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS email_logs (
-      id TEXT PRIMARY KEY,
-      kind TEXT NOT NULL,
-      recipient TEXT NOT NULL,
-      subject TEXT NOT NULL,
-      status TEXT NOT NULL,
-      error TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await db.query(`
-    CREATE INDEX IF NOT EXISTS email_logs_created_at_idx
-    ON email_logs (created_at DESC)
-  `);
-  ensured = true;
+  if (!ensurePromise) {
+    ensurePromise = runSchemaEnsure()
+      .then(() => {
+        ensured = true;
+      })
+      .catch((error) => {
+        ensurePromise = null;
+        throw error;
+      });
+  }
+  await ensurePromise;
 }
 
 export async function readStoreFromDb(): Promise<ContentStore | null> {
