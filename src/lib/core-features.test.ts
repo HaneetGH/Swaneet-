@@ -23,6 +23,11 @@ import {
   mergeDayResponses,
   rsvpDaysForSite,
 } from "@/lib/rsvp-days";
+import {
+  collectDownloadedMedia,
+  galleryImageIdFromDetail,
+  mergeDownloadedMedia,
+} from "@/lib/guest-downloads";
 
 describe("bride invites", () => {
   it("resolves mehfil and laavan slugs", () => {
@@ -196,5 +201,37 @@ describe("rsvp days per invite site", () => {
     expect(merged.find((d) => d.dateKey === "2026-08-13")?.attendance).toBe(
       "no",
     );
+  });
+});
+
+describe("guest download tracking", () => {
+  it("parses image ids from activity details", () => {
+    expect(
+      galleryImageIdFromDetail("invite:swnt-chugh-mehfil-k7m2|img-abc123"),
+    ).toBe("img-abc123");
+    expect(galleryImageIdFromDetail("photo-99xyz")).toBe("photo-99xyz");
+    expect(galleryImageIdFromDetail("invite:swnt-chugh-laavan-p9x4")).toBeNull();
+  });
+
+  it("merges and backfills downloaded media", () => {
+    const merged = mergeDownloadedMedia(
+      [{ imageId: "a", at: "2026-07-01T10:00:00.000Z" }],
+      "b",
+      "2026-07-02T10:00:00.000Z",
+    );
+    expect(merged[0]?.imageId).toBe("b");
+    expect(merged).toHaveLength(2);
+
+    const collected = collectDownloadedMedia({
+      downloadedMedia: [{ imageId: "a", at: "2026-07-01T10:00:00.000Z" }],
+      activity: [
+        {
+          action: "gallery_download",
+          at: "2026-07-03T10:00:00.000Z",
+          detail: "invite:x|c",
+        },
+      ],
+    });
+    expect(collected.map((d) => d.imageId)).toEqual(["c", "a"]);
   });
 });

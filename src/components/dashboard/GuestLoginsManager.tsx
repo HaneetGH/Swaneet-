@@ -261,6 +261,55 @@ export function GuestLoginsManager() {
                       </div>
                     </div>
 
+                    {(guest.downloadedImages?.length || 0) > 0 ? (
+                      <div className="mt-4">
+                        <p className="font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+                          Downloaded photos
+                          <span className="normal-case tracking-normal text-muted/80">
+                            {" "}
+                            · {guest.downloadedImages!.length}
+                          </span>
+                        </p>
+                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                          {guest.downloadedImages!.map((image) => (
+                            <a
+                              key={`${image.id}-${image.at}`}
+                              href={image.src}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="group relative aspect-square overflow-hidden rounded-xl border border-gold/20 bg-black/30"
+                              title={`${image.alt || "Photo"} · ${formatWhen(image.at)}`}
+                            >
+                              {image.kind === "video" ? (
+                                <video
+                                  src={image.src}
+                                  muted
+                                  playsInline
+                                  preload="metadata"
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <img
+                                  src={image.src}
+                                  alt={image.alt || "Downloaded photo"}
+                                  className="h-full w-full object-cover transition group-hover:scale-105"
+                                  loading="lazy"
+                                />
+                              )}
+                              <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/65 px-1.5 py-1 font-body text-[9px] text-cream/90 opacity-0 transition group-hover:opacity-100">
+                                {formatWhen(image.at)}
+                              </span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    ) : downloaded ? (
+                      <p className="mt-4 font-body text-xs text-muted">
+                        Downloads were recorded, but photo previews are not
+                        available for older activity without an image id.
+                      </p>
+                    ) : null}
+
                     <div className="mt-4 grid gap-4 sm:grid-cols-2">
                       <div>
                         <p className="font-body text-[10px] uppercase tracking-[0.18em] text-muted">

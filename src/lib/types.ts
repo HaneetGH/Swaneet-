@@ -171,6 +171,12 @@ export type GuestActivityEntry = {
   detail?: string;
 };
 
+/** Gallery items a guest downloaded (newest first) */
+export type GuestDownloadedMedia = {
+  imageId: string;
+  at: string;
+};
+
 export type GuestLoginStats = {
   galleryViews: number;
   galleryDownloads: number;
@@ -193,6 +199,8 @@ export type GuestLogin = {
   stats?: GuestLoginStats;
   /** Newest first, capped */
   activity?: GuestActivityEntry[];
+  /** Distinct gallery downloads with timestamps */
+  downloadedMedia?: GuestDownloadedMedia[];
   /** Last known invite path (from RSVP/stay/activity) */
   inviteSide?: "bride" | "groom";
   inviteTier?: "mehfil" | "laavan";
@@ -233,6 +241,14 @@ export type GuestProfile = GuestLogin & {
   stay?: GuestProfileStay | null;
   stays?: GuestProfileStay[];
   photoUploads: number;
+  /** Resolved gallery items this guest downloaded */
+  downloadedImages?: Array<{
+    id: string;
+    src: string;
+    alt: string;
+    kind: GalleryImage["kind"];
+    at: string;
+  }>;
 };
 
 export type EmailKind =

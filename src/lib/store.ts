@@ -39,6 +39,11 @@ import type {
   RsvpEntry,
   StayHotel,
 } from "@/lib/types";
+import {
+  collectDownloadedMedia,
+  galleryImageIdFromDetail,
+  mergeDownloadedMedia,
+} from "@/lib/guest-downloads";
 import { sortEventsByDateTime } from "@/lib/datetime";
 import { normalizeFeatureFlags } from "@/lib/feature-flags";
 import {
@@ -1284,6 +1289,30 @@ export async function listGuestProfiles(): Promise<GuestProfile[]> {
       inviteSite: item.inviteSite,
     });
 
+    const downloads = collectDownloadedMedia(guest);
+    const galleryById = new Map(
+      store.gallery.map((image) => [image.id, image] as const),
+    );
+    const downloadedImages = downloads
+      .map((item) => {
+        const image = galleryById.get(item.imageId);
+        if (!image) return null;
+        return {
+          id: image.id,
+          src: image.src,
+          alt: image.alt,
+          kind: image.kind,
+          at: item.at,
+        };
+      })
+      .filter(Boolean) as Array<{
+      id: string;
+      src: string;
+      alt: string;
+      kind: (typeof store.gallery)[number]["kind"];
+      at: string;
+    }>;
+
     return {
       ...guest,
       rsvp: rsvp ? mapRsvp(rsvp) : null,
@@ -1291,6 +1320,7 @@ export async function listGuestProfiles(): Promise<GuestProfile[]> {
       stay: stay ? mapStay(stay) : null,
       stays: matchedStays.map(mapStay),
       photoUploads,
+      downloadedImages,
       inviteSide,
       inviteTier,
       inviteSlug,
@@ -1370,6 +1400,14 @@ export async function recordGuestLogin(
     ...(current.activity || []),
   ].slice(0, MAX_GUEST_ACTIVITY);
 
+  let downloadedMedia = current.downloadedMedia || [];
+  if (source === "gallery_download") {
+    const imageId = galleryImageIdFromDetail(detail);
+    if (imageId) {
+      downloadedMedia = mergeDownloadedMedia(downloadedMedia, imageId, now);
+    }
+  }
+
   let inviteSlug = current.inviteSlug;
   let inviteTier = current.inviteTier;
   let inviteSide = current.inviteSide;
@@ -1391,6 +1429,7 @@ export async function recordGuestLogin(
     sources,
     stats,
     activity,
+    downloadedMedia,
     inviteSlug,
     inviteTier,
     inviteSide,
