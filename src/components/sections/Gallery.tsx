@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { Images, X } from "lucide-react";
+import { Download, Images, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { wedding } from "@/data/wedding";
@@ -29,18 +29,83 @@ const fallbackEvents: ManagedEvent[] = sortEventsByDateTime(
 
 const PREVIEW_PER_EVENT = 3;
 
+function filenameForMedia(photo: GalleryImage) {
+  const fromUrl = photo.src.split("?")[0]?.split("/").pop();
+  if (fromUrl && /\.[a-z0-9]{2,5}$/i.test(fromUrl)) return fromUrl;
+  const safe = (photo.alt || "swaneet-photo")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+  return `${safe || "swaneet"}-${photo.id.slice(0, 8)}.${
+    photo.kind === "video" ? "mp4" : "jpg"
+  }`;
+}
+
+async function downloadMedia(photo: GalleryImage) {
+  const filename = filenameForMedia(photo);
+  try {
+    const response = await fetch(photo.src);
+    if (!response.ok) throw new Error("fetch failed");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  } catch {
+    window.open(photo.src, "_blank", "noopener,noreferrer");
+  }
+}
+
+function DownloadButton({
+  photo,
+  className,
+}: {
+  photo: GalleryImage;
+  className?: string;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setBusy(true);
+        void downloadMedia(photo).finally(() => setBusy(false));
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full bg-black/55 text-cream backdrop-blur-sm transition hover:bg-black/75 disabled:opacity-60",
+        className,
+      )}
+      aria-label={`Download ${photo.alt || "photo"}`}
+      title="Download"
+    >
+      <Download size={16} />
+    </button>
+  );
+}
+
 function MediaTile({
   photo,
   index,
   onOpen,
   sizes,
+  href,
 }: {
   photo: GalleryImage;
   index: number;
   onOpen?: () => void;
   sizes: string;
+  href?: string;
 }) {
-  const content = (
+  const media = (
     <>
       {photo.kind === "video" ? (
         <video
@@ -64,22 +129,8 @@ function MediaTile({
     </>
   );
 
-  if (onOpen) {
-    return (
-      <motion.button
-        type="button"
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-40px" }}
-        transition={{ duration: 0.5, delay: index * 0.05 }}
-        onClick={onOpen}
-        className="group relative aspect-square w-full overflow-hidden rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-gold"
-        aria-label={`Open ${photo.alt}`}
-      >
-        {content}
-      </motion.button>
-    );
-  }
+  const shellClass =
+    "relative aspect-square w-full overflow-hidden rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-gold";
 
   return (
     <motion.div
@@ -87,9 +138,32 @@ function MediaTile({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
       transition={{ duration: 0.5, delay: index * 0.05 }}
-      className="group relative aspect-square w-full overflow-hidden rounded-2xl"
+      className="group relative"
     >
-      {content}
+      {href ? (
+        <Link
+          href={href}
+          className={cn(shellClass, "block")}
+          aria-label={`View gallery`}
+        >
+          {media}
+        </Link>
+      ) : onOpen ? (
+        <button
+          type="button"
+          onClick={onOpen}
+          className={shellClass}
+          aria-label={`Open ${photo.alt}`}
+        >
+          {media}
+        </button>
+      ) : (
+        <div className={shellClass}>{media}</div>
+      )}
+      <DownloadButton
+        photo={photo}
+        className="absolute bottom-2 right-2 z-10 h-9 w-9 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+      />
     </motion.div>
   );
 }
@@ -213,22 +287,17 @@ export function Gallery() {
 
                   <div className="grid grid-cols-3 gap-2 sm:gap-4">
                     {group.images.map((photo, i) => (
-                      <Link
+                      <MediaTile
                         key={photo.id}
+                        photo={photo}
+                        index={i}
                         href={
                           group.key === "unassigned"
                             ? "/gallery"
                             : `/gallery?event=${group.key}`
                         }
-                        className="block"
-                        aria-label={`View ${group.title} gallery`}
-                      >
-                        <MediaTile
-                          photo={photo}
-                          index={i}
-                          sizes="(max-width: 640px) 33vw, 280px"
-                        />
-                      </Link>
+                        sizes="(max-width: 640px) 33vw, 280px"
+                      />
                     ))}
                   </div>
                 </div>
@@ -432,9 +501,19 @@ export function GalleryFull() {
                   />
                 )}
               </div>
-              <p className="absolute bottom-3 left-4 font-body text-xs text-cream/90">
-                {active.alt}
-              </p>
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-black/80 to-transparent px-4 py-3">
+                <p className="min-w-0 truncate font-body text-xs text-cream/90">
+                  {active.alt}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void downloadMedia(active)}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-gold/30 bg-black/40 px-3 py-1.5 font-body text-[10px] uppercase tracking-[0.18em] text-gold-soft hover:bg-black/60"
+                >
+                  <Download size={14} />
+                  Download
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setActive(null)}
