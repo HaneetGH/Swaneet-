@@ -1,32 +1,82 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { User } from "firebase/auth";
 import { AnimatePresence, motion } from "framer-motion";
 import { Heart } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { wedding } from "@/data/wedding";
-import { AccommodationRequestPanel } from "@/components/rsvp/AccommodationRequestPanel";
+import {
+  GuestAuthPanel,
+  getGuestIdToken,
+  signOutGuest,
+} from "@/components/rsvp/GuestAuthPanel";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
-const schema = z.object({
-  name: z.string().min(2, "Please enter your full name"),
-  guests: z
-    .number({ error: "Enter number of guests" })
-    .min(1, "At least 1 guest")
-    .max(20, "Please contact the family for larger groups"),
-  attendance: z.enum(["yes", "no", "maybe"], {
-    message: "Please select your attendance",
-  }),
-  meal: z.enum(["vegetarian", "non-vegetarian", "no-preference"]).optional(),
-  notes: z.string().max(500).optional(),
-  contactFamily: z.string().optional(),
-  needsAccommodation: z.enum(["yes", "no"]),
-});
+const schema = z
+  .object({
+    name: z.string().min(2, "Please enter your full name"),
+    guests: z
+      .number({ error: "Enter number of guests" })
+      .min(1, "At least 1 guest")
+      .max(20, "Please contact the family for larger groups"),
+    attendance: z.enum(["yes", "no", "maybe"], {
+      message: "Please select your attendance",
+    }),
+    meal: z.enum(["vegetarian", "non-vegetarian", "no-preference"]),
+    notes: z.string().max(500).optional(),
+    contactFamily: z.string().optional(),
+    needsAccommodation: z.enum(["yes", "no"]),
+    stayPhone: z.string().optional(),
+    stayPeople: z.number().optional(),
+    stayRooms: z.number().optional(),
+    stayCheckIn: z.string().optional(),
+    stayCheckOut: z.string().optional(),
+    stayNotes: z.string().max(500).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.needsAccommodation !== "yes") return;
+    if (!data.stayPhone || data.stayPhone.trim().length < 7) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Phone / WhatsApp is required for stay",
+        path: ["stayPhone"],
+      });
+    }
+    if (!data.stayPeople || data.stayPeople < 1) {
+      ctx.addIssue({
+        code: "custom",
+        message: "How many people need a room?",
+        path: ["stayPeople"],
+      });
+    }
+    if (!data.stayRooms || data.stayRooms < 1) {
+      ctx.addIssue({
+        code: "custom",
+        message: "How many rooms?",
+        path: ["stayRooms"],
+      });
+    }
+    if (!data.stayCheckIn) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Check-in date required",
+        path: ["stayCheckIn"],
+      });
+    }
+    if (!data.stayCheckOut) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Check-out date required",
+        path: ["stayCheckOut"],
+      });
+    }
+  });
 
 type FormValues = z.infer<typeof schema>;
 
@@ -78,34 +128,47 @@ function pickMessage(attendance: FormValues["attendance"]): ThankYouMessage {
 }
 
 export function RSVP() {
+  const [user, setUser] = useState<User | null>(null);
   const [success, setSuccess] = useState(false);
   const [message, setMessage] = useState<ThankYouMessage | null>(null);
+  const [staySubmitted, setStaySubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [needsStayFlow, setNeedsStayFlow] = useState(false);
-  const [savedRsvp, setSavedRsvp] = useState<{
-    id: string;
-    name: string;
-    guests: number;
-    contactFamily?: string;
-  } | null>(null);
+
+  const onAuthed = useCallback((next: User) => {
+    setUser(next);
+  }, []);
 
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
+      name: "",
       attendance: "yes",
       meal: "no-preference",
       guests: 1,
       needsAccommodation: "no",
+      stayPeople: 1,
+      stayRooms: 1,
+      stayCheckIn: "2026-08-12",
+      stayCheckOut: "2026-08-13",
     },
   });
 
+  // Prefill name from Google once signed in
+  useEffect(() => {
+    if (user?.displayName) {
+      setValue("name", user.displayName);
+    }
+  }, [user, setValue]);
+
   const needsAccommodation = watch("needsAccommodation");
+  const guests = watch("guests");
 
   const familyList = useMemo(
     () => wedding.rsvpFamilies.map((f) => f.name).join(", "),
@@ -115,36 +178,66 @@ export function RSVP() {
   const onSubmit = async (data: FormValues) => {
     setSubmitError("");
     try {
+      const token = await getGuestIdToken();
+      if (!token) {
+        setSubmitError("Please sign in with Google again");
+        setUser(null);
+        return;
+      }
+
       const res = await fetch("/api/rsvp", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          ...data,
+          name: data.name,
+          guests: data.guests,
+          attendance: data.attendance,
+          meal: data.meal,
+          notes: data.notes,
+          contactFamily: data.contactFamily,
           needsAccommodation: data.needsAccommodation === "yes",
+          stay:
+            data.needsAccommodation === "yes"
+              ? {
+                  phone: data.stayPhone,
+                  people: data.stayPeople,
+                  rooms: data.stayRooms,
+                  checkIn: data.stayCheckIn,
+                  checkOut: data.stayCheckOut,
+                  notes: data.stayNotes,
+                }
+              : undefined,
         }),
       });
       const payload = (await res.json().catch(() => ({}))) as {
-        rsvp?: { id: string; name: string; guests: number; contactFamily?: string };
+        error?: string;
+        accommodation?: unknown;
       };
       if (!res.ok) {
-        setSubmitError("Could not send your RSVP. Please try again.");
+        setSubmitError(payload.error || "Could not send your RSVP. Please try again.");
+        if (res.status === 401) {
+          await signOutGuest();
+          setUser(null);
+        }
         return;
       }
       setMessage(pickMessage(data.attendance));
+      setStaySubmitted(Boolean(payload.accommodation));
       setSuccess(true);
-      if (data.needsAccommodation === "yes" && payload.rsvp) {
-        setNeedsStayFlow(true);
-        setSavedRsvp({
-          id: payload.rsvp.id,
-          name: payload.rsvp.name,
-          guests: payload.rsvp.guests,
-          contactFamily: payload.rsvp.contactFamily,
-        });
-      } else {
-        setNeedsStayFlow(false);
-        setSavedRsvp(null);
-      }
-      reset();
+      reset({
+        attendance: "yes",
+        meal: "no-preference",
+        guests: 1,
+        needsAccommodation: "no",
+        stayPeople: 1,
+        stayRooms: 1,
+        stayCheckIn: "2026-08-12",
+        stayCheckOut: "2026-08-13",
+        name: user?.displayName || "",
+      });
     } catch {
       setSubmitError("Could not send your RSVP. Please try again.");
     }
@@ -157,7 +250,7 @@ export function RSVP() {
         <SectionHeading
           eyebrow="Kindly reply"
           title="RSVP"
-          subtitle={`Please RSVP with the ${familyList}`}
+          subtitle={`Sign in with Google, then RSVP. Please reply via ${familyList}.`}
         />
 
         <GlassCard glow>
@@ -187,37 +280,38 @@ export function RSVP() {
                 <p className="mt-4 max-w-sm font-body text-sm leading-relaxed text-muted">
                   {message.body}
                 </p>
-
-                {needsStayFlow && savedRsvp ? (
-                  <div className="mt-8 w-full text-left">
-                    <AccommodationRequestPanel
-                      defaultName={savedRsvp.name}
-                      defaultPeople={savedRsvp.guests}
-                      defaultFamily={savedRsvp.contactFamily || ""}
-                      rsvpId={savedRsvp.id}
-                      onDone={() => {
-                        setNeedsStayFlow(false);
-                        setSuccess(false);
-                        setMessage(null);
-                        setSavedRsvp(null);
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-8"
-                    onClick={() => {
-                      setSuccess(false);
-                      setMessage(null);
-                      setNeedsStayFlow(false);
-                      setSavedRsvp(null);
-                    }}
-                  >
-                    Submit another
-                  </Button>
-                )}
+                {staySubmitted ? (
+                  <p className="mt-4 max-w-sm font-body text-sm text-gold-soft">
+                    Your stay request was received too — the family will confirm
+                    by email.
+                  </p>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-8"
+                  onClick={() => {
+                    setSuccess(false);
+                    setMessage(null);
+                    setStaySubmitted(false);
+                  }}
+                >
+                  Submit another
+                </Button>
+              </motion.div>
+            ) : !user ? (
+              <motion.div
+                key="auth"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <GuestAuthPanel
+                  onAuthed={onAuthed}
+                  title="RSVP with Google"
+                  subtitle="Sign in with Gmail so we can save your reply and ask clearly if you need a stay — no need to cram everything into Notes."
+                  ctaLabel="Continue with Google"
+                />
               </motion.div>
             ) : (
               <motion.form
@@ -229,8 +323,30 @@ export function RSVP() {
                 className="space-y-5"
                 noValidate
               >
+                <div className="rounded-xl border border-gold/20 bg-[#100e14] px-4 py-3">
+                  <p className="font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                    Signed in
+                  </p>
+                  <p className="mt-1 font-body text-sm text-cream">
+                    {user.email}
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-2 font-body text-xs text-gold-soft"
+                    onClick={async () => {
+                      await signOutGuest();
+                      setUser(null);
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+
                 <div>
-                  <label htmlFor="name" className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted">
+                  <label
+                    htmlFor="name"
+                    className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
+                  >
                     Full name
                   </label>
                   <input
@@ -240,13 +356,18 @@ export function RSVP() {
                     {...register("name")}
                   />
                   {errors.name ? (
-                    <p className="mt-1.5 text-xs text-red-300">{errors.name.message}</p>
+                    <p className="mt-1.5 text-xs text-red-300">
+                      {errors.name.message}
+                    </p>
                   ) : null}
                 </div>
 
                 <div className="grid gap-5 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="guests" className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted">
+                    <label
+                      htmlFor="guests"
+                      className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
+                    >
                       Number of guests
                     </label>
                     <input
@@ -255,7 +376,19 @@ export function RSVP() {
                       min={1}
                       max={20}
                       className={fieldClass}
-                      {...register("guests", { valueAsNumber: true })}
+                      {...register("guests", {
+                        valueAsNumber: true,
+                        onChange: (e) => {
+                          const value = Number(e.target.value);
+                          if (
+                            needsAccommodation === "yes" &&
+                            Number.isFinite(value) &&
+                            value > 0
+                          ) {
+                            setValue("stayPeople", value);
+                          }
+                        },
+                      })}
                     />
                     {errors.guests ? (
                       <p className="mt-1.5 text-xs text-red-300">
@@ -265,7 +398,10 @@ export function RSVP() {
                   </div>
 
                   <div>
-                    <label htmlFor="attendance" className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted">
+                    <label
+                      htmlFor="attendance"
+                      className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
+                    >
                       Attendance
                     </label>
                     <select
@@ -281,7 +417,10 @@ export function RSVP() {
                 </div>
 
                 <div>
-                  <label htmlFor="meal" className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted">
+                  <label
+                    htmlFor="meal"
+                    className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
+                  >
                     Meal preference
                   </label>
                   <select
@@ -295,31 +434,165 @@ export function RSVP() {
                   </select>
                 </div>
 
-                <div>
-                  <label
-                    htmlFor="needsAccommodation"
-                    className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
-                  >
-                    Need accommodation?
-                  </label>
-                  <select
-                    id="needsAccommodation"
-                    className={cn(fieldClass, "appearance-none")}
-                    {...register("needsAccommodation")}
-                  >
-                    <option value="no">No, we have our own stay</option>
-                    <option value="yes">Yes, please help with stay</option>
-                  </select>
+                <div className="rounded-2xl border border-gold/25 bg-[#100e14] p-4">
+                  <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
+                    Accommodation
+                  </p>
+                  <p className="mt-2 font-display text-xl text-cream">
+                    Do you need a stay arranged?
+                  </p>
+                  <p className="mt-1 font-body text-xs text-muted">
+                    Choose clearly here — don’t write stay details in Notes.
+                  </p>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    <label
+                      className={cn(
+                        "cursor-pointer rounded-xl border px-4 py-3 font-body text-sm transition",
+                        needsAccommodation === "no"
+                          ? "border-gold bg-gold/15 text-cream"
+                          : "border-gold/20 text-muted hover:border-gold/40",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        value="no"
+                        className="sr-only"
+                        {...register("needsAccommodation")}
+                      />
+                      No — we have our own stay
+                    </label>
+                    <label
+                      className={cn(
+                        "cursor-pointer rounded-xl border px-4 py-3 font-body text-sm transition",
+                        needsAccommodation === "yes"
+                          ? "border-gold bg-gold/15 text-cream"
+                          : "border-gold/20 text-muted hover:border-gold/40",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        value="yes"
+                        className="sr-only"
+                        {...register("needsAccommodation", {
+                          onChange: () => {
+                            if (!watch("stayPeople")) {
+                              setValue("stayPeople", guests || 1);
+                            }
+                          },
+                        })}
+                      />
+                      Yes — please help with rooms
+                    </label>
+                  </div>
+
                   {needsAccommodation === "yes" ? (
-                    <p className="mt-2 font-body text-xs leading-relaxed text-gold-soft/90">
-                      After RSVP, sign in with Google to share how many people
-                      need rooms and for which nights.
-                    </p>
+                    <div className="mt-5 space-y-4 border-t border-gold/15 pt-5">
+                      <p className="font-body text-xs text-gold-soft">
+                        Tell us who needs rooms and for which nights.
+                      </p>
+                      <div>
+                        <label className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                          Phone / WhatsApp
+                        </label>
+                        <input
+                          className={fieldClass}
+                          placeholder="+91 …"
+                          {...register("stayPhone")}
+                        />
+                        {errors.stayPhone ? (
+                          <p className="mt-1.5 text-xs text-red-300">
+                            {errors.stayPhone.message}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                            People needing stay
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={30}
+                            className={fieldClass}
+                            {...register("stayPeople", { valueAsNumber: true })}
+                          />
+                          {errors.stayPeople ? (
+                            <p className="mt-1.5 text-xs text-red-300">
+                              {errors.stayPeople.message}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                            Rooms needed
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={15}
+                            className={fieldClass}
+                            {...register("stayRooms", { valueAsNumber: true })}
+                          />
+                          {errors.stayRooms ? (
+                            <p className="mt-1.5 text-xs text-red-300">
+                              {errors.stayRooms.message}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                            Check-in
+                          </label>
+                          <input
+                            type="date"
+                            className={fieldClass}
+                            {...register("stayCheckIn")}
+                          />
+                          {errors.stayCheckIn ? (
+                            <p className="mt-1.5 text-xs text-red-300">
+                              {errors.stayCheckIn.message}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                            Check-out
+                          </label>
+                          <input
+                            type="date"
+                            className={fieldClass}
+                            {...register("stayCheckOut")}
+                          />
+                          {errors.stayCheckOut ? (
+                            <p className="mt-1.5 text-xs text-red-300">
+                              {errors.stayCheckOut.message}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                          Stay notes (optional)
+                        </label>
+                        <textarea
+                          rows={2}
+                          className={cn(fieldClass, "resize-none")}
+                          placeholder="Kids, arrival time, accessibility…"
+                          {...register("stayNotes")}
+                        />
+                      </div>
+                    </div>
                   ) : null}
                 </div>
 
                 <div>
-                  <label htmlFor="contactFamily" className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted">
+                  <label
+                    htmlFor="contactFamily"
+                    className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
+                  >
                     RSVP via
                   </label>
                   <select
@@ -337,14 +610,17 @@ export function RSVP() {
                 </div>
 
                 <div>
-                  <label htmlFor="notes" className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted">
-                    Notes
+                  <label
+                    htmlFor="notes"
+                    className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
+                  >
+                    Message for the couple (optional)
                   </label>
                   <textarea
                     id="notes"
-                    rows={4}
+                    rows={3}
                     className={cn(fieldClass, "resize-none")}
-                    placeholder="Any message for the couple or families"
+                    placeholder="Blessings or a short note — not meal or stay details"
                     {...register("notes")}
                   />
                 </div>
@@ -358,7 +634,11 @@ export function RSVP() {
                   disabled={isSubmitting}
                   className="w-full"
                 >
-                  {isSubmitting ? "Sending with love…" : "Send RSVP"}
+                  {isSubmitting
+                    ? "Sending with love…"
+                    : needsAccommodation === "yes"
+                      ? "Send RSVP + stay request"
+                      : "Send RSVP"}
                 </Button>
               </motion.form>
             )}

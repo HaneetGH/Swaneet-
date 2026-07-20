@@ -136,6 +136,7 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
                   {rsvp.meal && rsvp.meal !== "no-preference"
                     ? ` · ${rsvp.meal.replace("-", " ")}`
                     : ""}
+                  {rsvp.email ? ` · ${rsvp.email}` : ""}
                   {rsvp.contactFamily ? ` · via ${rsvp.contactFamily}` : ""}
                   {rsvp.needsAccommodation ? " · needs stay" : ""}
                 </p>

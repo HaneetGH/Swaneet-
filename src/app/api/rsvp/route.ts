@@ -2,19 +2,45 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { notifyOwner } from "@/lib/email";
-import { addRsvp, listRsvps } from "@/lib/store";
+import { verifyBearerToken } from "@/lib/firebase/admin";
+import {
+  addAccommodation,
+  addRsvp,
+  listRsvps,
+  recordGuestLogin,
+} from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-const rsvpSchema = z.object({
-  name: z.string().min(2),
-  guests: z.coerce.number().min(1).max(20),
-  attendance: z.enum(["yes", "no", "maybe"]),
-  meal: z.enum(["vegetarian", "non-vegetarian", "no-preference"]).optional(),
+const staySchema = z.object({
+  phone: z.string().trim().min(7, "Phone number is required"),
+  people: z.number().min(1).max(30),
+  rooms: z.number().min(1).max(15),
+  checkIn: z.string().trim().min(1),
+  checkOut: z.string().trim().min(1),
   notes: z.string().max(500).optional(),
-  contactFamily: z.string().optional(),
-  needsAccommodation: z.boolean().optional(),
 });
+
+const rsvpSchema = z
+  .object({
+    name: z.string().min(2),
+    guests: z.coerce.number().min(1).max(20),
+    attendance: z.enum(["yes", "no", "maybe"]),
+    meal: z.enum(["vegetarian", "non-vegetarian", "no-preference"]).optional(),
+    notes: z.string().max(500).optional(),
+    contactFamily: z.string().optional(),
+    needsAccommodation: z.boolean(),
+    stay: staySchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.needsAccommodation && !data.stay) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Stay details are required when you need accommodation",
+        path: ["stay"],
+      });
+    }
+  });
 
 export async function GET() {
   try {
@@ -32,10 +58,27 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const guest = await verifyBearerToken(request);
+    if (!guest) {
+      return NextResponse.json(
+        { error: "Please sign in with Google to RSVP" },
+        { status: 401 },
+      );
+    }
+    if (!guest.email) {
+      return NextResponse.json(
+        { error: "Your Google account needs an email address to RSVP" },
+        { status: 400 },
+      );
+    }
+
     const parsed = rsvpSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid RSVP details" },
+        {
+          error:
+            parsed.error.issues[0]?.message || "Invalid RSVP details",
+        },
         { status: 400 },
       );
     }
@@ -47,24 +90,58 @@ export async function POST(request: Request) {
       meal: parsed.data.meal,
       notes: parsed.data.notes?.trim() || undefined,
       contactFamily: parsed.data.contactFamily?.trim() || undefined,
-      needsAccommodation: parsed.data.needsAccommodation ?? false,
+      needsAccommodation: parsed.data.needsAccommodation,
+      email: guest.email,
+      authUid: guest.uid,
+      authEmail: guest.email,
     });
 
+    await recordGuestLogin(guest, "rsvp").catch(() => undefined);
+
+    let accommodation = null;
+    if (parsed.data.needsAccommodation && parsed.data.stay) {
+      accommodation = await addAccommodation({
+        name: parsed.data.name.trim(),
+        phone: parsed.data.stay.phone,
+        email: guest.email,
+        people: parsed.data.stay.people,
+        rooms: parsed.data.stay.rooms,
+        checkIn: parsed.data.stay.checkIn,
+        checkOut: parsed.data.stay.checkOut,
+        notes: parsed.data.stay.notes?.trim() || undefined,
+        contactFamily: parsed.data.contactFamily?.trim() || undefined,
+        rsvpId: rsvp.id,
+        authUid: guest.uid,
+        authEmail: guest.email,
+        status: "pending",
+      });
+      await recordGuestLogin(guest, "stay").catch(() => undefined);
+    }
+
     void notifyOwner({
-      title: "New RSVP",
-      summary: `${rsvp.name} submitted an RSVP.`,
+      title: parsed.data.needsAccommodation
+        ? "New RSVP + stay request"
+        : "New RSVP",
+      summary: `${rsvp.name} submitted an RSVP${
+        parsed.data.needsAccommodation ? " and needs accommodation" : ""
+      }.`,
       details: [
         `Name: ${rsvp.name}`,
+        `Email: ${guest.email}`,
         `Guests: ${rsvp.guests}`,
         `Attendance: ${rsvp.attendance}`,
         rsvp.meal ? `Meal: ${rsvp.meal}` : "",
-        rsvp.needsAccommodation ? "Needs accommodation: yes" : "",
+        rsvp.needsAccommodation ? "Needs accommodation: yes" : "Needs accommodation: no",
+        accommodation
+          ? `Stay: ${accommodation.people} people, ${accommodation.rooms} room(s), ${accommodation.checkIn} → ${accommodation.checkOut}`
+          : "",
+        accommodation?.phone ? `Phone: ${accommodation.phone}` : "",
         rsvp.notes ? `Notes: ${rsvp.notes}` : "",
         rsvp.contactFamily ? `Contact: ${rsvp.contactFamily}` : "",
       ],
     }).catch((error) => console.error("RSVP owner notify failed", error));
 
-    return NextResponse.json({ rsvp }, { status: 201 });
+    return NextResponse.json({ rsvp, accommodation }, { status: 201 });
   } catch (error) {
     console.error("POST /api/rsvp failed", error);
     const message =

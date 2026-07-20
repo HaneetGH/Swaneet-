@@ -479,7 +479,7 @@ export async function listGuestLogins(): Promise<GuestLogin[]> {
 
 export async function recordGuestLogin(
   guest: VerifiedGuest,
-  source: "stay" | "photos",
+  source: "stay" | "photos" | "rsvp",
 ): Promise<void> {
   const store = await readStore();
   const now = new Date().toISOString();

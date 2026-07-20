@@ -42,6 +42,9 @@ export type RsvpEntry = {
   contactFamily?: string;
   /** Guest indicated they may need a stay */
   needsAccommodation?: boolean;
+  email?: string;
+  authUid?: string;
+  authEmail?: string;
   createdAt: string;
 };
 
@@ -108,7 +111,7 @@ export type GuestLogin = {
   phone?: string;
   firstSeenAt: string;
   lastSeenAt: string;
-  sources: Array<"stay" | "photos">;
+  sources: Array<"stay" | "photos" | "rsvp">;
 };
 
 export type EmailKind =
