@@ -25,6 +25,7 @@ import type {
 } from "@/lib/types";
 import { AccommodationManager } from "@/components/dashboard/AccommodationManager";
 import { ChangePinForm } from "@/components/dashboard/ChangePinForm";
+import { RsvpBannerManager } from "@/components/dashboard/RsvpBannerManager";
 import { EmailLogManager } from "@/components/dashboard/EmailLogManager";
 import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
@@ -219,7 +220,10 @@ export function DashboardShell({
         ) : activeTab === "emails" ? (
           <EmailLogManager />
         ) : activeTab === "settings" ? (
-          <ChangePinForm />
+          <div>
+            <ChangePinForm />
+            <RsvpBannerManager />
+          </div>
         ) : (
           <p className="font-body text-sm text-muted">
             No permissions assigned. Ask Master to update your role.

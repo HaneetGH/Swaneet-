@@ -157,6 +157,10 @@ export type ContentStore = {
   hotels?: StayHotel[];
   /** @deprecated Prefer hotels[].totalRooms — kept for older data */
   totalRooms?: number;
+  /** Homepage RSVP / stay shortcut banner */
+  rsvpBanner?: {
+    imageUrl?: string;
+  };
   /** Pending email verification codes (hashed) */
   emailOtps?: Record<string, EmailOtpEntry>;
   /** Team admins created by master (not including master PIN) */

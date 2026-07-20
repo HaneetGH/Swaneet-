@@ -66,6 +66,7 @@ export function defaultStore(): ContentStore {
     accommodations: [],
     hotels: [],
     totalRooms: 0,
+    rsvpBanner: {},
     emailOtps: {},
     admins: [],
     guestLogins: [],
@@ -210,6 +211,9 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     accommodations,
     hotels,
     totalRooms,
+    rsvpBanner: {
+      imageUrl: raw.rsvpBanner?.imageUrl?.trim() || undefined,
+    },
     emailOtps: raw.emailOtps ?? {},
     admins,
     guestLogins,
@@ -383,6 +387,24 @@ export function getStorageInfo() {
     canPersist: canPersistData(),
     isVercel: isVercelRuntime(),
   };
+}
+
+export async function getRsvpBanner(): Promise<{ imageUrl?: string }> {
+  const store = await readStore();
+  return {
+    imageUrl: store.rsvpBanner?.imageUrl || undefined,
+  };
+}
+
+export async function setRsvpBannerImage(
+  imageUrl: string | undefined,
+): Promise<{ imageUrl?: string }> {
+  const store = await readStore();
+  store.rsvpBanner = {
+    imageUrl: imageUrl?.trim() || undefined,
+  };
+  await writeStore(store);
+  return store.rsvpBanner;
 }
 
 export async function listEvents(): Promise<ManagedEvent[]> {
