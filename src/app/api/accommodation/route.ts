@@ -30,6 +30,9 @@ const schema = z.object({
   notes: z.string().max(500).optional(),
   contactFamily: z.string().optional(),
   rsvpId: z.string().optional(),
+  inviteSide: z.enum(["bride", "groom"]).optional(),
+  inviteTier: z.enum(["mehfil", "laavan"]).optional(),
+  inviteSlug: z.string().trim().max(80).optional(),
 });
 
 const inventorySchema = z.object({
@@ -126,11 +129,20 @@ export async function POST(request: Request) {
           contactFamily: parsed.data.contactFamily?.trim() || undefined,
           rsvpId: parsed.data.rsvpId,
           status: "pending",
+          inviteSide: parsed.data.inviteSide,
+          inviteTier: parsed.data.inviteTier,
+          inviteSlug: parsed.data.inviteSlug,
         },
       );
       requestEntry = result.accommodation;
       updated = result.updated;
-      await recordGuestLogin(guest, "stay").catch(() => undefined);
+      await recordGuestLogin(
+        guest,
+        "stay",
+        parsed.data.inviteSlug
+          ? `invite:${parsed.data.inviteSlug}`
+          : undefined,
+      ).catch(() => undefined);
     } else {
       requestEntry = await addAccommodation({
         name: parsed.data.name,
@@ -144,6 +156,9 @@ export async function POST(request: Request) {
         contactFamily: parsed.data.contactFamily?.trim() || undefined,
         rsvpId: parsed.data.rsvpId,
         status: "pending",
+        inviteSide: parsed.data.inviteSide,
+        inviteTier: parsed.data.inviteTier,
+        inviteSlug: parsed.data.inviteSlug,
       });
     }
 
@@ -158,6 +173,9 @@ export async function POST(request: Request) {
         `Check-in: ${requestEntry.checkIn}`,
         `Check-out: ${requestEntry.checkOut}`,
         requestEntry.notes ? `Notes: ${requestEntry.notes}` : "",
+        requestEntry.inviteTier
+          ? `Invite: bride / ${requestEntry.inviteTier}`
+          : "",
       ],
     }).catch((error) => console.error("Stay owner notify failed", error));
 

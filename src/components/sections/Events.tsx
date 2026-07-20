@@ -20,6 +20,7 @@ import {
 import type { EventIcon, ManagedEvent } from "@/lib/types";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils";
+import { useInvite } from "@/lib/invite-context";
 
 const icons: Record<EventIcon, typeof Moon> = {
   moon: Moon,
@@ -45,9 +46,16 @@ const fallbackEvents: ManagedEvent[] = sortEventsByDateTime(
 );
 
 export function Events() {
-  const [events, setEvents] = useState<ManagedEvent[]>(fallbackEvents);
+  const invite = useInvite();
+  const [events, setEvents] = useState<ManagedEvent[]>(
+    invite ? invite.events : fallbackEvents,
+  );
 
   useEffect(() => {
+    if (invite) {
+      setEvents(sortEventsByDateTime(invite.events));
+      return;
+    }
     let active = true;
     fetch("/api/events")
       .then((res) => res.json())
@@ -60,7 +68,7 @@ export function Events() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [invite]);
 
   return (
     <section id="events" className="section-pad relative overflow-hidden">
@@ -73,7 +81,10 @@ export function Events() {
         <SectionHeading
           eyebrow="Celebrations"
           title="Wedding Events"
-          subtitle="Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri"
+          subtitle={
+            invite?.invite.venueSubtitle ||
+            "Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri"
+          }
         />
 
         <ol className="relative mx-auto max-w-4xl">

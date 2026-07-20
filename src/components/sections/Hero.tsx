@@ -8,6 +8,7 @@ import { FloatingLanterns } from "@/components/effects/FloatingLanterns";
 import { Petals } from "@/components/effects/Petals";
 import { Sparkles } from "@/components/effects/Sparkles";
 import { MusicToggle } from "@/components/ui/MusicToggle";
+import { useInvite } from "@/lib/invite-context";
 
 const Scene3D = dynamic(
   () =>
@@ -16,6 +17,18 @@ const Scene3D = dynamic(
 );
 
 export function Hero() {
+  const invite = useInvite();
+  const brideFirst = Boolean(invite);
+  const primaryName = brideFirst
+    ? wedding.couple.bride.name
+    : wedding.couple.groom.name;
+  const secondaryName = brideFirst
+    ? wedding.couple.groom.name
+    : wedding.couple.bride.name;
+  const place =
+    invite?.invite.heroPlace || "Maple Garden · Buria Road, Jagadhri";
+  const blessing = invite?.invite.blessings || wedding.blessing;
+
   return (
     <section
       id="hero"
@@ -34,9 +47,9 @@ export function Hero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.15 }}
-          className="mb-6 max-w-md font-body text-[11px] leading-relaxed tracking-[0.12em] text-gold-soft/80 sm:text-xs"
+          className="mb-6 max-w-lg font-body text-[11px] leading-relaxed tracking-[0.12em] text-gold-soft/80 sm:text-xs"
         >
-          {wedding.blessing}
+          {blessing}
         </motion.p>
 
         <motion.div
@@ -57,7 +70,7 @@ export function Hero() {
           transition={{ delay: 0.45 }}
           className="mb-3 font-body text-[10px] uppercase tracking-[0.45em] text-muted"
         >
-          The Wedding of
+          {invite ? invite.invite.title : "The Wedding of"}
         </motion.p>
 
         <motion.h1
@@ -67,15 +80,26 @@ export function Hero() {
           className="font-script text-5xl leading-[1.15] sm:text-6xl md:text-7xl lg:text-8xl"
         >
           <span className="gradient-text animate-shimmer block">
-            {wedding.couple.groom.name}
+            {primaryName}
           </span>
           <span className="my-3 block font-display text-lg tracking-[0.5em] text-gold/50 sm:text-xl">
             &
           </span>
           <span className="gradient-text animate-shimmer block">
-            {wedding.couple.bride.name}
+            {secondaryName}
           </span>
         </motion.h1>
+
+        {invite ? (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7 }}
+            className="mt-4 max-w-md font-body text-sm text-muted"
+          >
+            {invite.invite.subtitle}
+          </motion.p>
+        ) : null}
 
         <motion.p
           initial={{ opacity: 0, y: 16 }}
@@ -83,8 +107,14 @@ export function Hero() {
           transition={{ delay: 0.85, duration: 0.7 }}
           className="mt-8 font-display text-lg tracking-[0.2em] text-cream/90 sm:text-xl"
         >
-          12<sup className="text-sm">th</sup> & 13<sup className="text-sm">th</sup>{" "}
-          August 2026
+          {invite ? (
+            invite.invite.heroDates
+          ) : (
+            <>
+              12<sup className="text-sm">th</sup> & 13
+              <sup className="text-sm">th</sup> August 2026
+            </>
+          )}
         </motion.p>
 
         <motion.p
@@ -93,7 +123,7 @@ export function Hero() {
           transition={{ delay: 1 }}
           className="mt-3 font-body text-sm text-muted"
         >
-          Maple Garden · Buria Road, Jagadhri
+          {place}
         </motion.p>
 
         <motion.p
@@ -113,7 +143,7 @@ export function Hero() {
           className="mt-12 font-body text-[11px] uppercase tracking-[0.35em] text-gold/70 transition hover:text-gold"
         >
           Scroll to explore
-          <span className="mt-3 block h-8 w-px mx-auto bg-gradient-to-b from-gold/60 to-transparent animate-pulse-glow" />
+          <span className="mt-3 mx-auto block h-8 w-px bg-gradient-to-b from-gold/60 to-transparent animate-pulse-glow" />
         </motion.a>
       </div>
 

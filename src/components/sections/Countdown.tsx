@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useEffect, useRef } from "react";
 import { wedding } from "@/data/wedding";
 import { useCountdown } from "@/hooks/useCountdown";
+import { useInvite } from "@/lib/invite-context";
 import { pad } from "@/lib/utils";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -69,7 +70,9 @@ function Ring({
 }
 
 export function Countdown() {
-  const parts = useCountdown(wedding.countdownTarget);
+  const invite = useInvite();
+  const target = invite?.invite.countdownTarget || wedding.countdownTarget;
+  const parts = useCountdown(target);
   const fired = useRef(false);
 
   useEffect(() => {
@@ -96,6 +99,12 @@ export function Countdown() {
     frame();
   }, [parts.isComplete]);
 
+  const subtitle = invite
+    ? invite.tier === "mehfil"
+      ? "Until Sukhmani Sahib Path on 9th August 2026"
+      : "Until Haldi on 12th August 2026"
+    : "Until the Wedding Dinner on 12th August 2026";
+
   return (
     <section id="countdown" className="section-pad relative">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.06),transparent_60%)]" />
@@ -103,7 +112,7 @@ export function Countdown() {
         <SectionHeading
           eyebrow="Save the date"
           title="Counting Down"
-          subtitle="Until the Wedding Dinner on 12th August 2026"
+          subtitle={subtitle}
         />
 
         <GlassCard glow className="mx-auto max-w-3xl">

@@ -895,6 +895,9 @@ export async function upsertAccommodationForGuest(
       authUid: guest.uid,
       authEmail: guest.email,
       authPhone: guest.phone,
+      inviteSide: entry.inviteSide ?? existing.inviteSide,
+      inviteTier: entry.inviteTier ?? existing.inviteTier,
+      inviteSlug: entry.inviteSlug ?? existing.inviteSlug,
       // If family already decided, keep that status; otherwise stay pending
       status:
         existing.status === "confirmed" || existing.status === "declined"

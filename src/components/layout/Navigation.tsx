@@ -4,13 +4,24 @@ import { motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { wedding } from "@/data/wedding";
+import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
-const links = [
+const homeLinks = [
   { href: "#countdown", label: "Countdown" },
   { href: "#story", label: "Story" },
+  { href: "#events", label: "Events" },
+  { href: "#venue", label: "Venue" },
+  { href: "/gallery", label: "Gallery" },
+  { href: "#family", label: "Family" },
+  { href: "#rsvp", label: "RSVP" },
+  { href: "#share-photos", label: "Share" },
+];
+
+const inviteLinks = [
+  { href: "#countdown", label: "Countdown" },
   { href: "#events", label: "Events" },
   { href: "#venue", label: "Venue" },
   { href: "/gallery", label: "Gallery" },
@@ -22,12 +33,20 @@ const links = [
 export function Navigation() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const invite = useInvite();
   const onHome = pathname === "/";
+  const links = invite ? inviteLinks : homeLinks;
 
   const resolveHref = (href: string) => {
     if (href.startsWith("/")) return href;
+    if (invite) return `${invite.basePath}${href}`;
     return onHome ? href : `/${href}`;
   };
+
+  const brandHref = useMemo(() => {
+    if (invite) return `${invite.basePath}#hero`;
+    return onHome ? "#hero" : "/";
+  }, [invite, onHome]);
 
   return (
     <motion.header
@@ -38,7 +57,7 @@ export function Navigation() {
     >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
         <Link
-          href={onHome ? "#hero" : "/"}
+          href={brandHref}
           className="font-script text-2xl text-gold-soft transition hover:text-gold"
         >
           {wedding.hashtag}

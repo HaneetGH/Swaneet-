@@ -592,6 +592,11 @@ export function AccommodationManager({
                         {item.hotelName ? ` · ${item.hotelName}` : ""}
                       </span>
                     ) : null}
+                    {item.inviteTier ? (
+                      <span className="rounded-full border border-rose-300/30 bg-rose-400/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-rose-100">
+                        Bride · {item.inviteTier}
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-2 font-body text-sm text-gold-soft">
                     Asked: {item.people} people · {item.rooms} room

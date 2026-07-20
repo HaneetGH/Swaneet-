@@ -31,6 +31,9 @@ const rsvpSchema = z
     notes: z.string().max(500).optional(),
     contactFamily: z.string().optional(),
     needsAccommodation: z.boolean(),
+    inviteSide: z.enum(["bride", "groom"]).optional(),
+    inviteTier: z.enum(["mehfil", "laavan"]).optional(),
+    inviteSlug: z.string().trim().max(80).optional(),
     stay: staySchema.optional(),
   })
   .superRefine((data, ctx) => {
@@ -94,10 +97,19 @@ export async function POST(request: Request) {
         notes: parsed.data.notes?.trim() || undefined,
         contactFamily: parsed.data.contactFamily?.trim() || undefined,
         needsAccommodation: parsed.data.needsAccommodation,
+        inviteSide: parsed.data.inviteSide,
+        inviteTier: parsed.data.inviteTier,
+        inviteSlug: parsed.data.inviteSlug,
       },
     );
 
-    await recordGuestLogin(guest, "rsvp").catch(() => undefined);
+    await recordGuestLogin(
+      guest,
+      "rsvp",
+      parsed.data.inviteSlug
+        ? `invite:${parsed.data.inviteSlug}`
+        : undefined,
+    ).catch(() => undefined);
 
     let accommodation = null;
     let stayUpdated = false;
@@ -117,6 +129,9 @@ export async function POST(request: Request) {
           contactFamily: parsed.data.contactFamily?.trim() || undefined,
           rsvpId: rsvp.id,
           status: "pending",
+          inviteSide: parsed.data.inviteSide,
+          inviteTier: parsed.data.inviteTier,
+          inviteSlug: parsed.data.inviteSlug,
         },
       );
       accommodation = stayResult.accommodation;
@@ -152,6 +167,9 @@ export async function POST(request: Request) {
         accommodation?.phone ? `Phone: ${accommodation.phone}` : "",
         rsvp.notes ? `Notes: ${rsvp.notes}` : "",
         rsvp.contactFamily ? `Contact: ${rsvp.contactFamily}` : "",
+        rsvp.inviteTier
+          ? `Invite: bride / ${rsvp.inviteTier}${rsvp.inviteSlug ? ` (${rsvp.inviteSlug})` : ""}`
+          : "",
       ],
     }).catch((error) => console.error("RSVP owner notify failed", error));
 

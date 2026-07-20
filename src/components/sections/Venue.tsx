@@ -5,9 +5,14 @@ import { wedding } from "@/data/wedding";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
+import { useInvite } from "@/lib/invite-context";
 
 export function Venue() {
+  const invite = useInvite();
   const { venue } = wedding;
+  const subtitle =
+    invite?.invite.venueSubtitle ||
+    "Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri";
 
   return (
     <section id="venue" className="section-pad relative overflow-hidden">
@@ -20,8 +25,44 @@ export function Venue() {
         <SectionHeading
           eyebrow="Location"
           title="The Venue"
-          subtitle="Maple Garden (A Unit of Sukhmani Resort), Buria Road, Jagadhri"
+          subtitle={subtitle}
         />
+
+        {invite?.tier === "mehfil" ? (
+          <div className="mb-8 grid gap-4 sm:grid-cols-2">
+            <GlassCard glow>
+              <p className="font-body text-[10px] uppercase tracking-[0.3em] text-gold/70">
+                9th August
+              </p>
+              <h3 className="mt-2 font-display text-2xl text-cream">Panipat</h3>
+              <p className="mt-2 font-body text-sm text-muted">
+                Sukhmani Sahib Path · Mehndi · Jaggo · Sangeet
+              </p>
+              <a
+                href="https://www.google.com/maps/search/?api=1&query=Panipat%20Haryana"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 font-body text-xs uppercase tracking-[0.18em] text-gold-soft hover:underline"
+              >
+                Get directions <ExternalLink size={12} />
+              </a>
+            </GlassCard>
+            <GlassCard glow>
+              <p className="font-body text-[10px] uppercase tracking-[0.3em] text-gold/70">
+                12th & 13th August
+              </p>
+              <h3 className="mt-2 font-display text-2xl text-cream">
+                {venue.name}
+              </h3>
+              <p className="mt-2 font-body text-sm text-muted">
+                Haldi · Chooda · Bharaat · Anand Karaj · Doli
+              </p>
+              <p className="mt-1 font-body text-xs text-muted/80">
+                {venue.fullAddress}
+              </p>
+            </GlassCard>
+          </div>
+        ) : null}
 
         <div className="grid items-stretch gap-6 lg:grid-cols-2">
           <GlassCard glow className="flex flex-col justify-between">

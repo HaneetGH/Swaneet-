@@ -16,6 +16,7 @@ import {
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
+import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
 const schema = z
@@ -128,6 +129,7 @@ function pickMessage(attendance: FormValues["attendance"]): ThankYouMessage {
 }
 
 export function RSVP() {
+  const invite = useInvite();
   const [user, setUser] = useState<User | null>(null);
   const [success, setSuccess] = useState(false);
   const [message, setMessage] = useState<ThankYouMessage | null>(null);
@@ -261,9 +263,13 @@ export function RSVP() {
   const guests = watch("guests");
 
   const familyList = useMemo(
-    () => wedding.rsvpFamilies.map((f) => f.name).join(", "),
-    [],
+    () =>
+      (invite?.invite.rsvpFamilies || wedding.rsvpFamilies)
+        .map((f) => f.name)
+        .join(", "),
+    [invite],
   );
+  const familyOptions = invite?.invite.rsvpFamilies || wedding.rsvpFamilies;
 
   const onSubmit = async (data: FormValues) => {
     setSubmitError("");
@@ -289,6 +295,9 @@ export function RSVP() {
           notes: data.notes,
           contactFamily: data.contactFamily,
           needsAccommodation: data.needsAccommodation === "yes",
+          inviteSide: invite ? "bride" : undefined,
+          inviteTier: invite?.tier,
+          inviteSlug: invite?.slug,
           stay:
             data.needsAccommodation === "yes"
               ? {
@@ -698,7 +707,7 @@ export function RSVP() {
                     {...register("contactFamily")}
                   >
                     <option value="">Select a family</option>
-                    {wedding.rsvpFamilies.map((f) => (
+                    {familyOptions.map((f) => (
                       <option key={f.name} value={f.name}>
                         {f.name}
                       </option>

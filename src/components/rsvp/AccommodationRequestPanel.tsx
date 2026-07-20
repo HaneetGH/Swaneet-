@@ -9,6 +9,7 @@ import {
   signOutGuest,
 } from "@/components/rsvp/GuestAuthPanel";
 import { Button } from "@/components/ui/Button";
+import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
 const fieldClass =
@@ -29,6 +30,7 @@ export function AccommodationRequestPanel({
   rsvpId,
   onDone,
 }: AccommodationRequestPanelProps) {
+  const invite = useInvite();
   const [user, setUser] = useState<User | null>(null);
   const [emailVerified, setEmailVerified] = useState(false);
   const [emailFromAuth, setEmailFromAuth] = useState(false);
@@ -209,6 +211,9 @@ export function AccommodationRequestPanel({
           notes: notes || undefined,
           contactFamily: contactFamily || undefined,
           rsvpId,
+          inviteSide: invite ? "bride" : undefined,
+          inviteTier: invite?.tier,
+          inviteSlug: invite?.slug,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {

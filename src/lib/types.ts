@@ -47,6 +47,10 @@ export type RsvpEntry = {
   email?: string;
   authUid?: string;
   authEmail?: string;
+  /** Bride invite path used (mehfil / laavan); omit for main site */
+  inviteSide?: "bride" | "groom";
+  inviteTier?: "mehfil" | "laavan";
+  inviteSlug?: string;
   createdAt: string;
 };
 
@@ -92,6 +96,10 @@ export type AccommodationRequest = {
   confirmedAt?: string;
   emailSentAt?: string;
   createdAt: string;
+  /** Bride invite path used; omit for main site */
+  inviteSide?: "bride" | "groom";
+  inviteTier?: "mehfil" | "laavan";
+  inviteSlug?: string;
 };
 
 export type EmailOtpEntry = {
