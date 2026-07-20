@@ -17,6 +17,9 @@ import { wedding } from "@/data/wedding";
 
 type Params = { params: Promise<{ slug: string }> };
 
+/** Only the two known invite slugs are valid — everything else 404s. */
+export const dynamicParams = false;
+
 export async function generateStaticParams() {
   return [
     { slug: "swnt-chugh-mehfil-k7m2" },
