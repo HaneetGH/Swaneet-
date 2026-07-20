@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { EventIcon, ManagedEvent } from "@/lib/types";
 import {
@@ -10,6 +10,7 @@ import {
   formatDayLabel,
   formatDisplayDate,
   formatDisplayTime,
+  isEventDone,
   parseDisplayDate,
   parseDisplayTime,
   partsToTimeISO,
@@ -34,6 +35,7 @@ type FormState = {
   address: string;
   description: string;
   icon: EventIcon;
+  done: boolean;
 };
 
 const emptyForm: FormState = {
@@ -50,6 +52,7 @@ const emptyForm: FormState = {
   address: "Buria Road, Jagadhri",
   description: "",
   icon: "heart",
+  done: false,
 };
 
 const fieldClass =
@@ -84,6 +87,7 @@ function eventToForm(event: ManagedEvent): FormState {
     address: event.address,
     description: event.description,
     icon: event.icon,
+    done: Boolean(event.done),
   };
 }
 
@@ -139,6 +143,7 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
       address: form.address,
       description: form.description,
       icon: form.icon,
+      done: form.done,
     };
 
     try {
@@ -186,6 +191,48 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
     }
   };
 
+  const onToggleDone = async (event: ManagedEvent) => {
+    setError("");
+    const markDone = !isEventDone(event);
+
+    try {
+      const res = await fetch(`/api/events/${encodeURIComponent(event.id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: event.name,
+          date: event.date,
+          day: event.day,
+          time: event.time,
+          venue: event.venue,
+          venueDetail: event.venueDetail,
+          address: event.address,
+          description: event.description,
+          icon: event.icon,
+          done: markDone,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        event?: ManagedEvent;
+      };
+      if (!res.ok || !data.event) {
+        setError(data.error || "Could not update event status");
+        return;
+      }
+      setEvents((prev) =>
+        sortEventsByDateTime(
+          prev.map((item) => (item.id === event.id ? data.event! : item)),
+        ),
+      );
+      if (editingId === event.id) {
+        setForm((f) => ({ ...f, done: Boolean(data.event?.done) }));
+      }
+    } catch {
+      setError("Could not update event status");
+    }
+  };
+
   const onDelete = async (id: string, name: string) => {
     if (!window.confirm(`Delete “${name}”? This cannot be undone.`)) return;
 
@@ -225,17 +272,28 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
           </p>
         ) : null}
         <div className="space-y-3">
-          {events.map((event) => (
+          {events.map((event) => {
+            const done = isEventDone(event);
+            return (
             <div
               key={event.id}
               className={cn(
                 "rounded-2xl border border-gold/20 bg-[#141018] p-4",
                 editingId === event.id && "border-gold/50",
+                done && "border-emerald-400/25",
               )}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-display text-lg text-cream">{event.name}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-display text-lg text-cream">{event.name}</p>
+                    {done ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-400/10 px-2 py-0.5 font-body text-[10px] uppercase tracking-[0.18em] text-emerald-200">
+                        <Check size={11} strokeWidth={2.5} />
+                        Done
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="mt-1 font-body text-sm text-gold-soft">
                     {event.date} · {event.time}
                   </p>
@@ -245,6 +303,24 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onToggleDone(event)}
+                    className={cn(
+                      "rounded-full border p-2 hover:bg-gold/10",
+                      done
+                        ? "border-emerald-400/40 text-emerald-200"
+                        : "border-gold/25 text-gold-soft",
+                    )}
+                    aria-label={
+                      done
+                        ? `Mark ${event.name} as upcoming`
+                        : `Mark ${event.name} as done`
+                    }
+                    title={done ? "Mark as upcoming" : "Mark as done"}
+                  >
+                    <Check size={14} />
+                  </button>
                   <button
                     type="button"
                     onClick={() => onEdit(event)}
@@ -265,7 +341,8 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
           {events.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-gold/20 p-8 text-center font-body text-sm text-muted">
               No events yet. Create your first one.
@@ -496,6 +573,20 @@ export function EventsManager({ initialEvents }: EventsManagerProps) {
               <option value="star">Star</option>
               <option value="sparkles">Sparkles</option>
             </select>
+          </label>
+
+          <label className="flex cursor-pointer items-center gap-3 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={form.done}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, done: e.target.checked }))
+              }
+              className="h-4 w-4 rounded border-gold/40 bg-[#0d0b10] text-gold accent-[#d4af37]"
+            />
+            <span className="font-body text-sm text-cream">
+              Mark as done on the timeline
+            </span>
           </label>
         </div>
 

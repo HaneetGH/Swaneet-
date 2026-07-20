@@ -1,10 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Heart, Moon, Sparkles, Star, Sun } from "lucide-react";
+import { Check, Heart, Moon, Sparkles, Star, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { wedding } from "@/data/wedding";
-import { sortEventsByDateTime } from "@/lib/datetime";
+import { isEventDone, sortEventsByDateTime } from "@/lib/datetime";
 import type { EventIcon, ManagedEvent } from "@/lib/types";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils";
@@ -74,6 +74,7 @@ export function Events() {
           {events.map((event, i) => {
             const Icon = icons[event.icon] || Heart;
             const isLeft = i % 2 === 0;
+            const done = isEventDone(event);
 
             return (
               <li
@@ -95,7 +96,9 @@ export function Events() {
                     isLeft ? "col-start-1 row-start-1 text-right" : "invisible",
                   )}
                 >
-                  {isLeft ? <EventDetails event={event} align="right" /> : null}
+                  {isLeft ? (
+                    <EventDetails event={event} align="right" done={done} />
+                  ) : null}
                 </motion.div>
 
                 {/* Node */}
@@ -110,8 +113,20 @@ export function Events() {
                   }}
                   className="relative z-10 col-start-1 row-start-1 flex justify-center self-start md:col-start-2"
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-gold/45 bg-[#0d0b10] text-gold shadow-[0_0_24px_-4px_rgba(212,175,55,0.55)]">
-                    <Icon size={16} aria-hidden />
+                  <div
+                    className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-full border bg-[#0d0b10]",
+                      done
+                        ? "border-emerald-400/50 text-emerald-300 shadow-[0_0_20px_-4px_rgba(52,211,153,0.45)]"
+                        : "border-gold/45 text-gold shadow-[0_0_24px_-4px_rgba(212,175,55,0.55)]",
+                    )}
+                    aria-label={done ? `${event.name} — done` : event.name}
+                  >
+                    {done ? (
+                      <Check size={16} strokeWidth={2.5} aria-hidden />
+                    ) : (
+                      <Icon size={16} aria-hidden />
+                    )}
                   </div>
                 </motion.div>
 
@@ -131,11 +146,11 @@ export function Events() {
                   )}
                 >
                   <div className="md:hidden">
-                    <EventDetails event={event} align="left" />
+                    <EventDetails event={event} align="left" done={done} />
                   </div>
                   <div className="hidden md:block">
                     {!isLeft ? (
-                      <EventDetails event={event} align="left" />
+                      <EventDetails event={event} align="left" done={done} />
                     ) : null}
                   </div>
                 </motion.div>
@@ -151,31 +166,43 @@ export function Events() {
 function EventDetails({
   event,
   align,
+  done,
 }: {
   event: ManagedEvent;
   align: "left" | "right";
+  done: boolean;
 }) {
   return (
     <article
       className={cn(
-        "relative",
+        "relative transition-opacity",
+        done && "opacity-70",
         align === "right" ? "md:pr-2" : "md:pl-2",
       )}
     >
-      {event.day ? (
-        <p
-          className={cn(
-            "font-body text-[10px] uppercase tracking-[0.3em] text-gold/70",
-            align === "right" && "md:text-right",
-          )}
-        >
-          {event.day}
-        </p>
-      ) : null}
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2",
+          align === "right" && "md:justify-end",
+        )}
+      >
+        {event.day ? (
+          <p className="font-body text-[10px] uppercase tracking-[0.3em] text-gold/70">
+            {event.day}
+          </p>
+        ) : null}
+        {done ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-400/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.22em] text-emerald-200">
+            <Check size={11} strokeWidth={2.5} aria-hidden />
+            Done
+          </span>
+        ) : null}
+      </div>
 
       <h3
         className={cn(
-          "mt-2 font-display text-2xl tracking-wide text-cream sm:text-3xl",
+          "mt-2 font-display text-2xl tracking-wide sm:text-3xl",
+          done ? "text-cream/75 line-through decoration-gold/30" : "text-cream",
           align === "right" && "md:text-right",
         )}
       >

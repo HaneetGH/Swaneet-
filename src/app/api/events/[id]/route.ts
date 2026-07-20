@@ -15,6 +15,7 @@ const eventSchema = z.object({
   address: z.string().optional().default(""),
   description: z.string().optional().default(""),
   icon: z.enum(["moon", "heart", "sun", "star", "sparkles"]).default("heart"),
+  done: z.boolean().optional().default(false),
 });
 
 type Params = { params: Promise<{ id: string }> };

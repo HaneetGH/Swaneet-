@@ -96,11 +96,19 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
   }));
 
   // Never replace a saved store's events with invitation defaults
-  const events = Array.isArray(raw.events)
-    ? raw.events
-    : hasPersistedShape
-      ? []
-      : defaults.events;
+  const events = sortEventsByDateTime(
+    (Array.isArray(raw.events)
+      ? raw.events
+      : hasPersistedShape
+        ? []
+        : defaults.events
+    ).map((event) => ({
+      ...event,
+      // Keep unset so past dates can auto-show as done; only persist explicit booleans
+      done:
+        typeof event.done === "boolean" ? event.done : undefined,
+    })),
+  );
 
   const accommodations = (raw.accommodations ?? []).map((item) => ({
     ...item,
@@ -131,7 +139,7 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     .slice(0, MAX_EMAIL_LOGS);
 
   return {
-    events: sortEventsByDateTime(events),
+    events,
     gallery,
     rsvps: raw.rsvps ?? [],
     accommodations,

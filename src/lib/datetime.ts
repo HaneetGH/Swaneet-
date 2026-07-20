@@ -156,3 +156,26 @@ export function sortEventsByDateTime<T extends { date: string; time: string }>(
     (a, b) => eventSortKey(a.date, a.time) - eventSortKey(b.date, b.time),
   );
 }
+
+/** True when the event's date+time has passed (India / IST). */
+export function isEventInPast(event: { date: string; time: string }): boolean {
+  const dateISO = parseDisplayDate(event.date);
+  const { time: timeISO } = parseDisplayTime(event.time);
+  if (!dateISO) return false;
+
+  const time = timeISO || "23:59";
+  const eventMs = Date.parse(`${dateISO}T${time}:00+05:30`);
+  if (Number.isNaN(eventMs)) return false;
+  return eventMs < Date.now();
+}
+
+/** Done if explicitly marked, otherwise when the scheduled time has passed. */
+export function isEventDone(event: {
+  date: string;
+  time: string;
+  done?: boolean;
+}): boolean {
+  if (event.done === true) return true;
+  if (event.done === false) return false;
+  return isEventInPast(event);
+}

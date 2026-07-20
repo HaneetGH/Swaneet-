@@ -11,6 +11,8 @@ export type ManagedEvent = {
   address: string;
   description: string;
   icon: EventIcon;
+  /** Marked complete on the public timeline */
+  done?: boolean;
 };
 
 export type GalleryStatus = "approved" | "pending" | "rejected";
