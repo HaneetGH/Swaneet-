@@ -3,11 +3,20 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import { Download, Images, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  GuestAuthPanel,
+  getGuestIdToken,
+} from "@/components/rsvp/GuestAuthPanel";
 import { wedding } from "@/data/wedding";
 import { sortEventsByDateTime } from "@/lib/datetime";
+import {
+  getFirebaseAuth,
+  isFirebaseClientConfigured,
+} from "@/lib/firebase/client";
 import type { GalleryImage, ManagedEvent } from "@/lib/types";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils";
@@ -168,35 +177,99 @@ function MediaTile({
   );
 }
 
-function useGalleryData() {
-  const [gallery, setGallery] = useState<GalleryImage[]>([]);
-  const [events, setEvents] = useState<ManagedEvent[]>(fallbackEvents);
+function useGuestUser() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
+    if (!isFirebaseClientConfigured()) {
+      setAuthReady(true);
+      return;
+    }
+    return onAuthStateChanged(getFirebaseAuth(), (next) => {
+      setUser(next);
+      setAuthReady(true);
+    });
+  }, []);
+
+  const onAuthed = useCallback((next: User) => {
+    setUser(next);
+  }, []);
+
+  return { user, authReady, onAuthed };
+}
+
+function useGalleryData(user: User | null) {
+  const [gallery, setGallery] = useState<GalleryImage[]>([]);
+  const [events, setEvents] = useState<ManagedEvent[]>(fallbackEvents);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setGallery([]);
+      setLoading(false);
+      return;
+    }
+
     let alive = true;
-    Promise.all([
-      fetch("/api/gallery").then((res) => res.json()),
-      fetch("/api/events").then((res) => res.json()),
-    ])
-      .then(([galleryData, eventsData]) => {
+    setLoading(true);
+
+    (async () => {
+      try {
+        const token = await getGuestIdToken();
+        if (!token || !alive) return;
+
+        const [galleryRes, eventsRes] = await Promise.all([
+          fetch("/api/gallery", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch("/api/events"),
+        ]);
+        const galleryData = await galleryRes.json().catch(() => ({}));
+        const eventsData = await eventsRes.json().catch(() => ({}));
         if (!alive) return;
-        setGallery(galleryData.gallery ?? []);
+        setGallery(
+          galleryRes.ok ? ((galleryData.gallery as GalleryImage[]) ?? []) : [],
+        );
         if (eventsData.events?.length) {
           setEvents(sortEventsByDateTime(eventsData.events));
         }
-      })
-      .catch(() => undefined);
+      } catch {
+        if (alive) setGallery([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+
     return () => {
       alive = false;
     };
-  }, []);
+  }, [user]);
 
-  return { gallery, events };
+  return { gallery, events, loading };
+}
+
+function GalleryLoginGate({
+  onAuthed,
+}: {
+  onAuthed: (user: User) => void;
+}) {
+  return (
+    <div className="mx-auto max-w-md">
+      <GuestAuthPanel
+        onAuthed={onAuthed}
+        title="View the gallery"
+        subtitle="Sign in with Google to see wedding photos. Only guests who sign in can open the gallery."
+        ctaLabel="Continue with Google"
+      />
+    </div>
+  );
 }
 
 /** Compact homepage preview: up to 3 photos per event + View more */
 export function Gallery() {
-  const { gallery, events } = useGalleryData();
+  const { user, authReady, onAuthed } = useGuestUser();
+  const { gallery, events, loading } = useGalleryData(user);
 
   const groups = useMemo(() => {
     const result: {
@@ -234,13 +307,23 @@ export function Gallery() {
           eyebrow="Moments"
           title="Gallery"
           subtitle={
-            gallery.length
-              ? "A glimpse from each celebration — open the full gallery for more"
-              : "Photos coming soon — check back later"
+            !user
+              ? "Sign in with Google to view wedding photos"
+              : gallery.length
+                ? "A glimpse from each celebration — open the full gallery for more"
+                : "Photos coming soon — check back later"
           }
         />
 
-        {gallery.length === 0 ? (
+        {!authReady ? (
+          <p className="text-center font-body text-sm text-muted">Loading…</p>
+        ) : !user ? (
+          <GalleryLoginGate onAuthed={onAuthed} />
+        ) : loading ? (
+          <p className="text-center font-body text-sm text-muted">
+            Loading photos…
+          </p>
+        ) : gallery.length === 0 ? (
           <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">
             <Images className="mb-4 text-gold/50" size={32} />
             <p className="font-display text-xl text-cream">No photos yet</p>
@@ -314,7 +397,8 @@ export function Gallery() {
 export function GalleryFull() {
   const searchParams = useSearchParams();
   const eventFromUrl = searchParams.get("event") || "all";
-  const { gallery, events } = useGalleryData();
+  const { user, authReady, onAuthed } = useGuestUser();
+  const { gallery, events, loading } = useGalleryData(user);
   const [filterEventId, setFilterEventId] = useState(eventFromUrl);
   const [active, setActive] = useState<GalleryImage | null>(null);
 
@@ -375,9 +459,11 @@ export function GalleryFull() {
           eyebrow="Moments"
           title="Full gallery"
           subtitle={
-            gallery.length
-              ? "Every photo from the celebrations"
-              : "Photos coming soon — check back later"
+            !user
+              ? "Sign in with Google to view wedding photos"
+              : gallery.length
+                ? "Every photo from the celebrations"
+                : "Photos coming soon — check back later"
           }
         />
 
@@ -390,7 +476,17 @@ export function GalleryFull() {
           </Link>
         </div>
 
-        {gallery.length === 0 ? (
+        {!authReady ? (
+          <p className="text-center font-body text-sm text-muted">
+            Loading…
+          </p>
+        ) : !user ? (
+          <GalleryLoginGate onAuthed={onAuthed} />
+        ) : loading ? (
+          <p className="text-center font-body text-sm text-muted">
+            Loading photos…
+          </p>
+        ) : gallery.length === 0 ? (
           <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">
             <Images className="mb-4 text-gold/50" size={32} />
             <p className="font-display text-xl text-cream">No photos yet</p>

@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission, sessionHasPermission, getAdminSession } from "@/lib/auth";
+import { verifyBearerToken } from "@/lib/firebase/admin";
 import { listGallery, readStore, writeStore } from "@/lib/store";
 import type { GalleryImage } from "@/lib/types";
 import { saveUploadedImage } from "@/lib/uploads";
@@ -48,6 +49,16 @@ export async function GET(request: Request) {
   const eventId = searchParams.get("eventId");
   const wantsAll = searchParams.get("all") === "1";
   const session = await getAdminSession();
+  const guest = await verifyBearerToken(request);
+
+  // Gallery is private — guests need Google login; team uses dashboard session
+  if (!session && !guest) {
+    return NextResponse.json(
+      { error: "Please sign in with Google to view the gallery" },
+      { status: 401 },
+    );
+  }
+
   const includePending =
     wantsAll &&
     (sessionHasPermission(session, "gallery_review") ||
