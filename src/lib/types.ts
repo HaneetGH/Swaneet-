@@ -119,7 +119,32 @@ export type AdminMember = {
   createdAt: string;
 };
 
-/** Guests who signed in (stay / photo share) */
+/** Guests who signed in (stay / photo share / gallery / RSVP) */
+export type GuestActivityAction =
+  | "login"
+  | "stay"
+  | "photos"
+  | "rsvp"
+  | "gallery_view"
+  | "gallery_download";
+
+export type GuestActivityEntry = {
+  action: GuestActivityAction;
+  at: string;
+  detail?: string;
+};
+
+export type GuestLoginStats = {
+  galleryViews: number;
+  galleryDownloads: number;
+  lastGalleryViewAt?: string;
+  lastGalleryDownloadAt?: string;
+  lastLoginAt?: string;
+  lastRsvpAt?: string;
+  lastStayAt?: string;
+  lastPhotoUploadAt?: string;
+};
+
 export type GuestLogin = {
   uid: string;
   email?: string;
@@ -127,7 +152,30 @@ export type GuestLogin = {
   phone?: string;
   firstSeenAt: string;
   lastSeenAt: string;
-  sources: Array<"stay" | "photos" | "rsvp">;
+  sources: GuestActivityAction[];
+  stats?: GuestLoginStats;
+  /** Newest first, capped */
+  activity?: GuestActivityEntry[];
+};
+
+/** Dashboard view: login record + linked RSVP / stay / uploads */
+export type GuestProfile = GuestLogin & {
+  rsvp?: {
+    id: string;
+    name: string;
+    guests: number;
+    attendance: RsvpEntry["attendance"];
+    createdAt: string;
+  } | null;
+  stay?: {
+    id: string;
+    name: string;
+    status: AccommodationStatus;
+    people: number;
+    rooms: number;
+    createdAt: string;
+  } | null;
+  photoUploads: number;
 };
 
 export type EmailKind =

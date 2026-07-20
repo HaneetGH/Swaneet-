@@ -12,6 +12,7 @@ import {
   getFirebaseAuth,
   isFirebaseClientConfigured,
 } from "@/lib/firebase/client";
+import { trackGuestActivity } from "@/lib/guest-activity";
 import { Button } from "@/components/ui/Button";
 
 type GuestAuthPanelProps = {
@@ -46,6 +47,7 @@ export function GuestAuthPanel({
       const auth = getFirebaseAuth();
       const result = await signInWithPopup(auth, new GoogleAuthProvider());
       onAuthed(result.user);
+      void trackGuestActivity("login");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not sign in with Google";

@@ -29,7 +29,9 @@ import type {
   EmailKind,
   EmailLogEntry,
   GalleryImage,
+  GuestActivityAction,
   GuestLogin,
+  GuestProfile,
   ManagedEvent,
   RoomInventory,
   RsvpEntry,
@@ -38,8 +40,8 @@ import type {
 import { sortEventsByDateTime } from "@/lib/datetime";
 import { wedding } from "@/data/wedding";
 import { hashPin } from "@/lib/pin";
-import { memberUsername, normalizePermissions } from "@/lib/roles";
 import type { VerifiedGuest } from "@/lib/firebase/admin";
+import { memberUsername, normalizePermissions } from "@/lib/roles";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "content.json");
@@ -206,6 +208,21 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
   const guestLogins = (raw.guestLogins ?? []).map((login) => ({
     ...login,
     sources: Array.isArray(login.sources) ? login.sources : [],
+    stats: login.stats
+      ? {
+          galleryViews: Number(login.stats.galleryViews) || 0,
+          galleryDownloads: Number(login.stats.galleryDownloads) || 0,
+          lastGalleryViewAt: login.stats.lastGalleryViewAt,
+          lastGalleryDownloadAt: login.stats.lastGalleryDownloadAt,
+          lastLoginAt: login.stats.lastLoginAt,
+          lastRsvpAt: login.stats.lastRsvpAt,
+          lastStayAt: login.stats.lastStayAt,
+          lastPhotoUploadAt: login.stats.lastPhotoUploadAt,
+        }
+      : undefined,
+    activity: Array.isArray(login.activity)
+      ? login.activity.slice(0, 40)
+      : undefined,
   }));
 
   const emailLogs = (raw.emailLogs ?? [])
@@ -1018,6 +1035,16 @@ export async function deleteAdmin(id: string): Promise<boolean> {
   return true;
 }
 
+const MAX_GUEST_ACTIVITY = 40;
+const GALLERY_VIEW_DEBOUNCE_MS = 30 * 60 * 1000;
+
+function emptyGuestStats() {
+  return {
+    galleryViews: 0,
+    galleryDownloads: 0,
+  };
+}
+
 export async function listGuestLogins(): Promise<GuestLogin[]> {
   const store = await readStore();
   return [...(store.guestLogins || [])].sort(
@@ -1026,38 +1053,153 @@ export async function listGuestLogins(): Promise<GuestLogin[]> {
   );
 }
 
+/** Guests with linked RSVP, stay request, and photo upload counts. */
+export async function listGuestProfiles(): Promise<GuestProfile[]> {
+  const [guests, rsvps, stays, store] = await Promise.all([
+    listGuestLogins(),
+    listRsvps(),
+    listAccommodations(),
+    readStore(),
+  ]);
+
+  const emailKey = (value?: string) => value?.trim().toLowerCase() || "";
+
+  return guests.map((guest) => {
+    const rsvp =
+      rsvps.find(
+        (item) =>
+          item.authUid === guest.uid ||
+          (guest.email &&
+            emailKey(item.authEmail || item.email) === emailKey(guest.email)),
+      ) || null;
+    const stay =
+      stays.find(
+        (item) =>
+          item.authUid === guest.uid ||
+          (guest.email &&
+            emailKey(item.authEmail || item.email) === emailKey(guest.email)),
+      ) || null;
+    const photoUploads = store.gallery.filter(
+      (image) =>
+        image.source === "guest" &&
+        (image.uploadedByUid === guest.uid ||
+          (guest.email &&
+            emailKey(image.uploadedByEmail) === emailKey(guest.email))),
+    ).length;
+
+    return {
+      ...guest,
+      rsvp: rsvp
+        ? {
+            id: rsvp.id,
+            name: rsvp.name,
+            guests: rsvp.guests,
+            attendance: rsvp.attendance,
+            createdAt: rsvp.createdAt,
+          }
+        : null,
+      stay: stay
+        ? {
+            id: stay.id,
+            name: stay.name,
+            status: stay.status,
+            people: stay.people,
+            rooms: stay.rooms,
+            createdAt: stay.createdAt,
+          }
+        : null,
+      photoUploads,
+    };
+  });
+}
+
 export async function recordGuestLogin(
   guest: VerifiedGuest,
-  source: "stay" | "photos" | "rsvp",
+  source: GuestActivityAction,
+  detail?: string,
 ): Promise<void> {
   const store = await readStore();
   const now = new Date().toISOString();
   const list = [...(store.guestLogins || [])];
   const index = list.findIndex((item) => item.uid === guest.uid);
-  if (index >= 0) {
-    const current = list[index];
-    const sources = current.sources.includes(source)
-      ? current.sources
-      : [...current.sources, source];
-    list[index] = {
-      ...current,
-      email: guest.email || current.email,
-      name: guest.name || current.name,
-      phone: guest.phone || current.phone,
-      lastSeenAt: now,
-      sources,
-    };
-  } else {
-    list.push({
-      uid: guest.uid,
-      email: guest.email,
-      name: guest.name,
-      phone: guest.phone,
-      firstSeenAt: now,
-      lastSeenAt: now,
-      sources: [source],
-    });
+  const current: GuestLogin =
+    index >= 0
+      ? list[index]!
+      : {
+          uid: guest.uid,
+          email: guest.email,
+          name: guest.name,
+          phone: guest.phone,
+          firstSeenAt: now,
+          lastSeenAt: now,
+          sources: [],
+          stats: emptyGuestStats(),
+          activity: [],
+        };
+
+  const stats = { ...emptyGuestStats(), ...current.stats };
+
+  // Debounce gallery views so refreshes don't inflate counts
+  if (source === "gallery_view" && stats.lastGalleryViewAt) {
+    const elapsed =
+      Date.now() - new Date(stats.lastGalleryViewAt).getTime();
+    if (elapsed < GALLERY_VIEW_DEBOUNCE_MS) {
+      const updated: GuestLogin = {
+        ...current,
+        email: guest.email || current.email,
+        name: guest.name || current.name,
+        phone: guest.phone || current.phone,
+        lastSeenAt: now,
+        stats,
+      };
+      if (index >= 0) list[index] = updated;
+      else list.push(updated);
+      store.guestLogins = list;
+      await writeStore(store);
+      return;
+    }
   }
+
+  if (source === "gallery_view") {
+    stats.galleryViews += 1;
+    stats.lastGalleryViewAt = now;
+  } else if (source === "gallery_download") {
+    stats.galleryDownloads += 1;
+    stats.lastGalleryDownloadAt = now;
+  } else if (source === "login") {
+    stats.lastLoginAt = now;
+  } else if (source === "rsvp") {
+    stats.lastRsvpAt = now;
+  } else if (source === "stay") {
+    stats.lastStayAt = now;
+  } else if (source === "photos") {
+    stats.lastPhotoUploadAt = now;
+  }
+
+  const sources = current.sources.includes(source)
+    ? current.sources
+    : [...current.sources, source];
+
+  const activity: GuestLogin["activity"] = [
+    { action: source, at: now, detail: detail || undefined },
+    ...(current.activity || []),
+  ].slice(0, MAX_GUEST_ACTIVITY);
+
+  const next: GuestLogin = {
+    ...current,
+    email: guest.email || current.email,
+    name: guest.name || current.name,
+    phone: guest.phone || current.phone,
+    lastSeenAt: now,
+    firstSeenAt: current.firstSeenAt || now,
+    sources,
+    stats,
+    activity,
+  };
+
+  if (index >= 0) list[index] = next;
+  else list.push(next);
+
   store.guestLogins = list;
   await writeStore(store);
 }

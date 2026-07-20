@@ -13,6 +13,7 @@ import {
 } from "@/components/rsvp/GuestAuthPanel";
 import { wedding } from "@/data/wedding";
 import { sortEventsByDateTime } from "@/lib/datetime";
+import { trackGuestActivity } from "@/lib/guest-activity";
 import {
   getFirebaseAuth,
   isFirebaseClientConfigured,
@@ -53,6 +54,7 @@ function filenameForMedia(photo: GalleryImage) {
 
 async function downloadMedia(photo: GalleryImage) {
   const filename = filenameForMedia(photo);
+  void trackGuestActivity("gallery_download", photo.id);
   try {
     const response = await fetch(photo.src);
     if (!response.ok) throw new Error("fetch failed");
@@ -231,6 +233,9 @@ function useGalleryData(user: User | null) {
         setGallery(
           galleryRes.ok ? ((galleryData.gallery as GalleryImage[]) ?? []) : [],
         );
+        if (galleryRes.ok) {
+          void trackGuestActivity("gallery_view");
+        }
         if (eventsData.events?.length) {
           setEvents(sortEventsByDateTime(eventsData.events));
         }
