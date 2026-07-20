@@ -11,6 +11,7 @@ import {
   formatDisplayDate,
   formatDisplayTime,
   isEventDone,
+  isEventInPast,
   parseDisplayDate,
   parseDisplayTime,
   partsToTimeISO,
