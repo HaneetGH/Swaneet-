@@ -1090,6 +1090,32 @@ export async function listGuestProfiles(): Promise<GuestProfile[]> {
             emailKey(image.uploadedByEmail) === emailKey(guest.email))),
     ).length;
 
+    const inviteFromActivity = (guest.activity || [])
+      .map((item) => item.detail)
+      .find((detail) => detail?.startsWith("invite:"));
+    const slugFromActivity = inviteFromActivity
+      ?.replace(/^invite:/, "")
+      .split("|")[0];
+    const inviteTier =
+      rsvp?.inviteTier ||
+      stay?.inviteTier ||
+      guest.inviteTier ||
+      (slugFromActivity?.includes("mehfil")
+        ? ("mehfil" as const)
+        : slugFromActivity?.includes("laavan")
+          ? ("laavan" as const)
+          : undefined);
+    const inviteSlug =
+      rsvp?.inviteSlug ||
+      stay?.inviteSlug ||
+      guest.inviteSlug ||
+      slugFromActivity;
+    const inviteSide =
+      rsvp?.inviteSide ||
+      stay?.inviteSide ||
+      guest.inviteSide ||
+      (inviteTier ? ("bride" as const) : undefined);
+
     return {
       ...guest,
       rsvp: rsvp
@@ -1099,6 +1125,9 @@ export async function listGuestProfiles(): Promise<GuestProfile[]> {
             guests: rsvp.guests,
             attendance: rsvp.attendance,
             createdAt: rsvp.createdAt,
+            inviteSide: rsvp.inviteSide,
+            inviteTier: rsvp.inviteTier,
+            inviteSlug: rsvp.inviteSlug,
           }
         : null,
       stay: stay
@@ -1109,9 +1138,15 @@ export async function listGuestProfiles(): Promise<GuestProfile[]> {
             people: stay.people,
             rooms: stay.rooms,
             createdAt: stay.createdAt,
+            inviteSide: stay.inviteSide,
+            inviteTier: stay.inviteTier,
+            inviteSlug: stay.inviteSlug,
           }
         : null,
       photoUploads,
+      inviteSide,
+      inviteTier,
+      inviteSlug,
     };
   });
 }
@@ -1188,6 +1223,17 @@ export async function recordGuestLogin(
     ...(current.activity || []),
   ].slice(0, MAX_GUEST_ACTIVITY);
 
+  let inviteSlug = current.inviteSlug;
+  let inviteTier = current.inviteTier;
+  let inviteSide = current.inviteSide;
+  if (detail?.startsWith("invite:")) {
+    const raw = detail.slice("invite:".length);
+    inviteSlug = raw.split("|")[0] || inviteSlug;
+    inviteSide = "bride";
+    if (inviteSlug?.includes("mehfil")) inviteTier = "mehfil";
+    else if (inviteSlug?.includes("laavan")) inviteTier = "laavan";
+  }
+
   const next: GuestLogin = {
     ...current,
     email: guest.email || current.email,
@@ -1198,6 +1244,9 @@ export async function recordGuestLogin(
     sources,
     stats,
     activity,
+    inviteSlug,
+    inviteTier,
+    inviteSide,
   };
 
   if (index >= 0) list[index] = next;

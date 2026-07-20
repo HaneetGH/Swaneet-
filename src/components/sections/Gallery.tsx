@@ -14,6 +14,7 @@ import {
 import { wedding } from "@/data/wedding";
 import { sortEventsByDateTime } from "@/lib/datetime";
 import { trackGuestActivity } from "@/lib/guest-activity";
+import { useInvite } from "@/lib/invite-context";
 import {
   getFirebaseAuth,
   isFirebaseClientConfigured,
@@ -52,9 +53,12 @@ function filenameForMedia(photo: GalleryImage) {
   }`;
 }
 
-async function downloadMedia(photo: GalleryImage) {
+async function downloadMedia(photo: GalleryImage, inviteSlug?: string) {
   const filename = filenameForMedia(photo);
-  void trackGuestActivity("gallery_download", photo.id);
+  void trackGuestActivity(
+    "gallery_download",
+    inviteSlug ? `invite:${inviteSlug}|${photo.id}` : photo.id,
+  );
   try {
     const response = await fetch(photo.src);
     if (!response.ok) throw new Error("fetch failed");
@@ -79,6 +83,7 @@ function DownloadButton({
   photo: GalleryImage;
   className?: string;
 }) {
+  const invite = useInvite();
   const [busy, setBusy] = useState(false);
 
   return (
@@ -89,7 +94,7 @@ function DownloadButton({
         e.preventDefault();
         e.stopPropagation();
         setBusy(true);
-        void downloadMedia(photo).finally(() => setBusy(false));
+        void downloadMedia(photo, invite?.slug).finally(() => setBusy(false));
       }}
       className={cn(
         "inline-flex items-center justify-center rounded-full bg-black/55 text-cream backdrop-blur-sm transition hover:bg-black/75 disabled:opacity-60",
@@ -202,6 +207,7 @@ function useGuestUser() {
 }
 
 function useGalleryData(user: User | null) {
+  const invite = useInvite();
   const [gallery, setGallery] = useState<GalleryImage[]>([]);
   const [events, setEvents] = useState<ManagedEvent[]>(fallbackEvents);
   const [loading, setLoading] = useState(false);
@@ -234,7 +240,10 @@ function useGalleryData(user: User | null) {
           galleryRes.ok ? ((galleryData.gallery as GalleryImage[]) ?? []) : [],
         );
         if (galleryRes.ok) {
-          void trackGuestActivity("gallery_view");
+          void trackGuestActivity(
+            "gallery_view",
+            invite?.slug ? `invite:${invite.slug}` : undefined,
+          );
         }
         if (eventsData.events?.length) {
           setEvents(sortEventsByDateTime(eventsData.events));
@@ -249,7 +258,7 @@ function useGalleryData(user: User | null) {
     return () => {
       alive = false;
     };
-  }, [user]);
+  }, [user, invite?.slug]);
 
   return { gallery, events, loading };
 }

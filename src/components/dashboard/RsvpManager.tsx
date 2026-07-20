@@ -3,6 +3,12 @@
 import { Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { RsvpEntry } from "@/lib/types";
+import {
+  inviteSourceBadge,
+  inviteSourceDetail,
+  sourceBadgeClass,
+  sourceFromRsvp,
+} from "@/lib/invite-source";
 import { cn } from "@/lib/utils";
 
 type RsvpManagerProps = {
@@ -21,29 +27,40 @@ const attendanceStyle = {
   no: "border-rose-400/30 bg-rose-400/10 text-rose-200",
 } as const;
 
+type SourceFilter = "all" | "main" | "mehfil" | "laavan";
+
 export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
   const [rsvps, setRsvps] = useState(initialRsvps);
   const [filter, setFilter] = useState<"all" | "yes" | "maybe" | "no">("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
 
-  const filtered = useMemo(
-    () =>
-      filter === "all"
-        ? rsvps
-        : rsvps.filter((item) => item.attendance === filter),
-    [rsvps, filter],
-  );
+  const filtered = useMemo(() => {
+    return rsvps.filter((item) => {
+      if (filter !== "all" && item.attendance !== filter) return false;
+      if (sourceFilter === "main" && item.inviteTier) return false;
+      if (sourceFilter === "mehfil" && item.inviteTier !== "mehfil") return false;
+      if (sourceFilter === "laavan" && item.inviteTier !== "laavan") return false;
+      return true;
+    });
+  }, [rsvps, filter, sourceFilter]);
 
   const stats = useMemo(() => {
     const attending = rsvps.filter((r) => r.attendance === "yes");
     const maybe = rsvps.filter((r) => r.attendance === "maybe");
     const declined = rsvps.filter((r) => r.attendance === "no");
     const guestCount = attending.reduce((sum, r) => sum + r.guests, 0);
+    const mehfil = rsvps.filter((r) => r.inviteTier === "mehfil").length;
+    const laavan = rsvps.filter((r) => r.inviteTier === "laavan").length;
+    const main = rsvps.filter((r) => !r.inviteTier).length;
     return {
       total: rsvps.length,
       attending: attending.length,
       maybe: maybe.length,
       declined: declined.length,
       guestCount,
+      mehfil,
+      laavan,
+      main,
     };
   }, [rsvps]);
 
@@ -62,7 +79,7 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
             <h2 className="font-display text-2xl text-cream">RSVP list</h2>
           </div>
           <p className="mt-1 font-body text-sm text-muted">
-            Guests who replied through the invitation form
+            Guests who replied — badge shows which invite link they used
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -91,6 +108,31 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap gap-2">
+        {(
+          [
+            ["all", `Every source`],
+            ["main", `Main site (${stats.main})`],
+            ["mehfil", `Mehfil (${stats.mehfil})`],
+            ["laavan", `Laavan (${stats.laavan})`],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setSourceFilter(id)}
+            className={cn(
+              "rounded-full border px-3 py-1.5 font-body text-[11px] uppercase tracking-[0.16em] transition",
+              sourceFilter === id
+                ? "border-gold/50 bg-gold/15 text-gold-soft"
+                : "border-gold/20 text-muted hover:text-cream",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-gold/20 bg-[#141018] p-4">
           <p className="font-body text-[10px] uppercase tracking-[0.25em] text-muted">
@@ -113,62 +155,71 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
       </div>
 
       <div className="space-y-3">
-        {filtered.map((rsvp) => (
-          <div
-            key={rsvp.id}
-            className="rounded-2xl border border-gold/20 bg-[#141018] p-4"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-display text-xl text-cream">{rsvp.name}</p>
-                  <span
-                    className={cn(
-                      "rounded-full border px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em]",
-                      attendanceStyle[rsvp.attendance],
-                    )}
-                  >
-                    {attendanceLabel[rsvp.attendance]}
-                  </span>
-                  {rsvp.inviteTier ? (
-                    <span className="rounded-full border border-rose-300/30 bg-rose-400/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-rose-100">
-                      Bride · {rsvp.inviteTier}
+        {filtered.map((rsvp) => {
+          const source = sourceFromRsvp(rsvp);
+          return (
+            <div
+              key={rsvp.id}
+              className="rounded-2xl border border-gold/20 bg-[#141018] p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-display text-xl text-cream">{rsvp.name}</p>
+                    <span
+                      className={cn(
+                        "rounded-full border px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em]",
+                        attendanceStyle[rsvp.attendance],
+                      )}
+                    >
+                      {attendanceLabel[rsvp.attendance]}
                     </span>
-                  ) : null}
-                </div>
-                <p className="mt-2 font-body text-sm text-gold-soft">
-                  {rsvp.guests} guest{rsvp.guests === 1 ? "" : "s"}
-                  {rsvp.meal && rsvp.meal !== "no-preference"
-                    ? ` · ${rsvp.meal.replace("-", " ")}`
-                    : ""}
-                  {rsvp.email ? ` · ${rsvp.email}` : ""}
-                  {rsvp.contactFamily ? ` · via ${rsvp.contactFamily}` : ""}
-                  {rsvp.needsAccommodation ? " · needs stay" : ""}
-                </p>
-                {rsvp.notes ? (
-                  <p className="mt-2 font-body text-sm leading-relaxed text-muted">
-                    “{rsvp.notes}”
+                    <span
+                      className={cn(
+                        "rounded-full border px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em]",
+                        sourceBadgeClass(source),
+                      )}
+                    >
+                      {inviteSourceBadge(source)}
+                    </span>
+                  </div>
+                  <p className="mt-2 font-body text-sm text-gold-soft">
+                    {rsvp.guests} guest{rsvp.guests === 1 ? "" : "s"}
+                    {rsvp.meal && rsvp.meal !== "no-preference"
+                      ? ` · ${rsvp.meal.replace("-", " ")}`
+                      : ""}
+                    {rsvp.email ? ` · ${rsvp.email}` : ""}
+                    {rsvp.contactFamily ? ` · via ${rsvp.contactFamily}` : ""}
+                    {rsvp.needsAccommodation ? " · needs stay" : ""}
                   </p>
-                ) : null}
-                <p className="mt-2 font-body text-[11px] text-muted/70">
-                  {new Date(rsvp.createdAt).toLocaleString()}
-                </p>
+                  <p className="mt-1 font-body text-xs text-muted">
+                    {inviteSourceDetail(source)}
+                  </p>
+                  {rsvp.notes ? (
+                    <p className="mt-2 font-body text-sm leading-relaxed text-muted">
+                      “{rsvp.notes}”
+                    </p>
+                  ) : null}
+                  <p className="mt-2 font-body text-[11px] text-muted/70">
+                    {new Date(rsvp.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onDelete(rsvp.id)}
+                  className="rounded-full border border-red-400/30 p-2 text-red-300 hover:bg-red-400/10"
+                  aria-label={`Delete RSVP from ${rsvp.name}`}
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => onDelete(rsvp.id)}
-                className="rounded-full border border-red-400/30 p-2 text-red-300 hover:bg-red-400/10"
-                aria-label={`Delete RSVP from ${rsvp.name}`}
-              >
-                <Trash2 size={14} />
-              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {filtered.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-gold/20 p-10 text-center font-body text-sm text-muted">
-            No RSVPs yet. Responses from the website will appear here.
+            No RSVPs match this filter.
           </p>
         ) : null}
       </div>

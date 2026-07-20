@@ -10,6 +10,11 @@ import {
   UserRound,
 } from "lucide-react";
 import type { GuestActivityAction, GuestProfile } from "@/lib/types";
+import {
+  inviteSourceBadge,
+  inviteSourceDetail,
+  sourceBadgeClass,
+} from "@/lib/invite-source";
 import { cn } from "@/lib/utils";
 
 const ACTION_LABEL: Record<GuestActivityAction, string> = {
@@ -84,8 +89,8 @@ export function GuestLoginsManager() {
         <h2 className="font-display text-2xl text-cream">Logged-in guests</h2>
       </div>
       <p className="mb-6 font-body text-sm text-muted">
-        Who signed in with Google — gallery views, downloads, RSVP, stay, and
-        photo uploads.
+        Who signed in with Google — and which invite link they came from (main
+        site, mehfil, or laavan).
       </p>
 
       {error ? (
@@ -109,6 +114,11 @@ export function GuestLoginsManager() {
             const didStay = Boolean(guest.stay) || guest.sources.includes("stay");
             const didPhotos =
               guest.photoUploads > 0 || guest.sources.includes("photos");
+            const source = {
+              side: guest.inviteSide,
+              tier: guest.inviteTier,
+              slug: guest.inviteSlug,
+            };
 
             return (
               <div
@@ -121,11 +131,24 @@ export function GuestLoginsManager() {
                   className="flex w-full items-start justify-between gap-4 px-4 py-4 text-left"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="font-display text-lg text-cream">
-                      {guest.name || "Guest"}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-display text-lg text-cream">
+                        {guest.name || "Guest"}
+                      </p>
+                      <span
+                        className={cn(
+                          "rounded-full border px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em]",
+                          sourceBadgeClass(source),
+                        )}
+                      >
+                        {inviteSourceBadge(source)}
+                      </span>
+                    </div>
                     <p className="mt-0.5 truncate font-body text-sm text-muted">
                       {guest.email || "No email"}
+                    </p>
+                    <p className="mt-1 font-body text-xs text-muted">
+                      {inviteSourceDetail(source)}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Flag ok={viewedGallery} label="Gallery" />

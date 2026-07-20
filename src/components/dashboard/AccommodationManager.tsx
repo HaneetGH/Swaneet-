@@ -596,12 +596,23 @@ export function AccommodationManager({
                       <span className="rounded-full border border-rose-300/30 bg-rose-400/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-rose-100">
                         Bride · {item.inviteTier}
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="rounded-full border border-gold/25 bg-gold/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-gold-soft">
+                        Main site
+                      </span>
+                    )}
                   </div>
                   <p className="mt-2 font-body text-sm text-gold-soft">
                     Asked: {item.people} people · {item.rooms} room
                     {item.rooms === 1 ? "" : "s"} · {formatDate(item.checkIn)} →{" "}
                     {formatDate(item.checkOut)}
+                  </p>
+                  <p className="mt-1 font-body text-xs text-muted">
+                    {item.inviteTier === "mehfil"
+                      ? "Came from: Bride all-functions invite (mehfil)"
+                      : item.inviteTier === "laavan"
+                        ? "Came from: Bride wedding-only invite (laavan)"
+                        : "Came from: Main wedding site (/)"}
                   </p>
                   <p className="mt-1 font-body text-sm text-muted">
                     {item.phone}

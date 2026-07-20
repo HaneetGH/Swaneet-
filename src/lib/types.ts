@@ -164,6 +164,10 @@ export type GuestLogin = {
   stats?: GuestLoginStats;
   /** Newest first, capped */
   activity?: GuestActivityEntry[];
+  /** Last known invite path (from RSVP/stay/activity) */
+  inviteSide?: "bride" | "groom";
+  inviteTier?: "mehfil" | "laavan";
+  inviteSlug?: string;
 };
 
 /** Dashboard view: login record + linked RSVP / stay / uploads */
@@ -174,6 +178,9 @@ export type GuestProfile = GuestLogin & {
     guests: number;
     attendance: RsvpEntry["attendance"];
     createdAt: string;
+    inviteSide?: "bride" | "groom";
+    inviteTier?: "mehfil" | "laavan";
+    inviteSlug?: string;
   } | null;
   stay?: {
     id: string;
@@ -182,8 +189,15 @@ export type GuestProfile = GuestLogin & {
     people: number;
     rooms: number;
     createdAt: string;
+    inviteSide?: "bride" | "groom";
+    inviteTier?: "mehfil" | "laavan";
+    inviteSlug?: string;
   } | null;
   photoUploads: number;
+  /** Best-known invite path for this guest */
+  inviteSide?: "bride" | "groom";
+  inviteTier?: "mehfil" | "laavan";
+  inviteSlug?: string;
 };
 
 export type EmailKind =

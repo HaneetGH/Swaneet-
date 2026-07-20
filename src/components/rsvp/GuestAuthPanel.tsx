@@ -13,6 +13,7 @@ import {
   isFirebaseClientConfigured,
 } from "@/lib/firebase/client";
 import { trackGuestActivity } from "@/lib/guest-activity";
+import { useInvite } from "@/lib/invite-context";
 import { Button } from "@/components/ui/Button";
 
 type GuestAuthPanelProps = {
@@ -28,6 +29,7 @@ export function GuestAuthPanel({
   subtitle = "Sign in with Google to share stay details. We’ll use your email for confirmation.",
   ctaLabel = "Continue with Google",
 }: GuestAuthPanelProps) {
+  const invite = useInvite();
   const [configured] = useState(() => isFirebaseClientConfigured());
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,7 +49,10 @@ export function GuestAuthPanel({
       const auth = getFirebaseAuth();
       const result = await signInWithPopup(auth, new GoogleAuthProvider());
       onAuthed(result.user);
-      void trackGuestActivity("login");
+      void trackGuestActivity(
+        "login",
+        invite?.slug ? `invite:${invite.slug}` : undefined,
+      );
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not sign in with Google";
