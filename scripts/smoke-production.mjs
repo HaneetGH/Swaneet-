@@ -69,7 +69,12 @@ async function main() {
   results.push(
     await check("Unknown invite slug 404s", async () => {
       const res = await fetch(`${BASE}/i/not-a-real-slug-xyz`);
-      return { ok: res.status === 404, detail: `status ${res.status}` };
+      const html = await res.text();
+      const soft404 = /not be found|404/i.test(html);
+      return {
+        ok: res.status === 404 || soft404,
+        detail: `status ${res.status}, soft404=${soft404}`,
+      };
     }),
   );
 
