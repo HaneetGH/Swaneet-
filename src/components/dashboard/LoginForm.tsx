@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 
 export function LoginForm() {
   const router = useRouter();
+  const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,10 +19,17 @@ export function LoginForm() {
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify({
+          username: username.trim() || undefined,
+          pin,
+        }),
       });
       if (!res.ok) {
-        setError("Incorrect PIN");
+        setError(
+          username.trim()
+            ? "Incorrect username or PIN"
+            : "Incorrect master PIN",
+        );
         return;
       }
       router.refresh();
@@ -42,10 +50,30 @@ export function LoginForm() {
       </p>
       <h1 className="mt-3 font-display text-3xl text-cream">Dashboard</h1>
       <p className="mt-2 font-body text-sm text-muted">
-        Enter the master PIN or your team PIN. Access depends on your role.
+        Team: enter your first name + PIN. Master: leave username blank and use
+        the master PIN.
       </p>
 
-      <label htmlFor="pin" className="mt-8 block font-body text-xs uppercase tracking-[0.2em] text-muted">
+      <label
+        htmlFor="username"
+        className="mt-8 block font-body text-xs uppercase tracking-[0.2em] text-muted"
+      >
+        Username (first name)
+      </label>
+      <input
+        id="username"
+        type="text"
+        autoComplete="username"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        className="mt-2 w-full rounded-xl border border-gold/25 bg-[#0d0b10] px-4 py-3 font-body text-cream outline-none focus:border-gold/60"
+        placeholder="Leave blank for master"
+      />
+
+      <label
+        htmlFor="pin"
+        className="mt-5 block font-body text-xs uppercase tracking-[0.2em] text-muted"
+      >
         PIN
       </label>
       <input

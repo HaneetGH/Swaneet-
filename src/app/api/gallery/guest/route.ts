@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyBearerToken } from "@/lib/firebase/admin";
+import { notifyOwner } from "@/lib/email";
 import { resolveGuestEvent } from "@/lib/guest-event";
 import { readStore, recordGuestLogin, writeStore } from "@/lib/store";
 import type { GalleryImage } from "@/lib/types";
@@ -95,6 +96,21 @@ export async function POST(request: Request) {
     store.gallery = [...images, ...store.gallery];
     await writeStore(store);
     await recordGuestLogin(guest, "photos").catch(() => undefined);
+
+    const eventName =
+      store.events.find((event) => event.id === eventId)?.name || eventId;
+
+    void notifyOwner({
+      title: "New guest photos",
+      summary: `${guest.name || guest.email || "A guest"} shared ${images.length} photo(s) for review.`,
+      details: [
+        guest.name ? `Name: ${guest.name}` : "",
+        guest.email ? `Email: ${guest.email}` : "",
+        `Event: ${eventName}`,
+        `Photos: ${images.length}`,
+        createdEvent ? `New event created: ${createdEvent.name}` : "",
+      ],
+    }).catch((error) => console.error("Photo owner notify failed", error));
 
     return NextResponse.json(
       { images, pending: true, eventId, createdEvent },

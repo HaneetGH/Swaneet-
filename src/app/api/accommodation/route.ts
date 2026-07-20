@@ -11,6 +11,7 @@ import {
   listAccommodations,
   recordGuestLogin,
 } from "@/lib/store";
+import { notifyOwner } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,20 @@ export async function POST(request: Request) {
     if (guest) {
       await recordGuestLogin(guest, "stay").catch(() => undefined);
     }
+
+    void notifyOwner({
+      title: "New stay request",
+      summary: `${requestEntry.name} requested accommodation.`,
+      details: [
+        `Name: ${requestEntry.name}`,
+        `Phone: ${requestEntry.phone}`,
+        `Email: ${requestEntry.email}`,
+        `People: ${requestEntry.people} · Rooms: ${requestEntry.rooms}`,
+        `Check-in: ${requestEntry.checkIn}`,
+        `Check-out: ${requestEntry.checkOut}`,
+        requestEntry.notes ? `Notes: ${requestEntry.notes}` : "",
+      ],
+    }).catch((error) => console.error("Stay owner notify failed", error));
 
     return NextResponse.json({ accommodation: requestEntry }, { status: 201 });
   } catch (error) {

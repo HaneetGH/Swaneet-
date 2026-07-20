@@ -71,9 +71,9 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error("POST /api/admins failed", error);
-    return NextResponse.json(
-      { error: "Could not create team member" },
-      { status: 500 },
-    );
+    const message =
+      error instanceof Error ? error.message : "Could not create team member";
+    const status = /already used/i.test(message) ? 400 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -11,6 +11,7 @@ const KIND_LABELS: Record<EmailKind, string> = {
   team_invite: "Team invite",
   team_update: "Team update",
   photo_reject: "Photo rejection",
+  owner_alert: "Owner alert",
 };
 
 export function EmailLogManager() {

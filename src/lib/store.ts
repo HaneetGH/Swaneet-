@@ -24,7 +24,7 @@ import type {
 import { sortEventsByDateTime } from "@/lib/datetime";
 import { wedding } from "@/data/wedding";
 import { hashPin } from "@/lib/pin";
-import { normalizePermissions } from "@/lib/roles";
+import { memberUsername, normalizePermissions } from "@/lib/roles";
 import type { VerifiedGuest } from "@/lib/firebase/admin";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -377,6 +377,20 @@ export async function createAdmin(input: {
   permissions: AdminPermission[];
 }): Promise<Omit<AdminMember, "pinHash">> {
   const store = await readStore();
+  const username = memberUsername(input.name);
+  if (!username) {
+    throw new Error("Name is required");
+  }
+  const taken = (store.admins || []).some(
+    (admin) =>
+      admin.active && memberUsername(admin.name) === username,
+  );
+  if (taken) {
+    throw new Error(
+      `Username "${username}" is already used by another team member. Use a different first name.`,
+    );
+  }
+
   const member: AdminMember = {
     id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name: input.name.trim(),
@@ -409,9 +423,26 @@ export async function updateAdmin(
   if (index < 0) return null;
 
   const current = store.admins![index];
+  const nextName = patch.name?.trim() || current.name;
+  const username = memberUsername(nextName);
+  if (!username) {
+    throw new Error("Name is required");
+  }
+  const taken = (store.admins || []).some(
+    (admin) =>
+      admin.id !== id &&
+      admin.active &&
+      memberUsername(admin.name) === username,
+  );
+  if (taken) {
+    throw new Error(
+      `Username "${username}" is already used by another team member. Use a different first name.`,
+    );
+  }
+
   const next: AdminMember = {
     ...current,
-    name: patch.name?.trim() || current.name,
+    name: nextName,
     email:
       patch.email !== undefined
         ? patch.email.trim() || undefined

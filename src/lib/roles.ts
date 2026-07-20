@@ -1,5 +1,10 @@
 import type { AdminPermission } from "@/lib/types";
 
+/** First name → login username (case-insensitive) */
+export function memberUsername(name: string) {
+  return name.trim().split(/\s+/)[0]?.toLowerCase() || "";
+}
+
 export const ALL_PERMISSIONS: AdminPermission[] = [
   "rsvp",
   "stay",

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
+import { notifyOwner } from "@/lib/email";
 import { addRsvp, listRsvps } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,20 @@ export async function POST(request: Request) {
       contactFamily: parsed.data.contactFamily?.trim() || undefined,
       needsAccommodation: parsed.data.needsAccommodation ?? false,
     });
+
+    void notifyOwner({
+      title: "New RSVP",
+      summary: `${rsvp.name} submitted an RSVP.`,
+      details: [
+        `Name: ${rsvp.name}`,
+        `Guests: ${rsvp.guests}`,
+        `Attendance: ${rsvp.attendance}`,
+        rsvp.meal ? `Meal: ${rsvp.meal}` : "",
+        rsvp.needsAccommodation ? "Needs accommodation: yes" : "",
+        rsvp.notes ? `Notes: ${rsvp.notes}` : "",
+        rsvp.contactFamily ? `Contact: ${rsvp.contactFamily}` : "",
+      ],
+    }).catch((error) => console.error("RSVP owner notify failed", error));
 
     return NextResponse.json({ rsvp }, { status: 201 });
   } catch (error) {

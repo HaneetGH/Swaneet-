@@ -73,10 +73,10 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json({ admin, emailSent, emailError });
   } catch (error) {
     console.error("PATCH /api/admins/[id] failed", error);
-    return NextResponse.json(
-      { error: "Could not update member" },
-      { status: 500 },
-    );
+    const message =
+      error instanceof Error ? error.message : "Could not update member";
+    const status = /already used/i.test(message) ? 400 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 

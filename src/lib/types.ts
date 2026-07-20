@@ -116,7 +116,8 @@ export type EmailKind =
   | "stay"
   | "team_invite"
   | "team_update"
-  | "photo_reject";
+  | "photo_reject"
+  | "owner_alert";
 
 export type EmailLogEntry = {
   id: string;

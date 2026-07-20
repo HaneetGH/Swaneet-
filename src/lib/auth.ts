@@ -1,7 +1,11 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { getDefaultAdminPin, verifyPin } from "@/lib/pin";
-import { ALL_PERMISSIONS, normalizePermissions } from "@/lib/roles";
+import {
+  ALL_PERMISSIONS,
+  memberUsername,
+  normalizePermissions,
+} from "@/lib/roles";
 import type { AdminMember, AdminPermission } from "@/lib/types";
 import type { VerifiedGuest } from "@/lib/firebase/admin";
 
@@ -78,20 +82,30 @@ export async function verifyMasterPin(pin: string) {
   return pin === getDefaultAdminPin();
 }
 
-/** @deprecated prefer verifyMasterPin / loginWithPin */
+/** @deprecated prefer verifyMasterPin / loginWithCredentials */
 export async function verifyAdminPin(pin: string) {
   return verifyMasterPin(pin);
 }
 
-export async function loginWithPin(
+/**
+ * Master: PIN only (username empty or "master").
+ * Team: firstname username + PIN must both match an active member.
+ */
+export async function loginWithCredentials(
   pin: string,
+  username?: string,
 ): Promise<AdminSession | null> {
-  if (await verifyMasterPin(pin)) {
-    return {
-      kind: "master",
-      name: "Master",
-      permissions: [...ALL_PERMISSIONS],
-    };
+  const user = (username || "").trim().toLowerCase();
+
+  if (!user || user === "master") {
+    if (await verifyMasterPin(pin)) {
+      return {
+        kind: "master",
+        name: "Master",
+        permissions: [...ALL_PERMISSIONS],
+      };
+    }
+    return null;
   }
 
   const { readStore } = await import("@/lib/store");
@@ -99,6 +113,7 @@ export async function loginWithPin(
   const members = store.admins || [];
   for (const member of members) {
     if (!member.active) continue;
+    if (memberUsername(member.name) !== user) continue;
     if (verifyPin(pin, member.pinHash)) {
       return {
         kind: "member",
@@ -109,6 +124,13 @@ export async function loginWithPin(
     }
   }
   return null;
+}
+
+/** @deprecated use loginWithCredentials */
+export async function loginWithPin(
+  pin: string,
+): Promise<AdminSession | null> {
+  return loginWithCredentials(pin);
 }
 
 export async function getAdminSession(): Promise<AdminSession | null> {

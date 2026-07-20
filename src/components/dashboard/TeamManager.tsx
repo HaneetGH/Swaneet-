@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Pencil, Shield, Trash2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { PERMISSION_LABELS } from "@/lib/roles";
+import { PERMISSION_LABELS, memberUsername } from "@/lib/roles";
 import type { AdminMember, AdminPermission } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -232,13 +232,13 @@ export function TeamManager() {
         </div>
         <p className="mb-5 font-body text-sm text-muted">
           {isEditing
-            ? "Update name, email, permissions, or set a new PIN. Leave PIN blank to keep the current one — they’ll get an update email either way."
-            : "Email is required — they’ll get the dashboard link, PIN, and access list from Swaneet Wedding <noreply@mail.technorapper.com>."}
+            ? "Update name, email, permissions, or set a new PIN. First name is their login username. Leave PIN blank to keep the current one — they’ll get an update email either way."
+            : "Email is required — they’ll get the dashboard link, first-name username, PIN, and access list from noreply@mail.technorapper.com."}
         </p>
 
         <label className="mb-3 block">
           <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-            Name
+            Full name (first name = username)
           </span>
           <input
             className={fieldClass}
@@ -335,6 +335,9 @@ export function TeamManager() {
                   <div>
                     <p className="font-display text-xl text-cream">
                       {admin.name}
+                    </p>
+                    <p className="font-body text-[11px] uppercase tracking-[0.16em] text-muted">
+                      Login: {memberUsername(admin.name) || "—"}
                     </p>
                     {admin.email ? (
                       <p className="font-body text-xs text-muted">

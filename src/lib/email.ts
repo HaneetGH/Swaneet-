@@ -265,6 +265,7 @@ export async function sendTeamInviteEmail(input: {
   const accessList = input.permissions
     .map((p) => PERMISSION_LABELS[p] || p)
     .join(", ");
+  const username = input.name.trim().split(/\s+/)[0] || input.name;
 
   const text = [
     `Dear ${input.name},`,
@@ -272,10 +273,11 @@ export async function sendTeamInviteEmail(input: {
     "You’ve been added to the #Swaneet wedding dashboard team.",
     "",
     `Dashboard: ${dashboardUrl}`,
+    `Username (first name): ${username}`,
     `Your PIN: ${input.pin}`,
     `Access: ${accessList}`,
     "",
-    "Please keep this PIN private. You can sign in at the dashboard link above.",
+    "Sign in with your first name + PIN. Please keep this PIN private.",
     "",
     "With love,",
     "#Swaneet · Haneet & Swarandeep",
@@ -288,9 +290,10 @@ export async function sendTeamInviteEmail(input: {
       <p>Dear ${escapeHtml(input.name)},</p>
       <p>You’ve been added to the wedding dashboard team.</p>
       <p><strong>Dashboard:</strong> <a href="${escapeHtml(dashboardUrl)}">${escapeHtml(dashboardUrl)}</a></p>
+      <p><strong>Username (first name):</strong> ${escapeHtml(username)}</p>
       <p><strong>Your PIN:</strong> ${escapeHtml(input.pin)}</p>
       <p><strong>Access:</strong> ${escapeHtml(accessList)}</p>
-      <p>Please keep this PIN private.</p>
+      <p>Sign in with your first name + PIN. Please keep this PIN private.</p>
       <p>With love,<br/>Haneet &amp; Swarandeep</p>
     </div>
   `;
@@ -328,6 +331,7 @@ export async function sendTeamUpdateEmail(input: {
     statusLine,
     "",
     `Dashboard: ${dashboardUrl}`,
+    `Username (first name): ${input.name.trim().split(/\s+/)[0] || input.name}`,
     `Access: ${accessList}`,
     `Status: ${input.active ? "Active" : "Paused"}`,
   ];
@@ -345,6 +349,8 @@ export async function sendTeamUpdateEmail(input: {
       ? `<p>Your existing PIN is unchanged.</p>`
       : "";
 
+  const username = input.name.trim().split(/\s+/)[0] || input.name;
+
   const html = `
     <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
       <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
@@ -352,6 +358,7 @@ export async function sendTeamUpdateEmail(input: {
       <p>Dear ${escapeHtml(input.name)},</p>
       <p>${escapeHtml(statusLine)}</p>
       <p><strong>Dashboard:</strong> <a href="${escapeHtml(dashboardUrl)}">${escapeHtml(dashboardUrl)}</a></p>
+      <p><strong>Username (first name):</strong> ${escapeHtml(username)}</p>
       <p><strong>Access:</strong> ${escapeHtml(accessList)}</p>
       <p><strong>Status:</strong> ${input.active ? "Active" : "Paused"}</p>
       ${pinHtml}
@@ -365,6 +372,46 @@ export async function sendTeamUpdateEmail(input: {
     subject: input.active
       ? "Your #Swaneet dashboard access was updated"
       : "Your #Swaneet dashboard access was paused",
+    text,
+    html,
+  });
+}
+
+/** Where guest activity alerts are sent (RSVP, stay, photos) */
+export const OWNER_NOTIFY_EMAIL =
+  process.env.OWNER_NOTIFY_EMAIL?.trim() || "haneet555@gmail.com";
+
+/** Alert family inbox when guests RSVP / request stay / share photos */
+export async function notifyOwner(input: {
+  title: string;
+  summary: string;
+  details: string[];
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const lines = input.details.filter(Boolean);
+  const text = [
+    input.summary,
+    "",
+    ...lines,
+    "",
+    "Open the dashboard: https://swaneet.vercel.app/dashboard",
+    "",
+    "#Swaneet",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
+      <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
+      <h1 style="font-weight: 400; font-size: 26px;">${escapeHtml(input.title)}</h1>
+      <p>${escapeHtml(input.summary)}</p>
+      <pre style="white-space: pre-wrap; font-family: Georgia, serif; background: #f7f1e6; padding: 16px; border-radius: 12px;">${escapeHtml(lines.join("\n"))}</pre>
+      <p><a href="https://swaneet.vercel.app/dashboard">Open dashboard</a></p>
+    </div>
+  `;
+
+  return sendResendEmail({
+    kind: "owner_alert",
+    to: OWNER_NOTIFY_EMAIL,
+    subject: `[#Swaneet] ${input.title}`,
     text,
     html,
   });

@@ -2,18 +2,21 @@ import { NextResponse } from "next/server";
 import {
   ADMIN_COOKIE,
   encodeAdminCookie,
-  loginWithPin,
+  loginWithCredentials,
 } from "@/lib/auth";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { pin?: string };
+  const body = (await request.json()) as { pin?: string; username?: string };
   if (!body.pin) {
     return NextResponse.json({ error: "PIN is required" }, { status: 400 });
   }
 
-  const session = await loginWithPin(body.pin);
+  const session = await loginWithCredentials(body.pin, body.username);
   if (!session) {
-    return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Invalid username or PIN" },
+      { status: 401 },
+    );
   }
 
   const response = NextResponse.json({
