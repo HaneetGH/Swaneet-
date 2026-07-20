@@ -52,6 +52,16 @@ export type RsvpEntry = {
 
 export type AccommodationStatus = "pending" | "confirmed" | "declined";
 
+/** A hotel / stay option the family can assign rooms from */
+export type StayHotel = {
+  id: string;
+  name: string;
+  address?: string;
+  totalRooms: number;
+  notes?: string;
+  createdAt: string;
+};
+
 export type AccommodationRequest = {
   id: string;
   name: string;
@@ -70,7 +80,9 @@ export type AccommodationRequest = {
   authEmail?: string;
   authPhone?: string;
   status: AccommodationStatus;
-  /** Rooms taken from the family pool when confirmed */
+  /** Which hotel inventory this assignment draws from */
+  hotelId?: string;
+  /** Rooms taken from the selected hotel when confirmed */
   roomsAssigned?: number;
   /** What the family can provide */
   hotelName?: string;
@@ -141,7 +153,9 @@ export type ContentStore = {
   gallery: GalleryImage[];
   rsvps: RsvpEntry[];
   accommodations: AccommodationRequest[];
-  /** Total rooms the family can assign for wedding stay */
+  /** Hotels / stays the family can assign rooms from */
+  hotels?: StayHotel[];
+  /** @deprecated Prefer hotels[].totalRooms — kept for older data */
   totalRooms?: number;
   /** Pending email verification codes (hashed) */
   emailOtps?: Record<string, EmailOtpEntry>;
@@ -155,8 +169,19 @@ export type ContentStore = {
   adminPinHash?: string;
 };
 
+export type HotelInventory = {
+  id: string;
+  name: string;
+  address?: string;
+  totalRooms: number;
+  assigned: number;
+  available: number;
+  notes?: string;
+};
+
 export type RoomInventory = {
   total: number;
   assigned: number;
   available: number;
+  hotels: HotelInventory[];
 };

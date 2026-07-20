@@ -10,6 +10,7 @@ import {
   addAccommodation,
   getRoomInventory,
   listAccommodations,
+  listHotels,
   recordGuestLogin,
   setTotalRooms,
   upsertAccommodationForGuest,
@@ -32,30 +33,34 @@ const schema = z.object({
 });
 
 const inventorySchema = z.object({
-  totalRooms: z.coerce.number().int().min(0).max(500),
+  totalRooms: z.coerce.number().int().min(0).max(500).optional(),
 });
 
 export async function GET() {
   if (!(await requirePermission("stay"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const [accommodations, inventory] = await Promise.all([
+  const [accommodations, inventory, hotels] = await Promise.all([
     listAccommodations(),
     getRoomInventory(),
+    listHotels(),
   ]);
-  return NextResponse.json({ accommodations, inventory });
+  return NextResponse.json({ accommodations, inventory, hotels });
 }
 
-/** Master / stay team: set how many rooms the family has in total. */
+/** Legacy: set a single total when only one hotel exists. Prefer /api/accommodation/hotels. */
 export async function PUT(request: Request) {
   try {
     if (!(await requirePermission("stay"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const parsed = inventorySchema.safeParse(await request.json());
-    if (!parsed.success) {
+    if (!parsed.success || typeof parsed.data.totalRooms !== "number") {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || "Invalid room total" },
+        {
+          error:
+            "Add hotels under Stay → Hotels (name + rooms). A single total only works when one hotel exists.",
+        },
         { status: 400 },
       );
     }

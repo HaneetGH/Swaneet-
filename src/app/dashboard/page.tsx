@@ -48,7 +48,12 @@ export default async function DashboardPage() {
           : Promise.resolve([]),
         sessionHasPermission(session, "stay")
           ? getRoomInventory()
-          : Promise.resolve({ total: 0, assigned: 0, available: 0 }),
+          : Promise.resolve({
+              total: 0,
+              assigned: 0,
+              available: 0,
+              hotels: [],
+            }),
       ]);
 
     return (

@@ -33,6 +33,7 @@ import type {
   ManagedEvent,
   RoomInventory,
   RsvpEntry,
+  StayHotel,
 } from "@/lib/types";
 import { sortEventsByDateTime } from "@/lib/datetime";
 import { wedding } from "@/data/wedding";
@@ -63,6 +64,7 @@ export function defaultStore(): ContentStore {
     gallery: [],
     rsvps: [],
     accommodations: [],
+    hotels: [],
     totalRooms: 0,
     emailOtps: {},
     admins: [],
@@ -144,9 +146,40 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     ...item,
     email: item.email || item.authEmail || "",
     status: item.status || ("pending" as const),
+    hotelId: item.hotelId || undefined,
     roomsAssigned:
       typeof item.roomsAssigned === "number" ? item.roomsAssigned : undefined,
   }));
+
+  let hotels: StayHotel[] = (raw.hotels ?? [])
+    .filter((hotel) => hotel && typeof hotel.id === "string" && hotel.name)
+    .map((hotel) => ({
+      id: hotel.id,
+      name: String(hotel.name).trim(),
+      address: hotel.address?.trim() || undefined,
+      totalRooms: Math.max(0, Math.floor(Number(hotel.totalRooms) || 0)),
+      notes: hotel.notes?.trim() || undefined,
+      createdAt: hotel.createdAt || new Date().toISOString(),
+    }));
+
+  const legacyTotal =
+    typeof raw.totalRooms === "number" && raw.totalRooms >= 0
+      ? Math.floor(raw.totalRooms)
+      : 0;
+
+  // Migrate old single pool into one hotel so existing totals are not lost
+  if (!hotels.length && legacyTotal > 0) {
+    hotels = [
+      {
+        id: "hotel-legacy-pool",
+        name: "Family rooms",
+        totalRooms: legacyTotal,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+  }
+
+  const totalRooms = hotels.reduce((sum, hotel) => sum + hotel.totalRooms, 0);
 
   const admins = (raw.admins ?? []).map((admin) => ({
     ...admin,
@@ -170,16 +203,12 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     )
     .slice(0, MAX_EMAIL_LOGS);
 
-  const totalRooms =
-    typeof raw.totalRooms === "number" && raw.totalRooms >= 0
-      ? Math.floor(raw.totalRooms)
-      : 0;
-
   return {
     events,
     gallery,
     rsvps: raw.rsvps ?? [],
     accommodations,
+    hotels,
     totalRooms,
     emailOtps: raw.emailOtps ?? {},
     admins,
@@ -502,21 +531,43 @@ export async function listAccommodations(): Promise<AccommodationRequest[]> {
 
 export function computeRoomInventory(
   accommodations: AccommodationRequest[],
-  totalRooms: number,
+  hotels: StayHotel[],
 ): RoomInventory {
-  const assigned = accommodations.reduce((sum, item) => {
-    if (item.status !== "confirmed") return sum;
-    // Only count rooms that were manually assigned — never guest request size
-    if (typeof item.roomsAssigned !== "number" || item.roomsAssigned <= 0) {
+  const hotelRows = hotels.map((hotel) => {
+    const assigned = accommodations.reduce((sum, item) => {
+      if (item.status !== "confirmed") return sum;
+      if (typeof item.roomsAssigned !== "number" || item.roomsAssigned <= 0) {
+        return sum;
+      }
+      if (item.hotelId) {
+        return item.hotelId === hotel.id ? sum + item.roomsAssigned : sum;
+      }
+      // Legacy assignments without hotelId count against the only hotel
+      if (hotels.length === 1 && hotels[0].id === hotel.id) {
+        return sum + item.roomsAssigned;
+      }
       return sum;
-    }
-    return sum + item.roomsAssigned;
-  }, 0);
-  const total = Math.max(0, Math.floor(totalRooms || 0));
+    }, 0);
+
+    return {
+      id: hotel.id,
+      name: hotel.name,
+      address: hotel.address,
+      totalRooms: hotel.totalRooms,
+      assigned,
+      available: Math.max(0, hotel.totalRooms - assigned),
+      notes: hotel.notes,
+    };
+  });
+
+  const total = hotelRows.reduce((sum, row) => sum + row.totalRooms, 0);
+  const assigned = hotelRows.reduce((sum, row) => sum + row.assigned, 0);
+
   return {
     total,
     assigned,
     available: Math.max(0, total - assigned),
+    hotels: hotelRows,
   };
 }
 
@@ -525,17 +576,116 @@ export async function getRoomInventory(): Promise<RoomInventory> {
   const accommodations = hasDatabase()
     ? await listAccommodationsFromDb()
     : store.accommodations;
-  return computeRoomInventory(accommodations, store.totalRooms || 0);
+  return computeRoomInventory(accommodations, store.hotels || []);
 }
 
+export async function listHotels(): Promise<StayHotel[]> {
+  const store = await readStore();
+  return [...(store.hotels || [])];
+}
+
+export async function upsertHotel(input: {
+  id?: string;
+  name: string;
+  address?: string;
+  totalRooms: number;
+  notes?: string;
+}): Promise<StayHotel> {
+  const store = await readStore();
+  const hotels = [...(store.hotels || [])];
+  const name = input.name.trim();
+  if (!name) throw new Error("Hotel name is required");
+  const totalRooms = Math.max(0, Math.floor(input.totalRooms));
+
+  if (input.id) {
+    const index = hotels.findIndex((hotel) => hotel.id === input.id);
+    if (index === -1) throw new Error("Hotel not found");
+    hotels[index] = {
+      ...hotels[index],
+      name,
+      address: input.address?.trim() || undefined,
+      totalRooms,
+      notes: input.notes?.trim() || undefined,
+    };
+    store.hotels = hotels;
+    store.totalRooms = hotels.reduce((sum, hotel) => sum + hotel.totalRooms, 0);
+    await writeStore(store);
+    return hotels[index];
+  }
+
+  const hotel: StayHotel = {
+    id: `hotel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    address: input.address?.trim() || undefined,
+    totalRooms,
+    notes: input.notes?.trim() || undefined,
+    createdAt: new Date().toISOString(),
+  };
+  store.hotels = [hotel, ...hotels];
+  store.totalRooms = store.hotels.reduce(
+    (sum, item) => sum + item.totalRooms,
+    0,
+  );
+  await writeStore(store);
+  return hotel;
+}
+
+export async function deleteHotel(id: string): Promise<boolean> {
+  const store = await readStore();
+  const hotels = store.hotels || [];
+  const next = hotels.filter((hotel) => hotel.id !== id);
+  if (next.length === hotels.length) return false;
+
+  const accommodations = hasDatabase()
+    ? await listAccommodationsFromDb()
+    : store.accommodations;
+  const stillAssigned = accommodations.some(
+    (item) =>
+      item.status === "confirmed" &&
+      item.hotelId === id &&
+      typeof item.roomsAssigned === "number" &&
+      item.roomsAssigned > 0,
+  );
+  if (stillAssigned) {
+    throw new Error(
+      "Cannot delete this hotel while rooms are still assigned to guests. Reassign or clear those stays first.",
+    );
+  }
+
+  store.hotels = next;
+  store.totalRooms = next.reduce((sum, hotel) => sum + hotel.totalRooms, 0);
+  await writeStore(store);
+  return true;
+}
+
+/** @deprecated Use upsertHotel — kept for older clients setting a single pool */
 export async function setTotalRooms(totalRooms: number): Promise<RoomInventory> {
   const store = await readStore();
-  store.totalRooms = Math.max(0, Math.floor(totalRooms));
+  const hotels = [...(store.hotels || [])];
+  const total = Math.max(0, Math.floor(totalRooms));
+  if (!hotels.length) {
+    if (total > 0) {
+      hotels.push({
+        id: "hotel-legacy-pool",
+        name: "Family rooms",
+        totalRooms: total,
+        createdAt: new Date().toISOString(),
+      });
+    }
+  } else if (hotels.length === 1) {
+    hotels[0] = { ...hotels[0], totalRooms: total };
+  } else {
+    throw new Error(
+      "You have multiple hotels — edit each hotel’s room count instead of a single total.",
+    );
+  }
+  store.hotels = hotels;
+  store.totalRooms = hotels.reduce((sum, hotel) => sum + hotel.totalRooms, 0);
   await writeStore(store);
   const accommodations = hasDatabase()
     ? await listAccommodationsFromDb()
     : store.accommodations;
-  return computeRoomInventory(accommodations, store.totalRooms);
+  return computeRoomInventory(accommodations, store.hotels);
 }
 
 export async function addAccommodation(
@@ -574,31 +724,64 @@ export async function updateAccommodation(
     typeof existing.roomsAssigned === "number"
       ? existing.roomsAssigned
       : undefined;
+  let hotelId = existing.hotelId;
 
-  // Confirm alone does not auto-assign. Only assign when roomsAssigned is a number.
+  // Confirm alone does not auto-assign. Assign only when roomsAssigned is set.
   if (typeof patch.roomsAssigned === "number") {
     if (nextStatus === "confirmed" && patch.roomsAssigned > 0) {
+      const nextHotelId =
+        typeof patch.hotelId === "string" && patch.hotelId
+          ? patch.hotelId
+          : existing.hotelId;
+      if (!nextHotelId) {
+        throw new Error("Select a hotel before assigning rooms.");
+      }
+
       const inventory = await getRoomInventory();
+      const hotelRow = inventory.hotels.find((hotel) => hotel.id === nextHotelId);
+      if (!hotelRow) {
+        throw new Error("Selected hotel was not found. Add the hotel first.");
+      }
+
       const currentlyHolding =
         existing.status === "confirmed" &&
+        existing.hotelId === nextHotelId &&
         typeof existing.roomsAssigned === "number"
           ? existing.roomsAssigned
           : 0;
-      const availableForThis = inventory.available + currentlyHolding;
+      const availableForThis = hotelRow.available + currentlyHolding;
 
       if (patch.roomsAssigned > availableForThis) {
         throw new Error(
-          `Not enough rooms left. Available: ${availableForThis}, needed: ${patch.roomsAssigned}. Increase total rooms or free another assignment.`,
+          `Not enough rooms at ${hotelRow.name}. Available: ${availableForThis}, needed: ${patch.roomsAssigned}.`,
         );
       }
+
       roomsAssigned = patch.roomsAssigned;
+      hotelId = nextHotelId;
+
+      // Prefill hotel name/address from inventory when not provided
+      const store = await readStore();
+      const hotel = (store.hotels || []).find((item) => item.id === nextHotelId);
+      if (hotel) {
+        if (!patch.hotelName && !existing.hotelName) {
+          patch.hotelName = hotel.name;
+        }
+        if (!patch.hotelAddress && !existing.hotelAddress && hotel.address) {
+          patch.hotelAddress = hotel.address;
+        }
+      }
     } else {
       roomsAssigned = undefined;
+      hotelId = undefined;
     }
+  } else if (typeof patch.hotelId === "string") {
+    hotelId = patch.hotelId || undefined;
   }
 
   if (nextStatus === "pending" || nextStatus === "declined") {
     roomsAssigned = undefined;
+    hotelId = undefined;
   }
 
   const updated: AccommodationRequest = {
@@ -607,10 +790,12 @@ export async function updateAccommodation(
     id,
     status: nextStatus,
     roomsAssigned,
+    hotelId,
   };
 
   if (nextStatus !== "confirmed") {
     updated.roomsAssigned = undefined;
+    updated.hotelId = undefined;
   }
 
   if (hasDatabase()) {

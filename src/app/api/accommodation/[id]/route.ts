@@ -20,7 +20,9 @@ const updateSchema = z.object({
   adminNotes: z.string().trim().optional().default(""),
   email: z.string().trim().email().optional().or(z.literal("")),
   sendEmail: z.boolean().optional().default(false),
-  /** Rooms to assign from the pool when confirming (defaults to guest request) */
+  /** Hotel to assign rooms from */
+  hotelId: z.string().trim().optional(),
+  /** Rooms to assign from the selected hotel (defaults to guest request) */
   roomsAssigned: z.coerce.number().int().min(0).max(30).optional(),
 });
 
@@ -55,6 +57,9 @@ export async function PUT(request: Request, { params }: Params) {
     // Only assign when the admin explicitly sends a room count — never auto
     if (typeof parsed.data.roomsAssigned === "number") {
       patch.roomsAssigned = parsed.data.roomsAssigned;
+    }
+    if (parsed.data.hotelId) {
+      patch.hotelId = parsed.data.hotelId;
     }
 
     const updated = await updateAccommodation(id, patch);

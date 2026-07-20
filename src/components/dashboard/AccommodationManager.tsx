@@ -1,11 +1,12 @@
 "use client";
 
-import { BedDouble, Mail, Save, Trash2 } from "lucide-react";
+import { BedDouble, Mail, Plus, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   AccommodationRequest,
   AccommodationStatus,
   RoomInventory,
+  StayHotel,
 } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,7 @@ const statusStyle: Record<AccommodationStatus, string> = {
 
 type StayDraft = {
   status?: AccommodationStatus;
+  hotelId?: string;
   hotelName?: string;
   hotelAddress?: string;
   roomDetails?: string;
@@ -45,16 +47,31 @@ type StayDraft = {
   roomsAssigned?: number | "";
 };
 
-const emptyInventory: RoomInventory = { total: 0, assigned: 0, available: 0 };
+const emptyInventory: RoomInventory = {
+  total: 0,
+  assigned: 0,
+  available: 0,
+  hotels: [],
+};
 
 export function AccommodationManager({
   initialAccommodations,
   initialInventory = emptyInventory,
 }: AccommodationManagerProps) {
   const [items, setItems] = useState(initialAccommodations);
-  const [inventory, setInventory] = useState<RoomInventory>(initialInventory);
-  const [totalDraft, setTotalDraft] = useState(String(initialInventory.total || ""));
-  const [savingTotal, setSavingTotal] = useState(false);
+  const [inventory, setInventory] = useState<RoomInventory>({
+    ...emptyInventory,
+    ...initialInventory,
+    hotels: initialInventory.hotels || [],
+  });
+  const [hotelForm, setHotelForm] = useState({
+    name: "",
+    address: "",
+    totalRooms: "",
+    notes: "",
+  });
+  const [editingHotelId, setEditingHotelId] = useState<string | null>(null);
+  const [savingHotel, setSavingHotel] = useState(false);
   const [filter, setFilter] = useState<"all" | AccommodationStatus>("all");
   const [openId, setOpenId] = useState<string | null>(
     initialAccommodations[0]?.id || null,
@@ -70,11 +87,15 @@ export function AccommodationManager({
         (data: {
           accommodations?: AccommodationRequest[];
           inventory?: RoomInventory;
+          hotels?: StayHotel[];
         } | null) => {
           if (data?.accommodations) setItems(data.accommodations);
           if (data?.inventory) {
-            setInventory(data.inventory);
-            setTotalDraft(String(data.inventory.total || ""));
+            setInventory({
+              ...emptyInventory,
+              ...data.inventory,
+              hotels: data.inventory.hotels || [],
+            });
           }
         },
       )
@@ -103,6 +124,7 @@ export function AccommodationManager({
 
   const draftFor = (item: AccommodationRequest): StayDraft => ({
     status: item.status || "pending",
+    hotelId: item.hotelId || "",
     hotelName: item.hotelName || "",
     hotelAddress: item.hotelAddress || "",
     roomDetails: item.roomDetails || "",
@@ -120,37 +142,104 @@ export function AccommodationManager({
     }));
   };
 
-  const saveTotalRooms = async () => {
-    const totalRooms = Number(totalDraft);
-    if (!Number.isFinite(totalRooms) || totalRooms < 0) {
-      setMessage("Enter a valid total room count");
+  const resetHotelForm = () => {
+    setEditingHotelId(null);
+    setHotelForm({ name: "", address: "", totalRooms: "", notes: "" });
+  };
+
+  const saveHotel = async () => {
+    const totalRooms = Number(hotelForm.totalRooms);
+    if (!hotelForm.name.trim()) {
+      setMessage("Enter a hotel name");
       return;
     }
-    setSavingTotal(true);
+    if (!Number.isFinite(totalRooms) || totalRooms < 0) {
+      setMessage("Enter how many rooms this hotel has");
+      return;
+    }
+    setSavingHotel(true);
     setMessage("");
     try {
-      const res = await fetch("/api/accommodation", {
-        method: "PUT",
+      const res = await fetch("/api/accommodation/hotels", {
+        method: editingHotelId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ totalRooms }),
+        body: JSON.stringify({
+          id: editingHotelId || undefined,
+          name: hotelForm.name,
+          address: hotelForm.address,
+          totalRooms,
+          notes: hotelForm.notes,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
         inventory?: RoomInventory;
       };
       if (!res.ok) {
-        setMessage(data.error || "Could not save room total");
+        setMessage(data.error || "Could not save hotel");
         return;
       }
       if (data.inventory) {
-        setInventory(data.inventory);
-        setTotalDraft(String(data.inventory.total));
+        setInventory({
+          ...emptyInventory,
+          ...data.inventory,
+          hotels: data.inventory.hotels || [],
+        });
       }
-      setMessage(`Total rooms set to ${totalRooms}.`);
+      setMessage(
+        editingHotelId ? "Hotel updated." : "Hotel added to your stay list.",
+      );
+      resetHotelForm();
     } catch {
-      setMessage("Could not save room total");
+      setMessage("Could not save hotel");
     } finally {
-      setSavingTotal(false);
+      setSavingHotel(false);
+    }
+  };
+
+  const editHotel = (hotel: {
+    id: string;
+    name: string;
+    address?: string;
+    totalRooms: number;
+    notes?: string;
+  }) => {
+    setEditingHotelId(hotel.id);
+    setHotelForm({
+      name: hotel.name,
+      address: hotel.address || "",
+      totalRooms: String(hotel.totalRooms),
+      notes: hotel.notes || "",
+    });
+  };
+
+  const removeHotel = async (id: string, name: string) => {
+    if (!confirm(`Remove “${name}” from your hotel list?`)) return;
+    setMessage("");
+    try {
+      const res = await fetch(
+        `/api/accommodation/hotels?id=${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        inventory?: RoomInventory;
+      };
+      if (!res.ok) {
+        setMessage(data.error || "Could not delete hotel");
+        return;
+      }
+      if (data.inventory) {
+        setInventory({
+          ...emptyInventory,
+          ...data.inventory,
+          hotels: data.inventory.hotels || [],
+        });
+      }
+      if (editingHotelId === id) resetHotelForm();
+      setMessage("Hotel removed.");
+    } catch {
+      setMessage("Could not delete hotel");
     }
   };
 
@@ -174,13 +263,24 @@ export function AccommodationManager({
         email: draft.email ?? current.email ?? current.authEmail ?? "",
         sendEmail,
       };
-      // Only assign when the field was filled in — never auto from guest request
+      // Only assign when hotel + room count are filled — never auto
       const rawAssign = draft.roomsAssigned;
+      const hotelId = (draft.hotelId || current.hotelId || "").trim();
       if (rawAssign !== "" && rawAssign !== undefined && rawAssign !== null) {
         const roomsAssigned = Number(rawAssign);
         if (Number.isFinite(roomsAssigned)) {
           body.roomsAssigned = roomsAssigned;
+          if (roomsAssigned > 0) {
+            if (!hotelId) {
+              setMessage("Select a hotel before assigning rooms.");
+              setSavingId(null);
+              return;
+            }
+            body.hotelId = hotelId;
+          }
         }
+      } else if (hotelId && status === "confirmed") {
+        body.hotelId = hotelId;
       }
 
       const res = await fetch(`/api/accommodation/${id}`, {
@@ -210,7 +310,13 @@ export function AccommodationManager({
           return next;
         });
       }
-      if (data.inventory) setInventory(data.inventory);
+      if (data.inventory) {
+        setInventory({
+          ...emptyInventory,
+          ...data.inventory,
+          hotels: data.inventory.hotels || [],
+        });
+      }
       if (sendEmail) {
         const hasHotelCopy =
           Boolean(data.accommodation?.hotelName?.trim()) ||
@@ -256,7 +362,13 @@ export function AccommodationManager({
     };
     if (res.ok) {
       setItems((prev) => prev.filter((item) => item.id !== id));
-      if (data.inventory) setInventory(data.inventory);
+      if (data.inventory) {
+        setInventory({
+          ...emptyInventory,
+          ...data.inventory,
+          hotels: data.inventory.hotels || [],
+        });
+      }
       if (openId === id) setOpenId(null);
     }
   };
@@ -269,9 +381,8 @@ export function AccommodationManager({
           <h2 className="font-display text-2xl text-cream">Accommodation</h2>
         </div>
         <p className="mt-1 font-body text-sm text-muted">
-          Set your total rooms. Confirming a request does not assign rooms —
-          enter a count in “Rooms to assign” when you want to allocate from the
-          pool.
+          Add hotels with room counts, then when approving a guest pick the
+          hotel and how many rooms to assign.
         </p>
       </div>
 
@@ -283,59 +394,121 @@ export function AccommodationManager({
 
       <div className="mb-6 rounded-2xl border border-gold/20 bg-[#141018] p-4">
         <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
-          Room pool
+          Hotels &amp; rooms
         </p>
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <label className="block min-w-[140px] flex-1">
+        <p className="mt-1 font-body text-xs text-muted">
+          Overall: {inventory.total} total · {inventory.assigned} assigned ·{" "}
+          {inventory.available} available
+        </p>
+
+        <div className="mt-4 space-y-2">
+          {(inventory.hotels || []).map((hotel) => (
+            <div
+              key={hotel.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gold/15 bg-[#0d0b10] px-3 py-3"
+            >
+              <div>
+                <p className="font-display text-lg text-cream">{hotel.name}</p>
+                <p className="font-body text-xs text-muted">
+                  {hotel.totalRooms} rooms · {hotel.assigned} assigned ·{" "}
+                  <span
+                    className={
+                      hotel.available === 0 ? "text-rose-200" : "text-gold-soft"
+                    }
+                  >
+                    {hotel.available} free
+                  </span>
+                  {hotel.address ? ` · ${hotel.address}` : ""}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => editHotel(hotel)}
+                  className="rounded-full border border-gold/25 px-3 py-1.5 font-body text-[11px] uppercase tracking-[0.14em] text-gold-soft hover:bg-gold/10"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeHotel(hotel.id, hotel.name)}
+                  className="rounded-full border border-red-400/30 p-2 text-red-300 hover:bg-red-400/10"
+                  aria-label={`Delete ${hotel.name}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {(inventory.hotels || []).length === 0 ? (
+            <p className="rounded-xl border border-dashed border-gold/20 px-3 py-4 text-center font-body text-sm text-muted">
+              No hotels yet. Add one below.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-5 grid gap-3 border-t border-gold/15 pt-5 sm:grid-cols-2">
+          <label className="block sm:col-span-2">
             <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-              Total rooms we have
+              {editingHotelId ? "Edit hotel" : "Add hotel"}
+            </span>
+            <input
+              className={fieldClass}
+              value={hotelForm.name}
+              onChange={(e) =>
+                setHotelForm((f) => ({ ...f, name: e.target.value }))
+              }
+              placeholder="Hotel / resort name"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+              Rooms available
             </span>
             <input
               type="number"
               min={0}
               max={500}
               className={fieldClass}
-              value={totalDraft}
-              onChange={(e) => setTotalDraft(e.target.value)}
-              placeholder="e.g. 20"
+              value={hotelForm.totalRooms}
+              onChange={(e) =>
+                setHotelForm((f) => ({ ...f, totalRooms: e.target.value }))
+              }
+              placeholder="e.g. 8"
             />
           </label>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={savingTotal}
-            onClick={saveTotalRooms}
-          >
-            {savingTotal ? "Saving…" : "Save total"}
-          </Button>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          {(
-            [
-              ["Total", inventory.total],
-              ["Assigned", inventory.assigned],
-              ["Available", inventory.available],
-            ] as const
-          ).map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-xl border border-gold/15 bg-[#0d0b10] px-3 py-3"
+          <label className="block">
+            <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+              Address (optional)
+            </span>
+            <input
+              className={fieldClass}
+              value={hotelForm.address}
+              onChange={(e) =>
+                setHotelForm((f) => ({ ...f, address: e.target.value }))
+              }
+              placeholder="Address or map pin"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2 sm:col-span-2">
+            <Button
+              type="button"
+              disabled={savingHotel}
+              onClick={saveHotel}
             >
-              <p className="font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-                {label}
-              </p>
-              <p
-                className={cn(
-                  "mt-1 font-display text-2xl",
-                  label === "Available" && inventory.available === 0
-                    ? "text-rose-200"
-                    : "text-cream",
-                )}
-              >
-                {value}
-              </p>
-            </div>
-          ))}
+              <Plus size={14} />
+              {savingHotel
+                ? "Saving…"
+                : editingHotelId
+                  ? "Update hotel"
+                  : "Add hotel"}
+            </Button>
+            {editingHotelId ? (
+              <Button type="button" variant="outline" onClick={resetHotelForm}>
+                Cancel
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -415,7 +588,8 @@ export function AccommodationManager({
                     {status === "confirmed" && item.roomsAssigned ? (
                       <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-gold-soft">
                         {item.roomsAssigned} room
-                        {item.roomsAssigned === 1 ? "" : "s"} assigned
+                        {item.roomsAssigned === 1 ? "" : "s"}
+                        {item.hotelName ? ` · ${item.hotelName}` : ""}
                       </span>
                     ) : null}
                   </div>
@@ -454,7 +628,7 @@ export function AccommodationManager({
                   </p>
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block">
+                    <label className="block sm:col-span-2">
                       <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
                         Status
                       </span>
@@ -478,7 +652,37 @@ export function AccommodationManager({
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-                        Rooms to assign (manual)
+                        Assign hotel
+                      </span>
+                      <select
+                        className={cn(fieldClass, "appearance-none")}
+                        value={draft.hotelId || ""}
+                        onChange={(e) => {
+                          const hotelId = e.target.value;
+                          const hotel = (inventory.hotels || []).find(
+                            (row) => row.id === hotelId,
+                          );
+                          setDraft(item.id, {
+                            hotelId,
+                            hotelName: hotel?.name || draft.hotelName,
+                            hotelAddress:
+                              hotel?.address || draft.hotelAddress || "",
+                          });
+                        }}
+                        disabled={draft.status !== "confirmed"}
+                      >
+                        <option value="">Select hotel…</option>
+                        {(inventory.hotels || []).map((hotel) => (
+                          <option key={hotel.id} value={hotel.id}>
+                            {hotel.name} ({hotel.available} free /{" "}
+                            {hotel.totalRooms})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                        Rooms to assign
                       </span>
                       <input
                         type="number"
@@ -503,10 +707,13 @@ export function AccommodationManager({
                         disabled={draft.status !== "confirmed"}
                       />
                       <span className="mt-1 block font-body text-[11px] text-muted">
-                        Leave blank to approve without assigning. Available:{" "}
-                        {inventory.available}
+                        {(inventory.hotels || []).find(
+                          (hotel) => hotel.id === draft.hotelId,
+                        )
+                          ? `Free at this hotel: ${(inventory.hotels || []).find((hotel) => hotel.id === draft.hotelId)!.available}`
+                          : "Pick a hotel, then enter rooms"}
                         {item.status === "confirmed" && item.roomsAssigned
-                          ? ` · currently assigned here: ${item.roomsAssigned}`
+                          ? ` · currently assigned: ${item.roomsAssigned}`
                           : ""}
                         .
                       </span>
