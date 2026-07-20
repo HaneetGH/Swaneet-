@@ -10,6 +10,7 @@ import {
   Images,
   KeyRound,
   LogOut,
+  Mail,
   Shield,
   UserRound,
   Users,
@@ -23,6 +24,7 @@ import type {
 } from "@/lib/types";
 import { AccommodationManager } from "@/components/dashboard/AccommodationManager";
 import { ChangePinForm } from "@/components/dashboard/ChangePinForm";
+import { EmailLogManager } from "@/components/dashboard/EmailLogManager";
 import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
 import { GuestLoginsManager } from "@/components/dashboard/GuestLoginsManager";
@@ -55,6 +57,7 @@ type Tab =
   | "review"
   | "guests"
   | "team"
+  | "emails"
   | "settings";
 
 function can(session: DashboardSession, permission: AdminPermission) {
@@ -114,6 +117,7 @@ export function DashboardShell({
     }
     if (session.kind === "master") {
       items.push({ id: "team", label: "Team", Icon: Shield, count: 0 });
+      items.push({ id: "emails", label: "Email status", Icon: Mail, count: 0 });
       items.push({ id: "settings", label: "Master PIN", Icon: KeyRound, count: 0 });
     }
     return items;
@@ -206,6 +210,8 @@ export function DashboardShell({
           <GuestLoginsManager />
         ) : activeTab === "team" ? (
           <TeamManager />
+        ) : activeTab === "emails" ? (
+          <EmailLogManager />
         ) : activeTab === "settings" ? (
           <ChangePinForm />
         ) : (

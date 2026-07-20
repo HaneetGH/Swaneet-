@@ -111,6 +111,23 @@ export type GuestLogin = {
   sources: Array<"stay" | "photos">;
 };
 
+export type EmailKind =
+  | "otp"
+  | "stay"
+  | "team_invite"
+  | "team_update"
+  | "photo_reject";
+
+export type EmailLogEntry = {
+  id: string;
+  kind: EmailKind;
+  to: string;
+  subject: string;
+  status: "sent" | "failed";
+  error?: string;
+  createdAt: string;
+};
+
 export type ContentStore = {
   events: ManagedEvent[];
   gallery: GalleryImage[];
@@ -122,6 +139,8 @@ export type ContentStore = {
   admins?: AdminMember[];
   /** Firebase guests who used stay or photo share */
   guestLogins?: GuestLogin[];
+  /** Outbound email attempts (newest first, capped) */
+  emailLogs?: EmailLogEntry[];
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */
   adminPinHash?: string;
 };

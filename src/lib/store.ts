@@ -14,6 +14,8 @@ import type {
   AdminMember,
   AdminPermission,
   ContentStore,
+  EmailKind,
+  EmailLogEntry,
   GalleryImage,
   GuestLogin,
   ManagedEvent,
@@ -51,8 +53,11 @@ export function defaultStore(): ContentStore {
     emailOtps: {},
     admins: [],
     guestLogins: [],
+    emailLogs: [],
   };
 }
+
+const MAX_EMAIL_LOGS = 150;
 
 function normalizeStore(raw: Partial<ContentStore>): ContentStore {
   const defaults = defaultStore();
@@ -103,6 +108,16 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     sources: Array.isArray(login.sources) ? login.sources : [],
   }));
 
+  const emailLogs = (raw.emailLogs ?? [])
+    .filter(
+      (entry) =>
+        entry &&
+        typeof entry.id === "string" &&
+        typeof entry.to === "string" &&
+        (entry.status === "sent" || entry.status === "failed"),
+    )
+    .slice(0, MAX_EMAIL_LOGS);
+
   return {
     events: sortEventsByDateTime(events),
     gallery,
@@ -111,8 +126,36 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     emailOtps: raw.emailOtps ?? {},
     admins,
     guestLogins,
+    emailLogs,
     adminPinHash: raw.adminPinHash,
   };
+}
+
+export async function listEmailLogs(): Promise<EmailLogEntry[]> {
+  const store = await readStore();
+  return [...(store.emailLogs || [])];
+}
+
+export async function appendEmailLog(input: {
+  kind: EmailKind;
+  to: string;
+  subject: string;
+  status: "sent" | "failed";
+  error?: string;
+}): Promise<EmailLogEntry> {
+  const store = await readStore();
+  const entry: EmailLogEntry = {
+    id: `email-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    kind: input.kind,
+    to: input.to.trim().toLowerCase(),
+    subject: input.subject,
+    status: input.status,
+    error: input.error,
+    createdAt: new Date().toISOString(),
+  };
+  store.emailLogs = [entry, ...(store.emailLogs || [])].slice(0, MAX_EMAIL_LOGS);
+  await writeStore(store);
+  return entry;
 }
 
 export async function updateAdminPinHash(adminPinHash: string) {

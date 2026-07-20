@@ -1,9 +1,5 @@
 import { createHash, randomInt, timingSafeEqual } from "crypto";
-import {
-  friendlyResendError,
-  getEmailFrom,
-  isEmailConfigured,
-} from "@/lib/email";
+import { isEmailConfigured, sendResendEmail } from "@/lib/email";
 import { readStore, writeStore } from "@/lib/store";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -39,43 +35,24 @@ export async function createAndSendEmailOtp(email: string) {
   store.emailOtps = otps;
   await writeStore(store);
 
-  const apiKey = process.env.RESEND_API_KEY!;
-  const from = getEmailFrom();
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [normalized],
-      subject: "Your #Swaneet email verification code",
-      text: `Your verification code is ${code}. It expires in 10 minutes.\n\n#Swaneet`,
-      html: `
-        <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6;">
-          <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
-          <h1 style="font-weight: 400;">Verify your email</h1>
-          <p>Your verification code is:</p>
-          <p style="font-size: 32px; letter-spacing: 0.2em;"><strong>${code}</strong></p>
-          <p>This code expires in 10 minutes.</p>
-        </div>
-      `,
-    }),
+  const mailed = await sendResendEmail({
+    kind: "otp",
+    to: normalized,
+    subject: "Your #Swaneet email verification code",
+    text: `Your verification code is ${code}. It expires in 10 minutes.\n\n#Swaneet`,
+    html: `
+      <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6;">
+        <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
+        <h1 style="font-weight: 400;">Verify your email</h1>
+        <p>Your verification code is:</p>
+        <p style="font-size: 32px; letter-spacing: 0.2em;"><strong>${code}</strong></p>
+        <p>This code expires in 10 minutes.</p>
+      </div>
+    `,
   });
 
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as {
-      message?: string;
-    };
-    return {
-      ok: false as const,
-      error: friendlyResendError(
-        body.message,
-        response.status,
-      ),
-    };
+  if (!mailed.ok) {
+    return { ok: false as const, error: mailed.error };
   }
 
   return { ok: true as const, email: normalized };

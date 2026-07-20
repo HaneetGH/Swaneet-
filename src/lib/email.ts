@@ -1,9 +1,11 @@
 import type {
   AccommodationRequest,
   AdminPermission,
+  EmailKind,
   GalleryImage,
 } from "@/lib/types";
 import { PERMISSION_LABELS } from "@/lib/roles";
+import { appendEmailLog } from "@/lib/store";
 
 function formatDate(value: string) {
   if (!value) return "—";
@@ -40,21 +42,100 @@ export function friendlyResendError(message: string | undefined, status?: number
   return raw;
 }
 
+function dashboardSiteUrl() {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "https://swaneet.vercel.app")
+  );
+}
+
+async function logEmail(input: {
+  kind: EmailKind;
+  to: string;
+  subject: string;
+  status: "sent" | "failed";
+  error?: string;
+}) {
+  try {
+    await appendEmailLog(input);
+  } catch (error) {
+    console.error("appendEmailLog failed", error);
+  }
+}
+
+/** Shared Resend send + dashboard email log */
+export async function sendResendEmail(input: {
+  kind: EmailKind;
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = getEmailFrom();
+  const to = input.to.trim().toLowerCase();
+  const subject = input.subject;
+
+  if (!apiKey) {
+    const error = "Email is not configured. Add RESEND_API_KEY in Vercel.";
+    await logEmail({ kind: input.kind, to, subject, status: "failed", error });
+    return { ok: false, error };
+  }
+  if (!to) {
+    const error = "Email is required";
+    await logEmail({ kind: input.kind, to: "", subject, status: "failed", error });
+    return { ok: false, error };
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      text: input.text,
+      html: input.html,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      message?: string;
+    };
+    const error = friendlyResendError(body.message, response.status);
+    await logEmail({ kind: input.kind, to, subject, status: "failed", error });
+    return { ok: false, error };
+  }
+
+  await logEmail({ kind: input.kind, to, subject, status: "sent" });
+  return { ok: true };
+}
+
 export async function sendAccommodationEmail(
   request: AccommodationRequest,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = getEmailFrom();
   const to = request.email || request.authEmail;
+  const subject =
+    request.status === "confirmed"
+      ? "Your #Swaneet accommodation details"
+      : "Update on your #Swaneet accommodation request";
 
-  if (!apiKey) {
-    return {
-      ok: false,
-      error: "Email is not configured. Add RESEND_API_KEY in Vercel.",
-    };
-  }
   if (!to) {
-    return { ok: false, error: "This request has no email address to send to." };
+    const error = "This request has no email address to send to.";
+    await logEmail({
+      kind: "stay",
+      to: "",
+      subject,
+      status: "failed",
+      error,
+    });
+    return { ok: false, error };
   }
 
   const statusLine =
@@ -107,35 +188,13 @@ export async function sendAccommodationEmail(
     </div>
   `;
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject:
-        request.status === "confirmed"
-          ? "Your #Swaneet accommodation details"
-          : "Update on your #Swaneet accommodation request",
-      text,
-      html,
-    }),
+  return sendResendEmail({
+    kind: "stay",
+    to,
+    subject,
+    text,
+    html,
   });
-
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as {
-      message?: string;
-    };
-    return {
-      ok: false,
-      error: friendlyResendError(body.message, response.status),
-    };
-  }
-
-  return { ok: true };
 }
 
 export async function sendGuestPhotoRejectionEmail(
@@ -144,21 +203,19 @@ export async function sendGuestPhotoRejectionEmail(
     "alt" | "uploadedByEmail" | "uploadedByName"
   >,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = getEmailFrom();
-  const to = image.uploadedByEmail?.trim();
+  const to = image.uploadedByEmail?.trim() || "";
+  const subject = "A note about your #Swaneet photo";
 
-  if (!apiKey) {
-    return {
-      ok: false,
-      error: "Email is not configured. Add RESEND_API_KEY in Vercel.",
-    };
-  }
   if (!to) {
-    return {
-      ok: false,
-      error: "Guest has no email on this upload to notify.",
-    };
+    const error = "Guest has no email on this upload to notify.";
+    await logEmail({
+      kind: "photo_reject",
+      to: "",
+      subject,
+      status: "failed",
+      error,
+    });
+    return { ok: false, error };
   }
 
   const name = image.uploadedByName?.trim() || "Guest";
@@ -189,89 +246,13 @@ export async function sendGuestPhotoRejectionEmail(
     </div>
   `;
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject: "A note about your #Swaneet photo",
-      text,
-      html,
-    }),
+  return sendResendEmail({
+    kind: "photo_reject",
+    to,
+    subject,
+    text,
+    html,
   });
-
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as {
-      message?: string;
-    };
-    return {
-      ok: false,
-      error: friendlyResendError(body.message, response.status),
-    };
-  }
-
-  return { ok: true };
-}
-
-function dashboardSiteUrl() {
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : "https://swaneet.vercel.app")
-  );
-}
-
-async function sendResendEmail(input: {
-  to: string;
-  subject: string;
-  text: string;
-  html: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = getEmailFrom();
-  const to = input.to.trim().toLowerCase();
-
-  if (!apiKey) {
-    return {
-      ok: false,
-      error: "Email is not configured. Add RESEND_API_KEY in Vercel.",
-    };
-  }
-  if (!to) {
-    return { ok: false, error: "Email is required" };
-  }
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject: input.subject,
-      text: input.text,
-      html: input.html,
-    }),
-  });
-
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as {
-      message?: string;
-    };
-    return {
-      ok: false,
-      error: friendlyResendError(body.message, response.status),
-    };
-  }
-
-  return { ok: true };
 }
 
 export async function sendTeamInviteEmail(input: {
@@ -315,6 +296,7 @@ export async function sendTeamInviteEmail(input: {
   `;
 
   return sendResendEmail({
+    kind: "team_invite",
     to: input.email,
     subject: "Your #Swaneet dashboard access",
     text,
@@ -378,6 +360,7 @@ export async function sendTeamUpdateEmail(input: {
   `;
 
   return sendResendEmail({
+    kind: "team_update",
     to: input.email,
     subject: input.active
       ? "Your #Swaneet dashboard access was updated"
