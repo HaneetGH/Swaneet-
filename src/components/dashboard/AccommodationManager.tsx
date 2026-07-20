@@ -35,6 +35,16 @@ const statusStyle: Record<AccommodationStatus, string> = {
   declined: "border-rose-400/30 bg-rose-400/10 text-rose-200",
 };
 
+type StayDraft = {
+  status?: AccommodationStatus;
+  hotelName?: string;
+  hotelAddress?: string;
+  roomDetails?: string;
+  adminNotes?: string;
+  email?: string;
+  roomsAssigned?: number | "";
+};
+
 const emptyInventory: RoomInventory = { total: 0, assigned: 0, available: 0 };
 
 export function AccommodationManager({
@@ -49,12 +59,7 @@ export function AccommodationManager({
   const [openId, setOpenId] = useState<string | null>(
     initialAccommodations[0]?.id || null,
   );
-  const [drafts, setDrafts] = useState<
-    Record<
-      string,
-      Partial<AccommodationRequest> & { roomsAssigned?: number | "" }
-    >
-  >({});
+  const [drafts, setDrafts] = useState<Record<string, StayDraft>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
@@ -96,7 +101,7 @@ export function AccommodationManager({
     };
   }, [items]);
 
-  const draftFor = (item: AccommodationRequest) => ({
+  const draftFor = (item: AccommodationRequest): StayDraft => ({
     status: item.status || "pending",
     hotelName: item.hotelName || "",
     hotelAddress: item.hotelAddress || "",
@@ -108,13 +113,7 @@ export function AccommodationManager({
     ...drafts[item.id],
   });
 
-  const setDraft = (
-    id: string,
-    patch: Partial<AccommodationRequest> & {
-      status?: AccommodationStatus;
-      roomsAssigned?: number | "";
-    },
-  ) => {
+  const setDraft = (id: string, patch: StayDraft) => {
     setDrafts((prev) => ({
       ...prev,
       [id]: { ...prev[id], ...patch },
