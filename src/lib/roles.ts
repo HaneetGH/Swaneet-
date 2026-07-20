@@ -3,7 +3,8 @@ import type { AdminPermission } from "@/lib/types";
 export const ALL_PERMISSIONS: AdminPermission[] = [
   "rsvp",
   "stay",
-  "gallery",
+  "gallery_upload",
+  "gallery_review",
   "events",
   "guests",
   "team",
@@ -12,17 +13,27 @@ export const ALL_PERMISSIONS: AdminPermission[] = [
 export const PERMISSION_LABELS: Record<AdminPermission, string> = {
   rsvp: "RSVPs",
   stay: "Accommodation / stay",
-  gallery: "Photos (approve & upload)",
+  gallery_upload: "Photos Upload",
+  gallery_review: "Photos (approve & reject)",
   events: "Events",
   guests: "Logged-in guests",
   team: "Manage team (master tools)",
 };
 
+/** Expand legacy `gallery` into upload + review; drop unknown keys */
 export function normalizePermissions(
-  permissions: AdminPermission[] | undefined,
+  permissions: Array<AdminPermission | "gallery" | string> | undefined,
 ): AdminPermission[] {
-  const allowed = new Set(ALL_PERMISSIONS);
-  return [...new Set(permissions || [])].filter((p) =>
-    allowed.has(p),
+  const expanded: string[] = [];
+  for (const permission of permissions || []) {
+    if (permission === "gallery") {
+      expanded.push("gallery_upload", "gallery_review");
+    } else {
+      expanded.push(permission);
+    }
+  }
+  const allowed = new Set<string>(ALL_PERMISSIONS);
+  return [...new Set(expanded)].filter((permission) =>
+    allowed.has(permission),
   ) as AdminPermission[];
 }

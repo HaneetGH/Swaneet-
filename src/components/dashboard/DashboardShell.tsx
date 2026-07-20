@@ -90,13 +90,15 @@ export function DashboardShell({
         count: accommodations.length,
       });
     }
-    if (can(session, "gallery")) {
+    if (can(session, "gallery_upload")) {
       items.push({
         id: "upload",
         label: "Upload media",
         Icon: Images,
         count: 0,
       });
+    }
+    if (can(session, "gallery_review")) {
       items.push({
         id: "review",
         label: "Review photos",

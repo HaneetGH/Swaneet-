@@ -15,7 +15,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    if (!(await requirePermission("gallery"))) {
+    if (!(await requirePermission("gallery_review"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 const permissionEnum = z.enum([
   "rsvp",
   "stay",
-  "gallery",
+  "gallery_upload",
+  "gallery_review",
   "events",
   "guests",
   "team",

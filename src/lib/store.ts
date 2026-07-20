@@ -321,7 +321,10 @@ export async function listAdmins(): Promise<
   Omit<AdminMember, "pinHash">[]
 > {
   const store = await readStore();
-  return (store.admins || []).map(({ pinHash: _pin, ...rest }) => rest);
+  return (store.admins || []).map(({ pinHash: _pin, ...rest }) => ({
+    ...rest,
+    permissions: normalizePermissions(rest.permissions),
+  }));
 }
 
 export async function createAdmin(input: {

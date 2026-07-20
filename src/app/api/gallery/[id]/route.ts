@@ -15,7 +15,7 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: Params) {
-  if (!(await requirePermission("gallery"))) {
+  if (!(await requirePermission("gallery_review"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -73,7 +73,7 @@ export async function PATCH(request: Request, { params }: Params) {
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
-  if (!(await requirePermission("gallery"))) {
+  if (!(await requirePermission("gallery_upload"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

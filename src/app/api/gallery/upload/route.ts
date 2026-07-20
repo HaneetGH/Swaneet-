@@ -17,7 +17,7 @@ const ALLOWED = [
 
 export async function POST(request: Request) {
   try {
-    if (!(await requirePermission("gallery"))) {
+    if (!(await requirePermission("gallery_upload"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

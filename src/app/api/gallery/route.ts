@@ -49,7 +49,9 @@ export async function GET(request: Request) {
   const wantsAll = searchParams.get("all") === "1";
   const session = await getAdminSession();
   const includePending =
-    wantsAll && sessionHasPermission(session, "gallery");
+    wantsAll &&
+    (sessionHasPermission(session, "gallery_review") ||
+      sessionHasPermission(session, "gallery_upload"));
   const gallery = await listGallery({ includePending });
   const filtered = eventId
     ? gallery.filter((image) => image.eventId === eventId)
@@ -59,7 +61,7 @@ export async function GET(request: Request) {
 
 /** Register media already uploaded to Blob (preferred for videos / large files). */
 async function registerFromJson(request: Request) {
-  if (!(await requirePermission("gallery"))) {
+  if (!(await requirePermission("gallery_upload"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -104,7 +106,7 @@ async function registerFromJson(request: Request) {
 
 /** Local / small-image fallback through FormData (not suitable for videos on Vercel). */
 async function registerFromFormData(request: Request) {
-  if (!(await requirePermission("gallery"))) {
+  if (!(await requirePermission("gallery_upload"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -12,7 +12,8 @@ type SafeAdmin = Omit<AdminMember, "pinHash">;
 const ASSIGNABLE: AdminPermission[] = [
   "rsvp",
   "stay",
-  "gallery",
+  "gallery_upload",
+  "gallery_review",
   "events",
   "guests",
 ];
@@ -26,7 +27,9 @@ export function TeamManager() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
-  const [permissions, setPermissions] = useState<AdminPermission[]>(["gallery"]);
+  const [permissions, setPermissions] = useState<AdminPermission[]>([
+    "gallery_upload",
+  ]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -49,7 +52,7 @@ export function TeamManager() {
     setName("");
     setEmail("");
     setPin("");
-    setPermissions(["gallery"]);
+    setPermissions(["gallery_upload"]);
     setError("");
   };
 

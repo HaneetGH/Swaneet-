@@ -29,13 +29,14 @@ export default async function DashboardPage() {
   };
 
   try {
+    const canUpload = sessionHasPermission(session, "gallery_upload");
+    const canReview = sessionHasPermission(session, "gallery_review");
     const [events, gallery, rsvps, accommodations] = await Promise.all([
-      sessionHasPermission(session, "events") ||
-      sessionHasPermission(session, "gallery")
+      sessionHasPermission(session, "events") || canUpload || canReview
         ? listEvents()
         : Promise.resolve([]),
-      sessionHasPermission(session, "gallery")
-        ? listGallery({ includePending: true })
+      canUpload || canReview
+        ? listGallery({ includePending: canReview || canUpload })
         : Promise.resolve([]),
       sessionHasPermission(session, "rsvp")
         ? listRsvps()

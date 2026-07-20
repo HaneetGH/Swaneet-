@@ -84,7 +84,8 @@ export type EmailOtpEntry = {
 export type AdminPermission =
   | "rsvp"
   | "stay"
-  | "gallery"
+  | "gallery_upload"
+  | "gallery_review"
   | "events"
   | "guests"
   | "team";
