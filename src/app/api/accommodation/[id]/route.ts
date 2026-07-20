@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { sendAccommodationEmail } from "@/lib/email";
-import { deleteAccommodation, updateAccommodation } from "@/lib/store";
+import {
+  deleteAccommodation,
+  getRoomInventory,
+  updateAccommodation,
+} from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +20,8 @@ const updateSchema = z.object({
   adminNotes: z.string().trim().optional().default(""),
   email: z.string().trim().email().optional().or(z.literal("")),
   sendEmail: z.boolean().optional().default(false),
+  /** Rooms to assign from the pool when confirming (defaults to guest request) */
+  roomsAssigned: z.coerce.number().int().min(1).max(30).optional(),
 });
 
 export async function PUT(request: Request, { params }: Params) {
@@ -41,6 +47,7 @@ export async function PUT(request: Request, { params }: Params) {
       roomDetails: parsed.data.roomDetails || undefined,
       adminNotes: parsed.data.adminNotes || undefined,
       email: parsed.data.email || undefined,
+      roomsAssigned: parsed.data.roomsAssigned,
       confirmedAt:
         parsed.data.status === "confirmed" || parsed.data.status === "declined"
           ? now
@@ -51,6 +58,8 @@ export async function PUT(request: Request, { params }: Params) {
       return NextResponse.json({ error: "Request not found" }, { status: 404 });
     }
 
+    const inventory = await getRoomInventory();
+
     let emailResult: { sent: boolean; error?: string } = { sent: false };
     if (parsed.data.sendEmail) {
       const result = await sendAccommodationEmail(updated);
@@ -59,18 +68,24 @@ export async function PUT(request: Request, { params }: Params) {
         emailResult = { sent: true };
         return NextResponse.json({
           accommodation: withEmail || updated,
+          inventory,
           email: emailResult,
         });
       }
       emailResult = { sent: false, error: result.error };
     }
 
-    return NextResponse.json({ accommodation: updated, email: emailResult });
+    return NextResponse.json({
+      accommodation: updated,
+      inventory,
+      email: emailResult,
+    });
   } catch (error) {
     console.error("PUT /api/accommodation failed", error);
     const message =
       error instanceof Error ? error.message : "Could not update request";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.includes("Not enough rooms") ? 409 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
@@ -84,5 +99,6 @@ export async function DELETE(_request: Request, { params }: Params) {
   if (!ok) {
     return NextResponse.json({ error: "Request not found" }, { status: 404 });
   }
-  return NextResponse.json({ ok: true });
+  const inventory = await getRoomInventory();
+  return NextResponse.json({ ok: true, inventory });
 }

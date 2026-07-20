@@ -70,6 +70,8 @@ export type AccommodationRequest = {
   authEmail?: string;
   authPhone?: string;
   status: AccommodationStatus;
+  /** Rooms taken from the family pool when confirmed */
+  roomsAssigned?: number;
   /** What the family can provide */
   hotelName?: string;
   hotelAddress?: string;
@@ -139,6 +141,8 @@ export type ContentStore = {
   gallery: GalleryImage[];
   rsvps: RsvpEntry[];
   accommodations: AccommodationRequest[];
+  /** Total rooms the family can assign for wedding stay */
+  totalRooms?: number;
   /** Pending email verification codes (hashed) */
   emailOtps?: Record<string, EmailOtpEntry>;
   /** Team admins created by master (not including master PIN) */
@@ -149,4 +153,10 @@ export type ContentStore = {
   emailLogs?: EmailLogEntry[];
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */
   adminPinHash?: string;
+};
+
+export type RoomInventory = {
+  total: number;
+  assigned: number;
+  available: number;
 };

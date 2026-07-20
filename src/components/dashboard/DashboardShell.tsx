@@ -20,6 +20,7 @@ import type {
   AdminPermission,
   GalleryImage,
   ManagedEvent,
+  RoomInventory,
   RsvpEntry,
 } from "@/lib/types";
 import { AccommodationManager } from "@/components/dashboard/AccommodationManager";
@@ -46,6 +47,7 @@ type DashboardShellProps = {
   gallery: GalleryImage[];
   rsvps: RsvpEntry[];
   accommodations: AccommodationRequest[];
+  inventory?: RoomInventory;
   loadError?: string;
 };
 
@@ -71,6 +73,7 @@ export function DashboardShell({
   gallery,
   rsvps,
   accommodations,
+  inventory,
   loadError,
 }: DashboardShellProps) {
   const router = useRouter();
@@ -199,7 +202,10 @@ export function DashboardShell({
         {activeTab === "rsvp" ? (
           <RsvpManager initialRsvps={rsvps} />
         ) : activeTab === "stay" ? (
-          <AccommodationManager initialAccommodations={accommodations} />
+          <AccommodationManager
+            initialAccommodations={accommodations}
+            initialInventory={inventory}
+          />
         ) : activeTab === "events" ? (
           <EventsManager initialEvents={events} />
         ) : activeTab === "upload" ? (

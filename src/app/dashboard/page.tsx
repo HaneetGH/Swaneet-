@@ -3,6 +3,7 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { getAdminSession, sessionHasPermission } from "@/lib/auth";
 import {
   defaultStore,
+  getRoomInventory,
   listAccommodations,
   listEvents,
   listGallery,
@@ -31,20 +32,24 @@ export default async function DashboardPage() {
   try {
     const canUpload = sessionHasPermission(session, "gallery_upload");
     const canReview = sessionHasPermission(session, "gallery_review");
-    const [events, gallery, rsvps, accommodations] = await Promise.all([
-      sessionHasPermission(session, "events") || canUpload || canReview
-        ? listEvents()
-        : Promise.resolve([]),
-      canUpload || canReview
-        ? listGallery({ includePending: canReview || canUpload })
-        : Promise.resolve([]),
-      sessionHasPermission(session, "rsvp")
-        ? listRsvps()
-        : Promise.resolve([]),
-      sessionHasPermission(session, "stay")
-        ? listAccommodations()
-        : Promise.resolve([]),
-    ]);
+    const [events, gallery, rsvps, accommodations, inventory] =
+      await Promise.all([
+        sessionHasPermission(session, "events") || canUpload || canReview
+          ? listEvents()
+          : Promise.resolve([]),
+        canUpload || canReview
+          ? listGallery({ includePending: canReview || canUpload })
+          : Promise.resolve([]),
+        sessionHasPermission(session, "rsvp")
+          ? listRsvps()
+          : Promise.resolve([]),
+        sessionHasPermission(session, "stay")
+          ? listAccommodations()
+          : Promise.resolve([]),
+        sessionHasPermission(session, "stay")
+          ? getRoomInventory()
+          : Promise.resolve({ total: 0, assigned: 0, available: 0 }),
+      ]);
 
     return (
       <DashboardShell
@@ -53,6 +58,7 @@ export default async function DashboardPage() {
         gallery={gallery}
         rsvps={rsvps}
         accommodations={accommodations}
+        inventory={inventory}
       />
     );
   } catch (error) {

@@ -31,6 +31,7 @@ import type {
   GalleryImage,
   GuestLogin,
   ManagedEvent,
+  RoomInventory,
   RsvpEntry,
 } from "@/lib/types";
 import { sortEventsByDateTime } from "@/lib/datetime";
@@ -62,6 +63,7 @@ export function defaultStore(): ContentStore {
     gallery: [],
     rsvps: [],
     accommodations: [],
+    totalRooms: 0,
     emailOtps: {},
     admins: [],
     guestLogins: [],
@@ -129,6 +131,12 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     ...item,
     email: item.email || item.authEmail || "",
     status: item.status || ("pending" as const),
+    roomsAssigned:
+      typeof item.roomsAssigned === "number"
+        ? item.roomsAssigned
+        : item.status === "confirmed"
+          ? item.rooms
+          : undefined,
   }));
 
   const admins = (raw.admins ?? []).map((admin) => ({
@@ -153,11 +161,17 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     )
     .slice(0, MAX_EMAIL_LOGS);
 
+  const totalRooms =
+    typeof raw.totalRooms === "number" && raw.totalRooms >= 0
+      ? Math.floor(raw.totalRooms)
+      : 0;
+
   return {
     events,
     gallery,
     rsvps: raw.rsvps ?? [],
     accommodations,
+    totalRooms,
     emailOtps: raw.emailOtps ?? {},
     admins,
     guestLogins,
@@ -466,6 +480,44 @@ export async function listAccommodations(): Promise<AccommodationRequest[]> {
   return store.accommodations;
 }
 
+export function computeRoomInventory(
+  accommodations: AccommodationRequest[],
+  totalRooms: number,
+): RoomInventory {
+  const assigned = accommodations.reduce((sum, item) => {
+    if (item.status !== "confirmed") return sum;
+    const rooms =
+      typeof item.roomsAssigned === "number"
+        ? item.roomsAssigned
+        : item.rooms || 0;
+    return sum + Math.max(0, rooms);
+  }, 0);
+  const total = Math.max(0, Math.floor(totalRooms || 0));
+  return {
+    total,
+    assigned,
+    available: Math.max(0, total - assigned),
+  };
+}
+
+export async function getRoomInventory(): Promise<RoomInventory> {
+  const store = await readStore();
+  const accommodations = hasDatabase()
+    ? await listAccommodationsFromDb()
+    : store.accommodations;
+  return computeRoomInventory(accommodations, store.totalRooms || 0);
+}
+
+export async function setTotalRooms(totalRooms: number): Promise<RoomInventory> {
+  const store = await readStore();
+  store.totalRooms = Math.max(0, Math.floor(totalRooms));
+  await writeStore(store);
+  const accommodations = hasDatabase()
+    ? await listAccommodationsFromDb()
+    : store.accommodations;
+  return computeRoomInventory(accommodations, store.totalRooms);
+}
+
 export async function addAccommodation(
   entry: Omit<AccommodationRequest, "id" | "createdAt" | "status"> & {
     status?: AccommodationRequest["status"];
@@ -494,16 +546,57 @@ export async function updateAccommodation(
   id: string,
   patch: Partial<AccommodationRequest>,
 ): Promise<AccommodationRequest | null> {
+  const existing = (await listAccommodations()).find((item) => item.id === id);
+  if (!existing) return null;
+
+  const nextStatus = patch.status ?? existing.status;
+  let roomsAssigned = existing.roomsAssigned;
+
+  if (nextStatus === "confirmed") {
+    const assignCount =
+      typeof patch.roomsAssigned === "number"
+        ? patch.roomsAssigned
+        : typeof existing.roomsAssigned === "number"
+          ? existing.roomsAssigned
+          : existing.rooms;
+
+    const inventory = await getRoomInventory();
+    const currentlyHolding =
+      existing.status === "confirmed"
+        ? typeof existing.roomsAssigned === "number"
+          ? existing.roomsAssigned
+          : existing.rooms
+        : 0;
+    const availableForThis = inventory.available + currentlyHolding;
+
+    if (assignCount > availableForThis) {
+      throw new Error(
+        `Not enough rooms left. Available: ${availableForThis}, needed: ${assignCount}. Increase total rooms or free another confirmation.`,
+      );
+    }
+    roomsAssigned = assignCount;
+  } else if (nextStatus === "pending" || nextStatus === "declined") {
+    roomsAssigned = undefined;
+  }
+
+  if (typeof patch.roomsAssigned === "number" && nextStatus === "confirmed") {
+    roomsAssigned = patch.roomsAssigned;
+  }
+
+  const updated: AccommodationRequest = {
+    ...existing,
+    ...patch,
+    id,
+    status: nextStatus,
+    roomsAssigned,
+  };
+
+  // Clear roomsAssigned when not confirmed
+  if (nextStatus !== "confirmed") {
+    updated.roomsAssigned = undefined;
+  }
+
   if (hasDatabase()) {
-    const existing = (await listAccommodationsFromDb()).find(
-      (item) => item.id === id,
-    );
-    if (!existing) return null;
-    const updated: AccommodationRequest = {
-      ...existing,
-      ...patch,
-      id,
-    };
     await upsertAccommodationToDb(updated);
     return updated;
   }
@@ -511,14 +604,9 @@ export async function updateAccommodation(
   const store = await readStore();
   const index = store.accommodations.findIndex((item) => item.id === id);
   if (index === -1) return null;
-
-  store.accommodations[index] = {
-    ...store.accommodations[index],
-    ...patch,
-    id,
-  };
+  store.accommodations[index] = updated;
   await writeStore(store);
-  return store.accommodations[index];
+  return updated;
 }
 
 /** Create or update stay for the same Google guest (one stay request per account). */

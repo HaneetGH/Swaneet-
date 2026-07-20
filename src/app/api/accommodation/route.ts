@@ -8,8 +8,10 @@ import {
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import {
   addAccommodation,
+  getRoomInventory,
   listAccommodations,
   recordGuestLogin,
+  setTotalRooms,
   upsertAccommodationForGuest,
 } from "@/lib/store";
 import { notifyOwner } from "@/lib/email";
@@ -29,12 +31,42 @@ const schema = z.object({
   rsvpId: z.string().optional(),
 });
 
+const inventorySchema = z.object({
+  totalRooms: z.coerce.number().int().min(0).max(500),
+});
+
 export async function GET() {
   if (!(await requirePermission("stay"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const accommodations = await listAccommodations();
-  return NextResponse.json({ accommodations });
+  const [accommodations, inventory] = await Promise.all([
+    listAccommodations(),
+    getRoomInventory(),
+  ]);
+  return NextResponse.json({ accommodations, inventory });
+}
+
+/** Master / stay team: set how many rooms the family has in total. */
+export async function PUT(request: Request) {
+  try {
+    if (!(await requirePermission("stay"))) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const parsed = inventorySchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Invalid room total" },
+        { status: 400 },
+      );
+    }
+    const inventory = await setTotalRooms(parsed.data.totalRooms);
+    return NextResponse.json({ inventory });
+  } catch (error) {
+    console.error("PUT /api/accommodation inventory failed", error);
+    const message =
+      error instanceof Error ? error.message : "Could not save room total";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {

@@ -1,13 +1,18 @@
 "use client";
 
 import { BedDouble, Mail, Save, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { AccommodationRequest, AccommodationStatus } from "@/lib/types";
+import { useEffect, useMemo, useState } from "react";
+import type {
+  AccommodationRequest,
+  AccommodationStatus,
+  RoomInventory,
+} from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
 type AccommodationManagerProps = {
   initialAccommodations: AccommodationRequest[];
+  initialInventory?: RoomInventory;
 };
 
 const fieldClass =
@@ -30,19 +35,43 @@ const statusStyle: Record<AccommodationStatus, string> = {
   declined: "border-rose-400/30 bg-rose-400/10 text-rose-200",
 };
 
+const emptyInventory: RoomInventory = { total: 0, assigned: 0, available: 0 };
+
 export function AccommodationManager({
   initialAccommodations,
+  initialInventory = emptyInventory,
 }: AccommodationManagerProps) {
   const [items, setItems] = useState(initialAccommodations);
+  const [inventory, setInventory] = useState<RoomInventory>(initialInventory);
+  const [totalDraft, setTotalDraft] = useState(String(initialInventory.total || ""));
+  const [savingTotal, setSavingTotal] = useState(false);
   const [filter, setFilter] = useState<"all" | AccommodationStatus>("all");
   const [openId, setOpenId] = useState<string | null>(
     initialAccommodations[0]?.id || null,
   );
-  const [drafts, setDrafts] = useState<Record<string, Partial<AccommodationRequest>>>(
-    {},
-  );
+  const [drafts, setDrafts] = useState<
+    Record<string, Partial<AccommodationRequest> & { roomsAssigned?: number }>
+  >({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    fetch("/api/accommodation")
+      .then((res) => (res.ok ? res.json() : null))
+      .then(
+        (data: {
+          accommodations?: AccommodationRequest[];
+          inventory?: RoomInventory;
+        } | null) => {
+          if (data?.accommodations) setItems(data.accommodations);
+          if (data?.inventory) {
+            setInventory(data.inventory);
+            setTotalDraft(String(data.inventory.total || ""));
+          }
+        },
+      )
+      .catch(() => undefined);
+  }, []);
 
   const filtered = useMemo(
     () =>
@@ -71,17 +100,56 @@ export function AccommodationManager({
     roomDetails: item.roomDetails || "",
     adminNotes: item.adminNotes || "",
     email: item.email || item.authEmail || "",
+    roomsAssigned:
+      typeof item.roomsAssigned === "number" ? item.roomsAssigned : item.rooms,
     ...drafts[item.id],
   });
 
   const setDraft = (
     id: string,
-    patch: Partial<AccommodationRequest> & { status?: AccommodationStatus },
+    patch: Partial<AccommodationRequest> & {
+      status?: AccommodationStatus;
+      roomsAssigned?: number;
+    },
   ) => {
     setDrafts((prev) => ({
       ...prev,
       [id]: { ...prev[id], ...patch },
     }));
+  };
+
+  const saveTotalRooms = async () => {
+    const totalRooms = Number(totalDraft);
+    if (!Number.isFinite(totalRooms) || totalRooms < 0) {
+      setMessage("Enter a valid total room count");
+      return;
+    }
+    setSavingTotal(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/accommodation", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ totalRooms }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        inventory?: RoomInventory;
+      };
+      if (!res.ok) {
+        setMessage(data.error || "Could not save room total");
+        return;
+      }
+      if (data.inventory) {
+        setInventory(data.inventory);
+        setTotalDraft(String(data.inventory.total));
+      }
+      setMessage(`Total rooms set to ${totalRooms}.`);
+    } catch {
+      setMessage("Could not save room total");
+    } finally {
+      setSavingTotal(false);
+    }
   };
 
   const save = async (id: string, sendEmail: boolean) => {
@@ -92,22 +160,29 @@ export function AccommodationManager({
     setSavingId(id);
     setMessage("");
     try {
+      const status = (draft.status || current.status || "pending") as AccommodationStatus;
+      const roomsAssigned = Number(
+        draft.roomsAssigned ?? current.roomsAssigned ?? current.rooms,
+      );
+
       const res = await fetch(`/api/accommodation/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          status: draft.status || current.status || "pending",
+          status,
           hotelName: draft.hotelName ?? current.hotelName ?? "",
           hotelAddress: draft.hotelAddress ?? current.hotelAddress ?? "",
           roomDetails: draft.roomDetails ?? current.roomDetails ?? "",
           adminNotes: draft.adminNotes ?? current.adminNotes ?? "",
           email: draft.email ?? current.email ?? current.authEmail ?? "",
+          roomsAssigned: status === "confirmed" ? roomsAssigned : undefined,
           sendEmail,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
         accommodation?: AccommodationRequest;
+        inventory?: RoomInventory;
         email?: { sent?: boolean; error?: string };
       };
       if (!res.ok) {
@@ -126,11 +201,18 @@ export function AccommodationManager({
           return next;
         });
       }
+      if (data.inventory) setInventory(data.inventory);
       if (sendEmail) {
         setMessage(
           data.email?.sent
-            ? "Saved and email sent to the guest."
+            ? status === "confirmed"
+              ? `Confirmed — ${data.accommodation?.roomsAssigned || roomsAssigned} room(s) assigned. Email sent.`
+              : "Saved and email sent to the guest."
             : data.email?.error || "Saved, but email could not be sent.",
+        );
+      } else if (status === "confirmed") {
+        setMessage(
+          `Confirmed — ${data.accommodation?.roomsAssigned || roomsAssigned} room(s) assigned from your pool.`,
         );
       } else {
         setMessage("Saved stay details.");
@@ -145,8 +227,12 @@ export function AccommodationManager({
   const onDelete = async (id: string) => {
     if (!confirm("Remove this accommodation request?")) return;
     const res = await fetch(`/api/accommodation/${id}`, { method: "DELETE" });
+    const data = (await res.json().catch(() => ({}))) as {
+      inventory?: RoomInventory;
+    };
     if (res.ok) {
       setItems((prev) => prev.filter((item) => item.id !== id));
+      if (data.inventory) setInventory(data.inventory);
       if (openId === id) setOpenId(null);
     }
   };
@@ -159,7 +245,8 @@ export function AccommodationManager({
           <h2 className="font-display text-2xl text-cream">Accommodation</h2>
         </div>
         <p className="mt-1 font-body text-sm text-muted">
-          Review guest requests, add the stay you can provide, and email details
+          Set your total rooms. When you mark a request confirmed, those rooms
+          are assigned from the pool.
         </p>
       </div>
 
@@ -168,6 +255,64 @@ export function AccommodationManager({
           {message}
         </p>
       ) : null}
+
+      <div className="mb-6 rounded-2xl border border-gold/20 bg-[#141018] p-4">
+        <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
+          Room pool
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="block min-w-[140px] flex-1">
+            <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+              Total rooms we have
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={500}
+              className={fieldClass}
+              value={totalDraft}
+              onChange={(e) => setTotalDraft(e.target.value)}
+              placeholder="e.g. 20"
+            />
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={savingTotal}
+            onClick={saveTotalRooms}
+          >
+            {savingTotal ? "Saving…" : "Save total"}
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {(
+            [
+              ["Total", inventory.total],
+              ["Assigned", inventory.assigned],
+              ["Available", inventory.available],
+            ] as const
+          ).map(([label, value]) => (
+            <div
+              key={label}
+              className="rounded-xl border border-gold/15 bg-[#0d0b10] px-3 py-3"
+            >
+              <p className="font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                {label}
+              </p>
+              <p
+                className={cn(
+                  "mt-1 font-display text-2xl",
+                  label === "Available" && inventory.available === 0
+                    ? "text-rose-200"
+                    : "text-cream",
+                )}
+              >
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
         {(
@@ -242,6 +387,12 @@ export function AccommodationManager({
                     >
                       {status}
                     </span>
+                    {status === "confirmed" && item.roomsAssigned ? (
+                      <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-gold-soft">
+                        {item.roomsAssigned} room
+                        {item.roomsAssigned === 1 ? "" : "s"} assigned
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-2 font-body text-sm text-gold-soft">
                     Asked: {item.people} people · {item.rooms} room
@@ -292,11 +443,44 @@ export function AccommodationManager({
                         }
                       >
                         <option value="pending">Pending</option>
-                        <option value="confirmed">Confirmed — we can provide</option>
-                        <option value="declined">Declined — cannot arrange</option>
+                        <option value="confirmed">
+                          Confirmed — assign rooms
+                        </option>
+                        <option value="declined">
+                          Declined — cannot arrange
+                        </option>
                       </select>
                     </label>
                     <label className="block">
+                      <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                        Rooms to assign
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={30}
+                        className={fieldClass}
+                        value={draft.roomsAssigned ?? item.rooms}
+                        onChange={(e) =>
+                          setDraft(item.id, {
+                            roomsAssigned: Number(e.target.value) || 1,
+                          })
+                        }
+                        disabled={draft.status !== "confirmed"}
+                      />
+                      <span className="mt-1 block font-body text-[11px] text-muted">
+                        Guest asked for {item.rooms}. Available now:{" "}
+                        {inventory.available}
+                        {item.status === "confirmed" && item.roomsAssigned
+                          ? ` (+${item.roomsAssigned} already on this request)`
+                          : ""}
+                        .
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block sm:col-span-2">
                       <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
                         Guest email
                       </span>
@@ -371,7 +555,8 @@ export function AccommodationManager({
 
                   {item.emailSentAt ? (
                     <p className="font-body text-[11px] text-muted">
-                      Last email sent {new Date(item.emailSentAt).toLocaleString()}
+                      Last email sent{" "}
+                      {new Date(item.emailSentAt).toLocaleString()}
                     </p>
                   ) : null}
 
@@ -401,7 +586,7 @@ export function AccommodationManager({
         })}
 
         {filtered.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-gold/20 p-10 text-center font-body text-sm text-muted">
+          <p className="rounded-2xl border border-dashed border-gold/20 p-8 text-center font-body text-sm text-muted">
             No accommodation requests in this filter.
           </p>
         ) : null}
