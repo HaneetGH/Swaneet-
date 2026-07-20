@@ -61,6 +61,7 @@ async function logEmail(input: {
   try {
     await appendEmailLog(input);
   } catch (error) {
+    // Don't fail the send if logging fails — Resend may have already delivered
     console.error("appendEmailLog failed", error);
   }
 }

@@ -1,7 +1,13 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { readStoreFromBlob, writeStoreToBlob } from "@/lib/blob-store";
-import { readStoreFromDb, seedStoreIfEmpty, writeStoreToDb } from "@/lib/db";
+import {
+  insertEmailLogToDb,
+  listEmailLogsFromDb,
+  readStoreFromDb,
+  seedStoreIfEmpty,
+  writeStoreToDb,
+} from "@/lib/db";
 import {
   canPersistData,
   hasBlobStorage,
@@ -132,6 +138,13 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
 }
 
 export async function listEmailLogs(): Promise<EmailLogEntry[]> {
+  if (hasDatabase()) {
+    try {
+      return await listEmailLogsFromDb();
+    } catch (error) {
+      console.error("listEmailLogsFromDb failed", error);
+    }
+  }
   const store = await readStore();
   return [...(store.emailLogs || [])];
 }
@@ -153,8 +166,11 @@ export async function appendEmailLog(input: {
     createdAt: new Date().toISOString(),
   };
 
-  // Re-read immediately before write so concurrent store updates are less likely
-  // to wipe the newest log entry.
+  if (hasDatabase()) {
+    await insertEmailLogToDb(entry);
+    return entry;
+  }
+
   const store = await readStore();
   const existing = store.emailLogs || [];
   store.emailLogs = [
