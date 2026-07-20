@@ -50,7 +50,10 @@ export function AccommodationManager({
     initialAccommodations[0]?.id || null,
   );
   const [drafts, setDrafts] = useState<
-    Record<string, Partial<AccommodationRequest> & { roomsAssigned?: number }>
+    Record<
+      string,
+      Partial<AccommodationRequest> & { roomsAssigned?: number | "" }
+    >
   >({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -101,7 +104,7 @@ export function AccommodationManager({
     adminNotes: item.adminNotes || "",
     email: item.email || item.authEmail || "",
     roomsAssigned:
-      typeof item.roomsAssigned === "number" ? item.roomsAssigned : item.rooms,
+      typeof item.roomsAssigned === "number" ? item.roomsAssigned : "",
     ...drafts[item.id],
   });
 
@@ -109,7 +112,7 @@ export function AccommodationManager({
     id: string,
     patch: Partial<AccommodationRequest> & {
       status?: AccommodationStatus;
-      roomsAssigned?: number;
+      roomsAssigned?: number | "";
     },
   ) => {
     setDrafts((prev) => ({
@@ -160,24 +163,31 @@ export function AccommodationManager({
     setSavingId(id);
     setMessage("");
     try {
-      const status = (draft.status || current.status || "pending") as AccommodationStatus;
-      const roomsAssigned = Number(
-        draft.roomsAssigned ?? current.roomsAssigned ?? current.rooms,
-      );
+      const status = (draft.status ||
+        current.status ||
+        "pending") as AccommodationStatus;
+      const body: Record<string, unknown> = {
+        status,
+        hotelName: draft.hotelName ?? current.hotelName ?? "",
+        hotelAddress: draft.hotelAddress ?? current.hotelAddress ?? "",
+        roomDetails: draft.roomDetails ?? current.roomDetails ?? "",
+        adminNotes: draft.adminNotes ?? current.adminNotes ?? "",
+        email: draft.email ?? current.email ?? current.authEmail ?? "",
+        sendEmail,
+      };
+      // Only assign when the field was filled in — never auto from guest request
+      const rawAssign = draft.roomsAssigned;
+      if (rawAssign !== "" && rawAssign !== undefined && rawAssign !== null) {
+        const roomsAssigned = Number(rawAssign);
+        if (Number.isFinite(roomsAssigned)) {
+          body.roomsAssigned = roomsAssigned;
+        }
+      }
 
       const res = await fetch(`/api/accommodation/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status,
-          hotelName: draft.hotelName ?? current.hotelName ?? "",
-          hotelAddress: draft.hotelAddress ?? current.hotelAddress ?? "",
-          roomDetails: draft.roomDetails ?? current.roomDetails ?? "",
-          adminNotes: draft.adminNotes ?? current.adminNotes ?? "",
-          email: draft.email ?? current.email ?? current.authEmail ?? "",
-          roomsAssigned: status === "confirmed" ? roomsAssigned : undefined,
-          sendEmail,
-        }),
+        body: JSON.stringify(body),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -205,14 +215,14 @@ export function AccommodationManager({
       if (sendEmail) {
         setMessage(
           data.email?.sent
-            ? status === "confirmed"
-              ? `Confirmed — ${data.accommodation?.roomsAssigned || roomsAssigned} room(s) assigned. Email sent.`
+            ? data.accommodation?.roomsAssigned
+              ? `Saved — ${data.accommodation.roomsAssigned} room(s) assigned. Email sent.`
               : "Saved and email sent to the guest."
             : data.email?.error || "Saved, but email could not be sent.",
         );
-      } else if (status === "confirmed") {
+      } else if (data.accommodation?.roomsAssigned) {
         setMessage(
-          `Confirmed — ${data.accommodation?.roomsAssigned || roomsAssigned} room(s) assigned from your pool.`,
+          `Saved — ${data.accommodation.roomsAssigned} room(s) assigned.`,
         );
       } else {
         setMessage("Saved stay details.");
@@ -245,8 +255,9 @@ export function AccommodationManager({
           <h2 className="font-display text-2xl text-cream">Accommodation</h2>
         </div>
         <p className="mt-1 font-body text-sm text-muted">
-          Set your total rooms. When you mark a request confirmed, those rooms
-          are assigned from the pool.
+          Set your total rooms. Confirming a request does not assign rooms —
+          enter a count in “Rooms to assign” when you want to allocate from the
+          pool.
         </p>
       </div>
 
@@ -444,7 +455,7 @@ export function AccommodationManager({
                       >
                         <option value="pending">Pending</option>
                         <option value="confirmed">
-                          Confirmed — assign rooms
+                          Confirmed — we can provide
                         </option>
                         <option value="declined">
                           Declined — cannot arrange
@@ -453,26 +464,32 @@ export function AccommodationManager({
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-                        Rooms to assign
+                        Rooms to assign (manual)
                       </span>
                       <input
                         type="number"
-                        min={1}
+                        min={0}
                         max={30}
                         className={fieldClass}
-                        value={draft.roomsAssigned ?? item.rooms}
+                        value={draft.roomsAssigned === "" || draft.roomsAssigned == null
+                          ? ""
+                          : draft.roomsAssigned}
                         onChange={(e) =>
                           setDraft(item.id, {
-                            roomsAssigned: Number(e.target.value) || 1,
+                            roomsAssigned:
+                              e.target.value === ""
+                                ? ""
+                                : Number(e.target.value),
                           })
                         }
+                        placeholder={`Guest asked for ${item.rooms}`}
                         disabled={draft.status !== "confirmed"}
                       />
                       <span className="mt-1 block font-body text-[11px] text-muted">
-                        Guest asked for {item.rooms}. Available now:{" "}
+                        Leave blank to confirm without assigning. Available:{" "}
                         {inventory.available}
                         {item.status === "confirmed" && item.roomsAssigned
-                          ? ` (+${item.roomsAssigned} already on this request)`
+                          ? ` · currently assigned here: ${item.roomsAssigned}`
                           : ""}
                         .
                       </span>

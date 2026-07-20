@@ -21,7 +21,7 @@ const updateSchema = z.object({
   email: z.string().trim().email().optional().or(z.literal("")),
   sendEmail: z.boolean().optional().default(false),
   /** Rooms to assign from the pool when confirming (defaults to guest request) */
-  roomsAssigned: z.coerce.number().int().min(1).max(30).optional(),
+  roomsAssigned: z.coerce.number().int().min(0).max(30).optional(),
 });
 
 export async function PUT(request: Request, { params }: Params) {
@@ -40,19 +40,24 @@ export async function PUT(request: Request, { params }: Params) {
     }
 
     const now = new Date().toISOString();
-    const updated = await updateAccommodation(id, {
+    const patch: Parameters<typeof updateAccommodation>[1] = {
       status: parsed.data.status,
       hotelName: parsed.data.hotelName || undefined,
       hotelAddress: parsed.data.hotelAddress || undefined,
       roomDetails: parsed.data.roomDetails || undefined,
       adminNotes: parsed.data.adminNotes || undefined,
       email: parsed.data.email || undefined,
-      roomsAssigned: parsed.data.roomsAssigned,
       confirmedAt:
         parsed.data.status === "confirmed" || parsed.data.status === "declined"
           ? now
           : undefined,
-    });
+    };
+    // Only assign when the admin explicitly sends a room count — never auto
+    if (typeof parsed.data.roomsAssigned === "number") {
+      patch.roomsAssigned = parsed.data.roomsAssigned;
+    }
+
+    const updated = await updateAccommodation(id, patch);
 
     if (!updated) {
       return NextResponse.json({ error: "Request not found" }, { status: 404 });

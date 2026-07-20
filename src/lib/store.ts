@@ -132,11 +132,7 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     email: item.email || item.authEmail || "",
     status: item.status || ("pending" as const),
     roomsAssigned:
-      typeof item.roomsAssigned === "number"
-        ? item.roomsAssigned
-        : item.status === "confirmed"
-          ? item.rooms
-          : undefined,
+      typeof item.roomsAssigned === "number" ? item.roomsAssigned : undefined,
   }));
 
   const admins = (raw.admins ?? []).map((admin) => ({
@@ -486,11 +482,11 @@ export function computeRoomInventory(
 ): RoomInventory {
   const assigned = accommodations.reduce((sum, item) => {
     if (item.status !== "confirmed") return sum;
-    const rooms =
-      typeof item.roomsAssigned === "number"
-        ? item.roomsAssigned
-        : item.rooms || 0;
-    return sum + Math.max(0, rooms);
+    // Only count rooms that were manually assigned — never guest request size
+    if (typeof item.roomsAssigned !== "number" || item.roomsAssigned <= 0) {
+      return sum;
+    }
+    return sum + item.roomsAssigned;
   }, 0);
   const total = Math.max(0, Math.floor(totalRooms || 0));
   return {
@@ -550,37 +546,35 @@ export async function updateAccommodation(
   if (!existing) return null;
 
   const nextStatus = patch.status ?? existing.status;
-  let roomsAssigned = existing.roomsAssigned;
+  let roomsAssigned =
+    typeof existing.roomsAssigned === "number"
+      ? existing.roomsAssigned
+      : undefined;
 
-  if (nextStatus === "confirmed") {
-    const assignCount =
-      typeof patch.roomsAssigned === "number"
-        ? patch.roomsAssigned
-        : typeof existing.roomsAssigned === "number"
+  // Confirm alone does not auto-assign. Only assign when roomsAssigned is a number.
+  if (typeof patch.roomsAssigned === "number") {
+    if (nextStatus === "confirmed" && patch.roomsAssigned > 0) {
+      const inventory = await getRoomInventory();
+      const currentlyHolding =
+        existing.status === "confirmed" &&
+        typeof existing.roomsAssigned === "number"
           ? existing.roomsAssigned
-          : existing.rooms;
+          : 0;
+      const availableForThis = inventory.available + currentlyHolding;
 
-    const inventory = await getRoomInventory();
-    const currentlyHolding =
-      existing.status === "confirmed"
-        ? typeof existing.roomsAssigned === "number"
-          ? existing.roomsAssigned
-          : existing.rooms
-        : 0;
-    const availableForThis = inventory.available + currentlyHolding;
-
-    if (assignCount > availableForThis) {
-      throw new Error(
-        `Not enough rooms left. Available: ${availableForThis}, needed: ${assignCount}. Increase total rooms or free another confirmation.`,
-      );
+      if (patch.roomsAssigned > availableForThis) {
+        throw new Error(
+          `Not enough rooms left. Available: ${availableForThis}, needed: ${patch.roomsAssigned}. Increase total rooms or free another assignment.`,
+        );
+      }
+      roomsAssigned = patch.roomsAssigned;
+    } else {
+      roomsAssigned = undefined;
     }
-    roomsAssigned = assignCount;
-  } else if (nextStatus === "pending" || nextStatus === "declined") {
-    roomsAssigned = undefined;
   }
 
-  if (typeof patch.roomsAssigned === "number" && nextStatus === "confirmed") {
-    roomsAssigned = patch.roomsAssigned;
+  if (nextStatus === "pending" || nextStatus === "declined") {
+    roomsAssigned = undefined;
   }
 
   const updated: AccommodationRequest = {
@@ -591,7 +585,6 @@ export async function updateAccommodation(
     roomsAssigned,
   };
 
-  // Clear roomsAssigned when not confirmed
   if (nextStatus !== "confirmed") {
     updated.roomsAssigned = undefined;
   }
