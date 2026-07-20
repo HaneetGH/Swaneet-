@@ -10,6 +10,7 @@ import {
   addAccommodation,
   listAccommodations,
   recordGuestLogin,
+  upsertAccommodationForGuest,
 } from "@/lib/store";
 import { notifyOwner } from "@/lib/email";
 
@@ -70,30 +71,48 @@ export async function POST(request: Request) {
       }
     }
 
-    const requestEntry = await addAccommodation({
-      name: parsed.data.name,
-      phone: parsed.data.phone || guest?.phone || "",
-      email: email || guest?.email || "",
-      people: parsed.data.people,
-      rooms: parsed.data.rooms,
-      checkIn: parsed.data.checkIn,
-      checkOut: parsed.data.checkOut,
-      notes: parsed.data.notes?.trim() || undefined,
-      contactFamily: parsed.data.contactFamily?.trim() || undefined,
-      rsvpId: parsed.data.rsvpId,
-      authUid: guest?.uid,
-      authEmail: guest?.email,
-      authPhone: guest?.phone,
-      status: "pending",
-    });
+    let requestEntry;
+    let updated = false;
 
     if (guest) {
+      const result = await upsertAccommodationForGuest(
+        { uid: guest.uid, email: guest.email, phone: guest.phone },
+        {
+          name: parsed.data.name,
+          phone: parsed.data.phone || guest.phone || "",
+          email: email || guest.email || "",
+          people: parsed.data.people,
+          rooms: parsed.data.rooms,
+          checkIn: parsed.data.checkIn,
+          checkOut: parsed.data.checkOut,
+          notes: parsed.data.notes?.trim() || undefined,
+          contactFamily: parsed.data.contactFamily?.trim() || undefined,
+          rsvpId: parsed.data.rsvpId,
+          status: "pending",
+        },
+      );
+      requestEntry = result.accommodation;
+      updated = result.updated;
       await recordGuestLogin(guest, "stay").catch(() => undefined);
+    } else {
+      requestEntry = await addAccommodation({
+        name: parsed.data.name,
+        phone: parsed.data.phone,
+        email,
+        people: parsed.data.people,
+        rooms: parsed.data.rooms,
+        checkIn: parsed.data.checkIn,
+        checkOut: parsed.data.checkOut,
+        notes: parsed.data.notes?.trim() || undefined,
+        contactFamily: parsed.data.contactFamily?.trim() || undefined,
+        rsvpId: parsed.data.rsvpId,
+        status: "pending",
+      });
     }
 
     await notifyOwner({
-      title: "New stay request",
-      summary: `${requestEntry.name} requested accommodation.`,
+      title: updated ? "Stay request updated" : "New stay request",
+      summary: `${requestEntry.name} ${updated ? "updated their" : "requested"} accommodation.`,
       details: [
         `Name: ${requestEntry.name}`,
         `Phone: ${requestEntry.phone}`,
@@ -105,7 +124,10 @@ export async function POST(request: Request) {
       ],
     }).catch((error) => console.error("Stay owner notify failed", error));
 
-    return NextResponse.json({ accommodation: requestEntry }, { status: 201 });
+    return NextResponse.json(
+      { accommodation: requestEntry, updated },
+      { status: updated ? 200 : 201 },
+    );
   } catch (error) {
     console.error("POST /api/accommodation failed", error);
     const message =

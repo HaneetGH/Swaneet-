@@ -320,6 +320,40 @@ export async function listRsvps(): Promise<RsvpEntry[]> {
   return store.rsvps;
 }
 
+function matchesGuest(
+  entry: { authUid?: string; authEmail?: string; email?: string },
+  uid: string,
+  email?: string,
+) {
+  if (entry.authUid && entry.authUid === uid) return true;
+  const needle = email?.trim().toLowerCase();
+  if (!needle) return false;
+  const hay = (entry.authEmail || entry.email || "").trim().toLowerCase();
+  return Boolean(hay && hay === needle);
+}
+
+export async function findRsvpByGuest(
+  uid: string,
+  email?: string,
+): Promise<RsvpEntry | null> {
+  const rsvps = await listRsvps();
+  return (
+    rsvps.find((item) => matchesGuest(item, uid, email)) ||
+    null
+  );
+}
+
+export async function findAccommodationByGuest(
+  uid: string,
+  email?: string,
+): Promise<AccommodationRequest | null> {
+  const stays = await listAccommodations();
+  return (
+    stays.find((item) => matchesGuest(item, uid, email)) ||
+    null
+  );
+}
+
 export async function addRsvp(
   entry: Omit<RsvpEntry, "id" | "createdAt">,
 ): Promise<RsvpEntry> {
@@ -338,6 +372,55 @@ export async function addRsvp(
   store.rsvps = [rsvp, ...store.rsvps];
   await writeStore(store);
   return rsvp;
+}
+
+export async function updateRsvp(
+  id: string,
+  patch: Partial<RsvpEntry>,
+): Promise<RsvpEntry | null> {
+  const existing = (await listRsvps()).find((item) => item.id === id);
+  if (!existing) return null;
+
+  const updated: RsvpEntry = {
+    ...existing,
+    ...patch,
+    id,
+    createdAt: existing.createdAt,
+  };
+
+  if (hasDatabase()) {
+    await upsertRsvpToDb(updated);
+    return updated;
+  }
+
+  const store = await readStore();
+  const index = store.rsvps.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+  store.rsvps[index] = updated;
+  await writeStore(store);
+  return updated;
+}
+
+/** Create or update RSVP for the same Google guest (one RSVP per account). */
+export async function upsertRsvpForGuest(
+  guest: { uid: string; email: string },
+  entry: Omit<RsvpEntry, "id" | "createdAt" | "authUid" | "authEmail" | "email">,
+): Promise<{ rsvp: RsvpEntry; updated: boolean }> {
+  const existing = await findRsvpByGuest(guest.uid, guest.email);
+  const payload = {
+    ...entry,
+    email: guest.email,
+    authUid: guest.uid,
+    authEmail: guest.email,
+  };
+
+  if (existing) {
+    const rsvp = await updateRsvp(existing.id, payload);
+    return { rsvp: rsvp!, updated: true };
+  }
+
+  const rsvp = await addRsvp(payload);
+  return { rsvp, updated: false };
 }
 
 export async function deleteRsvp(id: string): Promise<boolean> {
@@ -413,6 +496,53 @@ export async function updateAccommodation(
   };
   await writeStore(store);
   return store.accommodations[index];
+}
+
+/** Create or update stay for the same Google guest (one stay request per account). */
+export async function upsertAccommodationForGuest(
+  guest: { uid: string; email?: string; phone?: string },
+  entry: Omit<
+    AccommodationRequest,
+    "id" | "createdAt" | "authUid" | "authEmail" | "authPhone"
+  > & { status?: AccommodationRequest["status"] },
+): Promise<{ accommodation: AccommodationRequest; updated: boolean }> {
+  const existing = await findAccommodationByGuest(guest.uid, guest.email);
+  const email = entry.email || guest.email || "";
+
+  if (existing) {
+    // Guest edits keep status pending unless family already confirmed/declined —
+    // only overwrite guest-owned fields; keep hotel confirmation details.
+    const accommodation = await updateAccommodation(existing.id, {
+      name: entry.name,
+      phone: entry.phone,
+      email,
+      people: entry.people,
+      rooms: entry.rooms,
+      checkIn: entry.checkIn,
+      checkOut: entry.checkOut,
+      notes: entry.notes,
+      contactFamily: entry.contactFamily,
+      rsvpId: entry.rsvpId ?? existing.rsvpId,
+      authUid: guest.uid,
+      authEmail: guest.email,
+      authPhone: guest.phone,
+      // If family already decided, keep that status; otherwise stay pending
+      status:
+        existing.status === "confirmed" || existing.status === "declined"
+          ? existing.status
+          : entry.status || "pending",
+    });
+    return { accommodation: accommodation!, updated: true };
+  }
+
+  const accommodation = await addAccommodation({
+    ...entry,
+    email,
+    authUid: guest.uid,
+    authEmail: guest.email,
+    authPhone: guest.phone,
+  });
+  return { accommodation, updated: false };
 }
 
 export async function deleteAccommodation(id: string): Promise<boolean> {

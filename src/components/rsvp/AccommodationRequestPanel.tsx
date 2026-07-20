@@ -1,7 +1,7 @@
 "use client";
 
 import type { User } from "firebase/auth";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { wedding } from "@/data/wedding";
 import {
   GuestAuthPanel,
@@ -32,6 +32,7 @@ export function AccommodationRequestPanel({
   const [user, setUser] = useState<User | null>(null);
   const [emailVerified, setEmailVerified] = useState(false);
   const [emailFromAuth, setEmailFromAuth] = useState(false);
+  const [hasExisting, setHasExisting] = useState(false);
 
   const [name, setName] = useState(defaultName);
   const [phone, setPhone] = useState("");
@@ -49,6 +50,7 @@ export function AccommodationRequestPanel({
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [wasUpdate, setWasUpdate] = useState(false);
 
   const resetEmailGate = () => {
     setEmailVerified(false);
@@ -73,6 +75,54 @@ export function AccommodationRequestPanel({
     },
     [defaultName],
   );
+
+  useEffect(() => {
+    if (!user) {
+      setHasExisting(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getGuestIdToken();
+        if (!token || cancelled) return;
+        const res = await fetch("/api/rsvp/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as {
+          accommodation?: {
+            name?: string;
+            phone?: string;
+            email?: string;
+            people?: number;
+            rooms?: number;
+            checkIn?: string;
+            checkOut?: string;
+            notes?: string;
+            contactFamily?: string;
+          } | null;
+        };
+        if (cancelled || !data.accommodation) return;
+        setHasExisting(true);
+        const stay = data.accommodation;
+        if (stay.name) setName(stay.name);
+        if (stay.phone) setPhone(stay.phone);
+        if (stay.email) setEmail(stay.email);
+        if (stay.people) setPeople(stay.people);
+        if (stay.rooms) setRooms(stay.rooms);
+        if (stay.checkIn) setCheckIn(stay.checkIn);
+        if (stay.checkOut) setCheckOut(stay.checkOut);
+        if (stay.notes) setNotes(stay.notes);
+        if (stay.contactFamily) setContactFamily(stay.contactFamily);
+      } catch {
+        // ignore — blank form is fine
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const sendEmailCode = async () => {
     setEmailBusy(true);
@@ -161,7 +211,10 @@ export function AccommodationRequestPanel({
           rsvpId,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        updated?: boolean;
+      };
       if (!res.ok) {
         setSubmitError(data.error || "Could not send accommodation request");
         if (res.status === 401) {
@@ -170,6 +223,8 @@ export function AccommodationRequestPanel({
         }
         return;
       }
+      setWasUpdate(Boolean(data.updated));
+      setHasExisting(true);
       setSuccess(true);
     } catch {
       setSubmitError("Could not send accommodation request");
@@ -181,21 +236,38 @@ export function AccommodationRequestPanel({
   if (success) {
     return (
       <div className="rounded-2xl border border-gold/25 bg-gold/10 px-5 py-6 text-center">
-        <p className="font-display text-2xl text-cream">Stay request received</p>
+        <p className="font-display text-2xl text-cream">
+          {wasUpdate ? "Stay request updated" : "Stay request received"}
+        </p>
         <p className="mt-2 font-body text-sm text-muted">
-          The family will confirm accommodation details by email soon.
+          The family will confirm accommodation details by email soon. Sign in
+          again anytime to change your request.
         </p>
         {onDone ? (
           <Button type="button" variant="outline" className="mt-5" onClick={onDone}>
             Done
           </Button>
-        ) : null}
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-5"
+            onClick={() => setSuccess(false)}
+          >
+            Edit stay request
+          </Button>
+        )}
       </div>
     );
   }
 
   if (!user) {
-    return <GuestAuthPanel onAuthed={onAuthed} />;
+    return (
+      <GuestAuthPanel
+        onAuthed={onAuthed}
+        subtitle="Sign in with Google to share stay details. Use the same account later to update your request."
+      />
+    );
   }
 
   if (!emailVerified) {
@@ -304,6 +376,11 @@ export function AccommodationRequestPanel({
         <p className="mt-1 font-body text-sm text-muted">
           {email} · tell us how many people need a stay.
         </p>
+        {hasExisting ? (
+          <p className="mt-2 font-body text-xs text-gold-soft">
+            We found your earlier stay request — edit and save to update.
+          </p>
+        ) : null}
       </div>
 
       <div>
@@ -451,7 +528,13 @@ export function AccommodationRequestPanel({
       ) : null}
 
       <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? "Sending…" : "Submit stay request"}
+        {submitting
+          ? hasExisting
+            ? "Saving…"
+            : "Sending…"
+          : hasExisting
+            ? "Update stay request"
+            : "Submit stay request"}
       </Button>
 
       <button

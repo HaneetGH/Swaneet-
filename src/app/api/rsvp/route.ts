@@ -4,10 +4,11 @@ import { requirePermission } from "@/lib/auth";
 import { notifyOwner } from "@/lib/email";
 import { verifyBearerToken } from "@/lib/firebase/admin";
 import {
-  addAccommodation,
-  addRsvp,
+  findAccommodationByGuest,
   listRsvps,
   recordGuestLogin,
+  upsertAccommodationForGuest,
+  upsertRsvpForGuest,
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -83,47 +84,60 @@ export async function POST(request: Request) {
       );
     }
 
-    const rsvp = await addRsvp({
-      name: parsed.data.name.trim(),
-      guests: parsed.data.guests,
-      attendance: parsed.data.attendance,
-      meal: parsed.data.meal,
-      notes: parsed.data.notes?.trim() || undefined,
-      contactFamily: parsed.data.contactFamily?.trim() || undefined,
-      needsAccommodation: parsed.data.needsAccommodation,
-      email: guest.email,
-      authUid: guest.uid,
-      authEmail: guest.email,
-    });
+    const { rsvp, updated } = await upsertRsvpForGuest(
+      { uid: guest.uid, email: guest.email },
+      {
+        name: parsed.data.name.trim(),
+        guests: parsed.data.guests,
+        attendance: parsed.data.attendance,
+        meal: parsed.data.meal,
+        notes: parsed.data.notes?.trim() || undefined,
+        contactFamily: parsed.data.contactFamily?.trim() || undefined,
+        needsAccommodation: parsed.data.needsAccommodation,
+      },
+    );
 
     await recordGuestLogin(guest, "rsvp").catch(() => undefined);
 
     let accommodation = null;
+    let stayUpdated = false;
+
     if (parsed.data.needsAccommodation && parsed.data.stay) {
-      accommodation = await addAccommodation({
-        name: parsed.data.name.trim(),
-        phone: parsed.data.stay.phone,
-        email: guest.email,
-        people: parsed.data.stay.people,
-        rooms: parsed.data.stay.rooms,
-        checkIn: parsed.data.stay.checkIn,
-        checkOut: parsed.data.stay.checkOut,
-        notes: parsed.data.stay.notes?.trim() || undefined,
-        contactFamily: parsed.data.contactFamily?.trim() || undefined,
-        rsvpId: rsvp.id,
-        authUid: guest.uid,
-        authEmail: guest.email,
-        status: "pending",
-      });
+      const stayResult = await upsertAccommodationForGuest(
+        { uid: guest.uid, email: guest.email },
+        {
+          name: parsed.data.name.trim(),
+          phone: parsed.data.stay.phone,
+          email: guest.email,
+          people: parsed.data.stay.people,
+          rooms: parsed.data.stay.rooms,
+          checkIn: parsed.data.stay.checkIn,
+          checkOut: parsed.data.stay.checkOut,
+          notes: parsed.data.stay.notes?.trim() || undefined,
+          contactFamily: parsed.data.contactFamily?.trim() || undefined,
+          rsvpId: rsvp.id,
+          status: "pending",
+        },
+      );
+      accommodation = stayResult.accommodation;
+      stayUpdated = stayResult.updated;
       await recordGuestLogin(guest, "stay").catch(() => undefined);
+    } else {
+      // Still return existing stay if they previously requested one
+      accommodation = await findAccommodationByGuest(guest.uid, guest.email);
     }
 
+    const action = updated ? "updated" : "new";
     await notifyOwner({
       title: parsed.data.needsAccommodation
-        ? "New RSVP + stay request"
-        : "New RSVP",
-      summary: `${rsvp.name} submitted an RSVP${
-        parsed.data.needsAccommodation ? " and needs accommodation" : ""
+        ? updated
+          ? "RSVP + stay updated"
+          : "New RSVP + stay request"
+        : updated
+          ? "RSVP updated"
+          : "New RSVP",
+      summary: `${rsvp.name} ${updated ? "updated their" : "submitted an"} RSVP${
+        parsed.data.needsAccommodation ? " and accommodation" : ""
       }.`,
       details: [
         `Name: ${rsvp.name}`,
@@ -133,7 +147,7 @@ export async function POST(request: Request) {
         rsvp.meal ? `Meal: ${rsvp.meal}` : "",
         rsvp.needsAccommodation ? "Needs accommodation: yes" : "Needs accommodation: no",
         accommodation
-          ? `Stay: ${accommodation.people} people, ${accommodation.rooms} room(s), ${accommodation.checkIn} → ${accommodation.checkOut}`
+          ? `Stay: ${accommodation.people} people, ${accommodation.rooms} room(s), ${accommodation.checkIn} → ${accommodation.checkOut}${stayUpdated ? " (updated)" : ""}`
           : "",
         accommodation?.phone ? `Phone: ${accommodation.phone}` : "",
         rsvp.notes ? `Notes: ${rsvp.notes}` : "",
@@ -141,7 +155,16 @@ export async function POST(request: Request) {
       ],
     }).catch((error) => console.error("RSVP owner notify failed", error));
 
-    return NextResponse.json({ rsvp, accommodation }, { status: 201 });
+    return NextResponse.json(
+      {
+        rsvp,
+        accommodation,
+        updated,
+        stayUpdated,
+        action,
+      },
+      { status: updated ? 200 : 201 },
+    );
   } catch (error) {
     console.error("POST /api/rsvp failed", error);
     const message =

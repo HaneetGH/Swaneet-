@@ -133,6 +133,9 @@ export function RSVP() {
   const [message, setMessage] = useState<ThankYouMessage | null>(null);
   const [staySubmitted, setStaySubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [hasExisting, setHasExisting] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(false);
+  const [wasUpdate, setWasUpdate] = useState(false);
 
   const onAuthed = useCallback((next: User) => {
     setUser(next);
@@ -160,12 +163,99 @@ export function RSVP() {
     },
   });
 
-  // Prefill name from Google once signed in
+  // Prefill from Google + load prior RSVP/stay when signing in again
   useEffect(() => {
-    if (user?.displayName) {
-      setValue("name", user.displayName);
+    if (!user) {
+      setHasExisting(false);
+      return;
     }
-  }, [user, setValue]);
+
+    let cancelled = false;
+    (async () => {
+      setLoadingExisting(true);
+      try {
+        const token = await getGuestIdToken();
+        if (!token || cancelled) return;
+
+        const res = await fetch("/api/rsvp/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) {
+          if (user.displayName) setValue("name", user.displayName);
+          return;
+        }
+
+        const data = (await res.json()) as {
+          rsvp?: {
+            name?: string;
+            guests?: number;
+            attendance?: "yes" | "no" | "maybe";
+            meal?: "vegetarian" | "non-vegetarian" | "no-preference";
+            notes?: string;
+            contactFamily?: string;
+            needsAccommodation?: boolean;
+          } | null;
+          accommodation?: {
+            phone?: string;
+            people?: number;
+            rooms?: number;
+            checkIn?: string;
+            checkOut?: string;
+            notes?: string;
+          } | null;
+        };
+
+        if (cancelled) return;
+
+        if (data.rsvp) {
+          setHasExisting(true);
+          reset({
+            name: data.rsvp.name || user.displayName || "",
+            guests: data.rsvp.guests || 1,
+            attendance: data.rsvp.attendance || "yes",
+            meal: data.rsvp.meal || "no-preference",
+            notes: data.rsvp.notes || "",
+            contactFamily: data.rsvp.contactFamily || "",
+            needsAccommodation:
+              data.rsvp.needsAccommodation || data.accommodation
+                ? "yes"
+                : "no",
+            stayPhone: data.accommodation?.phone || "",
+            stayPeople: data.accommodation?.people || data.rsvp.guests || 1,
+            stayRooms: data.accommodation?.rooms || 1,
+            stayCheckIn: data.accommodation?.checkIn || "2026-08-12",
+            stayCheckOut: data.accommodation?.checkOut || "2026-08-13",
+            stayNotes: data.accommodation?.notes || "",
+          });
+        } else if (user.displayName) {
+          setHasExisting(Boolean(data.accommodation));
+          setValue("name", user.displayName);
+          if (data.accommodation) {
+            setValue("needsAccommodation", "yes");
+            setValue("stayPhone", data.accommodation.phone || "");
+            setValue("stayPeople", data.accommodation.people || 1);
+            setValue("stayRooms", data.accommodation.rooms || 1);
+            setValue("stayCheckIn", data.accommodation.checkIn || "2026-08-12");
+            setValue(
+              "stayCheckOut",
+              data.accommodation.checkOut || "2026-08-13",
+            );
+            setValue("stayNotes", data.accommodation.notes || "");
+          }
+        }
+      } catch {
+        if (!cancelled && user.displayName) {
+          setValue("name", user.displayName);
+        }
+      } finally {
+        if (!cancelled) setLoadingExisting(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, reset, setValue]);
 
   const needsAccommodation = watch("needsAccommodation");
   const guests = watch("guests");
@@ -215,6 +305,7 @@ export function RSVP() {
       const payload = (await res.json().catch(() => ({}))) as {
         error?: string;
         accommodation?: unknown;
+        updated?: boolean;
       };
       if (!res.ok) {
         setSubmitError(payload.error || "Could not send your RSVP. Please try again.");
@@ -224,20 +315,11 @@ export function RSVP() {
         }
         return;
       }
+      setWasUpdate(Boolean(payload.updated));
       setMessage(pickMessage(data.attendance));
-      setStaySubmitted(Boolean(payload.accommodation));
+      setStaySubmitted(Boolean(payload.accommodation) && data.needsAccommodation === "yes");
+      setHasExisting(true);
       setSuccess(true);
-      reset({
-        attendance: "yes",
-        meal: "no-preference",
-        guests: 1,
-        needsAccommodation: "no",
-        stayPeople: 1,
-        stayRooms: 1,
-        stayCheckIn: "2026-08-12",
-        stayCheckOut: "2026-08-13",
-        name: user?.displayName || "",
-      });
     } catch {
       setSubmitError("Could not send your RSVP. Please try again.");
     }
@@ -282,10 +364,14 @@ export function RSVP() {
                 </p>
                 {staySubmitted ? (
                   <p className="mt-4 max-w-sm font-body text-sm text-gold-soft">
-                    Your stay request was received too — the family will confirm
-                    by email.
+                    Your stay request was {wasUpdate ? "updated" : "received"} —
+                    the family will confirm by email.
                   </p>
                 ) : null}
+                <p className="mt-4 max-w-sm font-body text-xs text-muted">
+                  Need to change something? Sign in with the same Google account
+                  anytime to update your RSVP or stay.
+                </p>
                 <Button
                   type="button"
                   variant="outline"
@@ -296,7 +382,7 @@ export function RSVP() {
                     setStaySubmitted(false);
                   }}
                 >
-                  Submit another
+                  {hasExisting ? "Edit your reply" : "Submit another"}
                 </Button>
               </motion.div>
             ) : !user ? (
@@ -309,7 +395,7 @@ export function RSVP() {
                 <GuestAuthPanel
                   onAuthed={onAuthed}
                   title="RSVP with Google"
-                  subtitle="Sign in with Gmail so we can save your reply and ask clearly if you need a stay — no need to cram everything into Notes."
+                  subtitle="Sign in with Gmail to RSVP. Come back anytime with the same account to update your reply or stay request."
                   ctaLabel="Continue with Google"
                 />
               </motion.div>
@@ -330,12 +416,23 @@ export function RSVP() {
                   <p className="mt-1 font-body text-sm text-cream">
                     {user.email}
                   </p>
+                  {loadingExisting ? (
+                    <p className="mt-2 font-body text-xs text-muted">
+                      Loading your saved RSVP…
+                    </p>
+                  ) : hasExisting ? (
+                    <p className="mt-2 font-body text-xs text-gold-soft">
+                      We found your earlier reply — edit below and save to
+                      update.
+                    </p>
+                  ) : null}
                   <button
                     type="button"
                     className="mt-2 font-body text-xs text-gold-soft"
                     onClick={async () => {
                       await signOutGuest();
                       setUser(null);
+                      setHasExisting(false);
                     }}
                   >
                     Sign out
@@ -631,14 +728,20 @@ export function RSVP() {
 
                 <Button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || loadingExisting}
                   className="w-full"
                 >
                   {isSubmitting
-                    ? "Sending with love…"
-                    : needsAccommodation === "yes"
-                      ? "Send RSVP + stay request"
-                      : "Send RSVP"}
+                    ? hasExisting
+                      ? "Saving your update…"
+                      : "Sending with love…"
+                    : hasExisting
+                      ? needsAccommodation === "yes"
+                        ? "Update RSVP + stay"
+                        : "Update RSVP"
+                      : needsAccommodation === "yes"
+                        ? "Send RSVP + stay request"
+                        : "Send RSVP"}
                 </Button>
               </motion.form>
             )}
