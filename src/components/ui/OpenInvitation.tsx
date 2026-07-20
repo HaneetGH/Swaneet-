@@ -58,6 +58,15 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
   const [busy, setBusy] = useState(false);
   const scroll = useScrollMetrics();
 
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
   const handleOpen = () => {
     if (busy || phase !== "sealed") return;
     setBusy(true);
@@ -81,7 +90,7 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
     <AnimatePresence>
       {open ? (
         <motion.div
-          className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-[#07060a]"
+          className="fixed inset-0 z-[90] flex items-center justify-center overflow-x-hidden overflow-y-auto overscroll-none bg-[#07060a] py-10"
           exit={{ opacity: 0 }}
           transition={{ duration: 0.9, ease: easeLuxury }}
         >
@@ -146,7 +155,9 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
             {/* Rolled / unrolling scroll */}
             <div className="relative flex w-full justify-center">
               <motion.div
-                className="relative w-full max-w-[340px] md:max-w-[560px]"
+                className={`relative w-full max-w-[340px] md:max-w-[560px] ${
+                  phase === "sealed" ? "pb-[5.5rem] md:pb-28" : ""
+                }`}
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.9, ease: easeLuxury }}
@@ -249,14 +260,14 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
                   <ScrollRod side="bottom" />
                 </motion.div>
 
-                {/* Ribbon / seal across rolled scroll */}
+                {/* Ribbon / seal across rolled scroll — sits in reserved padding, not over the CTA */}
                 <AnimatePresence>
                   {phase === "sealed" ? (
                     <motion.button
                       type="button"
                       aria-label="Unroll the invitation scroll"
                       onClick={handleOpen}
-                      className="absolute left-1/2 top-[34px] z-40 flex -translate-x-1/2 flex-col items-center focus:outline-none md:top-[46px]"
+                      className="absolute left-1/2 top-[34px] z-30 flex -translate-x-1/2 flex-col items-center focus:outline-none md:top-[46px]"
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.6, y: 24 }}
@@ -317,7 +328,7 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.55, delay: 0.2 }}
-                  className="mt-12 text-center md:mt-14"
+                  className="mt-8 text-center md:mt-10"
                 >
                   <p className="font-body text-[11px] tracking-[0.28em] text-muted md:text-sm">
                     Break the seal to unroll
