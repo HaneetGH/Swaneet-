@@ -151,21 +151,23 @@ export async function sendAccommodationEmail(
       ? [
           request.hotelName ? `Hotel / stay: ${request.hotelName}` : null,
           request.hotelAddress ? `Address: ${request.hotelAddress}` : null,
-          request.roomDetails ? `Room details: ${request.roomDetails}` : null,
+          request.roomDetails ? `Room / hotel details:\n${request.roomDetails}` : null,
+          typeof request.roomsAssigned === "number" && request.roomsAssigned > 0
+            ? `Rooms arranged for you: ${request.roomsAssigned}`
+            : `Guests: ${request.people} · Rooms requested: ${request.rooms}`,
           `Check-in: ${formatDate(request.checkIn)}`,
           `Check-out: ${formatDate(request.checkOut)}`,
-          `Guests: ${request.people} · Rooms: ${request.rooms}`,
-          request.adminNotes ? `Notes from family: ${request.adminNotes}` : null,
+          request.adminNotes ? `Message from family:\n${request.adminNotes}` : null,
         ]
           .filter(Boolean)
-          .join("\n")
+          .join("\n\n")
       : [
           `Requested: ${formatDate(request.checkIn)} → ${formatDate(request.checkOut)}`,
           `Guests: ${request.people} · Rooms: ${request.rooms}`,
           request.adminNotes ? `Message: ${request.adminNotes}` : null,
         ]
           .filter(Boolean)
-          .join("\n");
+          .join("\n\n");
 
   const text = [
     `Dear ${request.name},`,
@@ -178,13 +180,23 @@ export async function sendAccommodationEmail(
     "#Swaneet · Haneet & Swarandeep",
   ].join("\n");
 
+  const htmlDetails = details
+    .split("\n\n")
+    .map(
+      (block) =>
+        `<p style="margin: 0 0 12px; white-space: pre-wrap;">${escapeHtml(block)}</p>`,
+    )
+    .join("");
+
   const html = `
     <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
       <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
-      <h1 style="font-weight: 400; font-size: 28px;">Accommodation update</h1>
+      <h1 style="font-weight: 400; font-size: 28px;">Your hotel details</h1>
       <p>Dear ${escapeHtml(request.name)},</p>
       <p>${escapeHtml(statusLine)}</p>
-      <pre style="white-space: pre-wrap; font-family: Georgia, serif; background: #f7f1e6; padding: 16px; border-radius: 12px;">${escapeHtml(details)}</pre>
+      <div style="background: #f7f1e6; padding: 16px 18px; border-radius: 12px; margin: 16px 0;">
+        ${htmlDetails || "<p>Details will follow from the family.</p>"}
+      </div>
       <p>With love,<br/>Haneet &amp; Swarandeep</p>
     </div>
   `;

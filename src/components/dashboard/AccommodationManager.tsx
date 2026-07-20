@@ -212,13 +212,28 @@ export function AccommodationManager({
       }
       if (data.inventory) setInventory(data.inventory);
       if (sendEmail) {
-        setMessage(
+        const hasHotelCopy =
+          Boolean(data.accommodation?.hotelName?.trim()) ||
+          Boolean(data.accommodation?.hotelAddress?.trim()) ||
+          Boolean(data.accommodation?.roomDetails?.trim()) ||
+          Boolean(data.accommodation?.adminNotes?.trim());
+        if (
+          status === "confirmed" &&
+          !hasHotelCopy &&
           data.email?.sent
-            ? data.accommodation?.roomsAssigned
-              ? `Saved — ${data.accommodation.roomsAssigned} room(s) assigned. Email sent.`
-              : "Saved and email sent to the guest."
-            : data.email?.error || "Saved, but email could not be sent.",
-        );
+        ) {
+          setMessage(
+            "Email sent, but hotel details were empty — add hotel info and email again if needed.",
+          );
+        } else {
+          setMessage(
+            data.email?.sent
+              ? data.accommodation?.roomsAssigned
+                ? `Hotel details emailed. ${data.accommodation.roomsAssigned} room(s) assigned.`
+                : "Hotel details emailed to the guest."
+              : data.email?.error || "Saved, but email could not be sent.",
+          );
+        }
       } else if (data.accommodation?.roomsAssigned) {
         setMessage(
           `Saved — ${data.accommodation.roomsAssigned} room(s) assigned.`,
@@ -454,7 +469,7 @@ export function AccommodationManager({
                       >
                         <option value="pending">Pending</option>
                         <option value="confirmed">
-                          Confirmed — we can provide
+                          Approved — send hotel details
                         </option>
                         <option value="declined">
                           Declined — cannot arrange
@@ -470,9 +485,12 @@ export function AccommodationManager({
                         min={0}
                         max={30}
                         className={fieldClass}
-                        value={draft.roomsAssigned === "" || draft.roomsAssigned == null
-                          ? ""
-                          : draft.roomsAssigned}
+                        value={
+                          draft.roomsAssigned === "" ||
+                          draft.roomsAssigned == null
+                            ? ""
+                            : draft.roomsAssigned
+                        }
                         onChange={(e) =>
                           setDraft(item.id, {
                             roomsAssigned:
@@ -485,7 +503,7 @@ export function AccommodationManager({
                         disabled={draft.status !== "confirmed"}
                       />
                       <span className="mt-1 block font-body text-[11px] text-muted">
-                        Leave blank to confirm without assigning. Available:{" "}
+                        Leave blank to approve without assigning. Available:{" "}
                         {inventory.available}
                         {item.status === "confirmed" && item.roomsAssigned
                           ? ` · currently assigned here: ${item.roomsAssigned}`
@@ -495,79 +513,109 @@ export function AccommodationManager({
                     </label>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block sm:col-span-2">
+                  <label className="block">
+                    <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                      Guest email
+                    </span>
+                    <input
+                      type="email"
+                      className={fieldClass}
+                      value={draft.email || ""}
+                      onChange={(e) =>
+                        setDraft(item.id, { email: e.target.value })
+                      }
+                      placeholder="for confirmation email"
+                    />
+                  </label>
+
+                  {draft.status === "confirmed" ? (
+                    <div className="space-y-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-4">
+                      <div>
+                        <p className="font-body text-[10px] uppercase tracking-[0.25em] text-emerald-200/80">
+                          Hotel details for guest email
+                        </p>
+                        <p className="mt-1 font-body text-xs text-muted">
+                          Fill this in, then tap Approve &amp; email. Everything
+                          below is sent to the guest.
+                        </p>
+                      </div>
+
+                      <label className="block">
+                        <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                          Hotel / stay name
+                        </span>
+                        <input
+                          className={fieldClass}
+                          value={draft.hotelName || ""}
+                          onChange={(e) =>
+                            setDraft(item.id, { hotelName: e.target.value })
+                          }
+                          placeholder="e.g. Maple Garden / Sukhmani Resort"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                          Address / directions
+                        </span>
+                        <input
+                          className={fieldClass}
+                          value={draft.hotelAddress || ""}
+                          onChange={(e) =>
+                            setDraft(item.id, { hotelAddress: e.target.value })
+                          }
+                          placeholder="Full address or map link"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                          Hotel &amp; room details
+                        </span>
+                        <textarea
+                          rows={5}
+                          className={cn(fieldClass, "resize-none")}
+                          value={draft.roomDetails || ""}
+                          onChange={(e) =>
+                            setDraft(item.id, { roomDetails: e.target.value })
+                          }
+                          placeholder={
+                            "Room number / type, floor, check-in time, contact person, parking, how to find the room…"
+                          }
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                          Extra message to guest
+                        </span>
+                        <textarea
+                          rows={3}
+                          className={cn(fieldClass, "resize-none")}
+                          value={draft.adminNotes || ""}
+                          onChange={(e) =>
+                            setDraft(item.id, { adminNotes: e.target.value })
+                          }
+                          placeholder="Anything else you want them to know"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <label className="block">
                       <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-                        Guest email
+                        Message to guest
                       </span>
-                      <input
-                        type="email"
-                        className={fieldClass}
-                        value={draft.email || ""}
+                      <textarea
+                        rows={3}
+                        className={cn(fieldClass, "resize-none")}
+                        value={draft.adminNotes || ""}
                         onChange={(e) =>
-                          setDraft(item.id, { email: e.target.value })
+                          setDraft(item.id, { adminNotes: e.target.value })
                         }
-                        placeholder="for confirmation email"
+                        placeholder="Optional note if declining or updating"
                       />
                     </label>
-                  </div>
-
-                  <label className="block">
-                    <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-                      Hotel / stay name
-                    </span>
-                    <input
-                      className={fieldClass}
-                      value={draft.hotelName || ""}
-                      onChange={(e) =>
-                        setDraft(item.id, { hotelName: e.target.value })
-                      }
-                      placeholder="e.g. Maple Garden guest rooms"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-                      Address
-                    </span>
-                    <input
-                      className={fieldClass}
-                      value={draft.hotelAddress || ""}
-                      onChange={(e) =>
-                        setDraft(item.id, { hotelAddress: e.target.value })
-                      }
-                      placeholder="Full address / map pin"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-                      Room details
-                    </span>
-                    <input
-                      className={fieldClass}
-                      value={draft.roomDetails || ""}
-                      onChange={(e) =>
-                        setDraft(item.id, { roomDetails: e.target.value })
-                      }
-                      placeholder="Room type, floor, sharing, etc."
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-                      Message to guest
-                    </span>
-                    <textarea
-                      rows={3}
-                      className={cn(fieldClass, "resize-none")}
-                      value={draft.adminNotes || ""}
-                      onChange={(e) =>
-                        setDraft(item.id, { adminNotes: e.target.value })
-                      }
-                      placeholder="Check-in time, contact person, anything else"
-                    />
-                  </label>
+                  )}
 
                   {item.emailSentAt ? (
                     <p className="font-body text-[11px] text-muted">
@@ -584,7 +632,7 @@ export function AccommodationManager({
                       onClick={() => save(item.id, false)}
                     >
                       <Save size={14} />
-                      {savingId === item.id ? "Saving…" : "Save details"}
+                      {savingId === item.id ? "Saving…" : "Save only"}
                     </Button>
                     <Button
                       type="button"
@@ -592,7 +640,9 @@ export function AccommodationManager({
                       onClick={() => save(item.id, true)}
                     >
                       <Mail size={14} />
-                      Save & email guest
+                      {draft.status === "confirmed"
+                        ? "Approve & email hotel details"
+                        : "Save & email guest"}
                     </Button>
                   </div>
                 </div>
