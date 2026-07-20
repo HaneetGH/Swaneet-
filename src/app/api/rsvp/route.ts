@@ -118,7 +118,7 @@ export async function POST(request: Request) {
       await recordGuestLogin(guest, "stay").catch(() => undefined);
     }
 
-    void notifyOwner({
+    await notifyOwner({
       title: parsed.data.needsAccommodation
         ? "New RSVP + stay request"
         : "New RSVP",

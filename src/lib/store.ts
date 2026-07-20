@@ -143,7 +143,6 @@ export async function appendEmailLog(input: {
   status: "sent" | "failed";
   error?: string;
 }): Promise<EmailLogEntry> {
-  const store = await readStore();
   const entry: EmailLogEntry = {
     id: `email-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     kind: input.kind,
@@ -153,7 +152,15 @@ export async function appendEmailLog(input: {
     error: input.error,
     createdAt: new Date().toISOString(),
   };
-  store.emailLogs = [entry, ...(store.emailLogs || [])].slice(0, MAX_EMAIL_LOGS);
+
+  // Re-read immediately before write so concurrent store updates are less likely
+  // to wipe the newest log entry.
+  const store = await readStore();
+  const existing = store.emailLogs || [];
+  store.emailLogs = [
+    entry,
+    ...existing.filter((item) => item.id !== entry.id),
+  ].slice(0, MAX_EMAIL_LOGS);
   await writeStore(store);
   return entry;
 }

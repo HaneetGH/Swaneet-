@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     const eventName =
       store.events.find((event) => event.id === eventId)?.name || eventId;
 
-    void notifyOwner({
+    await notifyOwner({
       title: "New guest photos",
       summary: `${guest.name || guest.email || "A guest"} shared ${images.length} photo(s) for review.`,
       details: [
