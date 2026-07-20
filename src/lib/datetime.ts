@@ -179,3 +179,16 @@ export function isEventDone(event: {
   if (event.done === false) return false;
   return isEventInPast(event);
 }
+
+/** Google Maps directions link for an event venue. */
+export function eventDirectionsUrl(event: {
+  venue: string;
+  venueDetail?: string;
+  address?: string;
+}): string {
+  const query = [event.venue, event.venueDetail, event.address]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(" ");
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query || "Jagadhri")}`;
+}

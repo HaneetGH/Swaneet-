@@ -102,12 +102,27 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
       : hasPersistedShape
         ? []
         : defaults.events
-    ).map((event) => ({
-      ...event,
-      // Keep unset so past dates can auto-show as done; only persist explicit booleans
-      done:
-        typeof event.done === "boolean" ? event.done : undefined,
-    })),
+    ).map((event) => {
+      const base = {
+        ...event,
+        done: typeof event.done === "boolean" ? event.done : undefined,
+      };
+      // Anand Karaj + Brunch are at the Gurudwara (keep dinner at Maple Garden)
+      const isCeremony =
+        event.id === "anand-karaj" ||
+        event.id === "brunch" ||
+        /^anand\s*karaj$/i.test(event.name) ||
+        /^brunch$/i.test(event.name);
+      if (isCeremony && /maple\s*garden/i.test(event.venue || "")) {
+        return {
+          ...base,
+          venue: "Gurudwara",
+          venueDetail: "",
+          address: event.address || "Buria Road, Jagadhri",
+        };
+      }
+      return base;
+    }),
   );
 
   const accommodations = (raw.accommodations ?? []).map((item) => ({

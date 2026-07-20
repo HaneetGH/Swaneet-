@@ -1,10 +1,22 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Check, Heart, Moon, Sparkles, Star, Sun } from "lucide-react";
+import {
+  Check,
+  ExternalLink,
+  Heart,
+  Moon,
+  Sparkles,
+  Star,
+  Sun,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { wedding } from "@/data/wedding";
-import { isEventDone, sortEventsByDateTime } from "@/lib/datetime";
+import {
+  eventDirectionsUrl,
+  isEventDone,
+  sortEventsByDateTime,
+} from "@/lib/datetime";
 import type { EventIcon, ManagedEvent } from "@/lib/types";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils";
@@ -262,6 +274,27 @@ function EventDetails({
           {event.address}
         </p>
       ) : null}
+
+      <div
+        className={cn(
+          "mt-4",
+          align === "right" && "md:flex md:justify-end",
+        )}
+      >
+        <a
+          href={eventDirectionsUrl(event)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(
+            "inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-[0.2em] text-gold-soft transition hover:text-gold",
+            done && "opacity-80",
+          )}
+        >
+          Get directions
+          <ExternalLink size={12} aria-hidden />
+        </a>
+      </div>
+
       {event.description ? (
         <p
           className={cn(
