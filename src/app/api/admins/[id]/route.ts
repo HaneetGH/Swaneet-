@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireMaster } from "@/lib/auth";
+import { sendTeamUpdateEmail } from "@/lib/email";
 import { deleteAdmin, updateAdmin } from "@/lib/store";
 import type { AdminPermission } from "@/lib/types";
 
@@ -52,7 +53,23 @@ export async function PATCH(request: Request, { params }: Params) {
       return NextResponse.json({ error: "Member not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ admin });
+    let emailSent = false;
+    let emailError: string | undefined;
+    if (admin.email) {
+      const mailed = await sendTeamUpdateEmail({
+        name: admin.name,
+        email: admin.email,
+        permissions: admin.permissions,
+        active: admin.active,
+        newPin: parsed.data.pin,
+      });
+      emailSent = mailed.ok;
+      if (!mailed.ok) emailError = mailed.error;
+    } else {
+      emailError = "Member has no email on file";
+    }
+
+    return NextResponse.json({ admin, emailSent, emailError });
   } catch (error) {
     console.error("PATCH /api/admins/[id] failed", error);
     return NextResponse.json(

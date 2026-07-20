@@ -103,16 +103,26 @@ export function TeamManager() {
         });
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;
+          emailSent?: boolean;
+          emailError?: string;
         };
         if (!res.ok) {
           setError(data.error || "Could not update member");
           return;
         }
-        setNotice(
-          pin.trim()
-            ? "Member updated — share the new PIN with them if you changed it"
-            : "Member role and details updated",
-        );
+        if (data.emailSent) {
+          setNotice(
+            `Member updated — changes emailed to ${email.trim()}${
+              pin.trim() ? " (including the new PIN)" : ""
+            }`,
+          );
+        } else {
+          setError(
+            data.emailError
+              ? `Member updated, but email failed: ${data.emailError}`
+              : "Member updated, but the update email could not be sent.",
+          );
+        }
         resetForm();
         await load();
         return;
@@ -163,11 +173,29 @@ export function TeamManager() {
   };
 
   const onToggleActive = async (admin: SafeAdmin) => {
-    await fetch(`/api/admins/${admin.id}`, {
+    setNotice("");
+    setError("");
+    const res = await fetch(`/api/admins/${admin.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active: !admin.active }),
     });
+    const data = (await res.json().catch(() => ({}))) as {
+      emailSent?: boolean;
+      emailError?: string;
+      error?: string;
+    };
+    if (!res.ok) {
+      setError(data.error || "Could not update member");
+      return;
+    }
+    if (data.emailSent && admin.email) {
+      setNotice(
+        `${admin.name} is now ${admin.active ? "paused" : "active"} — emailed ${admin.email}`,
+      );
+    } else if (data.emailError) {
+      setError(`Status updated, but email failed: ${data.emailError}`);
+    }
     await load();
   };
 
@@ -201,7 +229,7 @@ export function TeamManager() {
         </div>
         <p className="mb-5 font-body text-sm text-muted">
           {isEditing
-            ? "Update name, email, permissions, or set a new PIN. Leave PIN blank to keep the current one."
+            ? "Update name, email, permissions, or set a new PIN. Leave PIN blank to keep the current one — they’ll get an update email either way."
             : "Email is required — they’ll get the dashboard link, PIN, and access list from Swaneet Wedding <noreply@mail.technorapper.com>."}
         </p>
 

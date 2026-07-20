@@ -217,15 +217,24 @@ export async function sendGuestPhotoRejectionEmail(
   return { ok: true };
 }
 
-export async function sendTeamInviteEmail(input: {
-  name: string;
-  email: string;
-  pin: string;
-  permissions: AdminPermission[];
+function dashboardSiteUrl() {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "https://swaneet.vercel.app")
+  );
+}
+
+async function sendResendEmail(input: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = getEmailFrom();
-  const to = input.email.trim().toLowerCase();
+  const to = input.to.trim().toLowerCase();
 
   if (!apiKey) {
     return {
@@ -237,12 +246,41 @@ export async function sendTeamInviteEmail(input: {
     return { ok: false, error: "Email is required" };
   }
 
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : "https://swaneet.vercel.app");
-  const dashboardUrl = `${siteUrl.replace(/\/$/, "")}/dashboard`;
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: input.subject,
+      text: input.text,
+      html: input.html,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      message?: string;
+    };
+    return {
+      ok: false,
+      error: friendlyResendError(body.message, response.status),
+    };
+  }
+
+  return { ok: true };
+}
+
+export async function sendTeamInviteEmail(input: {
+  name: string;
+  email: string;
+  pin: string;
+  permissions: AdminPermission[];
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const dashboardUrl = `${dashboardSiteUrl().replace(/\/$/, "")}/dashboard`;
   const accessList = input.permissions
     .map((p) => PERMISSION_LABELS[p] || p)
     .join(", ");
@@ -276,32 +314,77 @@ export async function sendTeamInviteEmail(input: {
     </div>
   `;
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject: "Your #Swaneet dashboard access",
-      text,
-      html,
-    }),
+  return sendResendEmail({
+    to: input.email,
+    subject: "Your #Swaneet dashboard access",
+    text,
+    html,
   });
+}
 
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as {
-      message?: string;
-    };
-    return {
-      ok: false,
-      error: friendlyResendError(body.message, response.status),
-    };
+/** Notify a team member after their role / PIN / active status changes */
+export async function sendTeamUpdateEmail(input: {
+  name: string;
+  email: string;
+  permissions: AdminPermission[];
+  active: boolean;
+  /** Only include when a new PIN was set */
+  newPin?: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const dashboardUrl = `${dashboardSiteUrl().replace(/\/$/, "")}/dashboard`;
+  const accessList = input.permissions
+    .map((p) => PERMISSION_LABELS[p] || p)
+    .join(", ");
+
+  const statusLine = input.active
+    ? "Your #Swaneet dashboard access was updated."
+    : "Your #Swaneet dashboard access has been paused.";
+
+  const textParts = [
+    `Dear ${input.name},`,
+    "",
+    statusLine,
+    "",
+    `Dashboard: ${dashboardUrl}`,
+    `Access: ${accessList}`,
+    `Status: ${input.active ? "Active" : "Paused"}`,
+  ];
+  if (input.newPin) {
+    textParts.push(`Your new PIN: ${input.newPin}`, "Please keep this PIN private.");
+  } else if (input.active) {
+    textParts.push("Your existing PIN is unchanged.");
   }
+  textParts.push("", "With love,", "#Swaneet · Haneet & Swarandeep");
+  const text = textParts.join("\n");
 
-  return { ok: true };
+  const pinHtml = input.newPin
+    ? `<p><strong>Your new PIN:</strong> ${escapeHtml(input.newPin)}</p><p>Please keep this PIN private.</p>`
+    : input.active
+      ? `<p>Your existing PIN is unchanged.</p>`
+      : "";
+
+  const html = `
+    <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
+      <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
+      <h1 style="font-weight: 400; font-size: 28px;">Access update</h1>
+      <p>Dear ${escapeHtml(input.name)},</p>
+      <p>${escapeHtml(statusLine)}</p>
+      <p><strong>Dashboard:</strong> <a href="${escapeHtml(dashboardUrl)}">${escapeHtml(dashboardUrl)}</a></p>
+      <p><strong>Access:</strong> ${escapeHtml(accessList)}</p>
+      <p><strong>Status:</strong> ${input.active ? "Active" : "Paused"}</p>
+      ${pinHtml}
+      <p>With love,<br/>Haneet &amp; Swarandeep</p>
+    </div>
+  `;
+
+  return sendResendEmail({
+    to: input.email,
+    subject: input.active
+      ? "Your #Swaneet dashboard access was updated"
+      : "Your #Swaneet dashboard access was paused",
+    text,
+    html,
+  });
 }
 
 function escapeHtml(value: string) {
