@@ -2,8 +2,10 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
+import Link from "next/link";
 import { Images, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { wedding } from "@/data/wedding";
 import { sortEventsByDateTime } from "@/lib/datetime";
 import type { GalleryImage, ManagedEvent } from "@/lib/types";
@@ -25,11 +27,76 @@ const fallbackEvents: ManagedEvent[] = sortEventsByDateTime(
   })),
 );
 
-export function Gallery() {
+const PREVIEW_PER_EVENT = 3;
+
+function MediaTile({
+  photo,
+  index,
+  onOpen,
+  sizes,
+}: {
+  photo: GalleryImage;
+  index: number;
+  onOpen?: () => void;
+  sizes: string;
+}) {
+  const content = (
+    <>
+      {photo.kind === "video" ? (
+        <video
+          src={photo.src}
+          className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+          muted
+          playsInline
+          preload="metadata"
+        />
+      ) : (
+        <Image
+          src={photo.src}
+          alt={photo.alt}
+          fill
+          sizes={sizes}
+          className="object-cover transition duration-700 group-hover:scale-105"
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+      <div className="absolute inset-0 gold-border rounded-2xl" />
+    </>
+  );
+
+  if (onOpen) {
+    return (
+      <motion.button
+        type="button"
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-40px" }}
+        transition={{ duration: 0.5, delay: index * 0.05 }}
+        onClick={onOpen}
+        className="group relative aspect-square w-full overflow-hidden rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+        aria-label={`Open ${photo.alt}`}
+      >
+        {content}
+      </motion.button>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-40px" }}
+      transition={{ duration: 0.5, delay: index * 0.05 }}
+      className="group relative aspect-square w-full overflow-hidden rounded-2xl"
+    >
+      {content}
+    </motion.div>
+  );
+}
+
+function useGalleryData() {
   const [gallery, setGallery] = useState<GalleryImage[]>([]);
   const [events, setEvents] = useState<ManagedEvent[]>(fallbackEvents);
-  const [filterEventId, setFilterEventId] = useState("all");
-  const [active, setActive] = useState<GalleryImage | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -50,6 +117,142 @@ export function Gallery() {
     };
   }, []);
 
+  return { gallery, events };
+}
+
+/** Compact homepage preview: up to 3 photos per event + View more */
+export function Gallery() {
+  const { gallery, events } = useGalleryData();
+
+  const groups = useMemo(() => {
+    const result: {
+      key: string;
+      title: string;
+      images: GalleryImage[];
+      total: number;
+    }[] = [];
+    for (const event of events) {
+      const images = gallery.filter((image) => image.eventId === event.id);
+      if (!images.length) continue;
+      result.push({
+        key: event.id,
+        title: event.name,
+        images: images.slice(0, PREVIEW_PER_EVENT),
+        total: images.length,
+      });
+    }
+    const unassigned = gallery.filter((image) => !image.eventId);
+    if (unassigned.length) {
+      result.push({
+        key: "unassigned",
+        title: "More moments",
+        images: unassigned.slice(0, PREVIEW_PER_EVENT),
+        total: unassigned.length,
+      });
+    }
+    return result;
+  }, [events, gallery]);
+
+  return (
+    <section id="gallery" className="section-pad relative">
+      <div className="mx-auto max-w-6xl">
+        <SectionHeading
+          eyebrow="Moments"
+          title="Gallery"
+          subtitle={
+            gallery.length
+              ? "A glimpse from each celebration — open the full gallery for more"
+              : "Photos coming soon — check back later"
+          }
+        />
+
+        {gallery.length === 0 ? (
+          <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">
+            <Images className="mb-4 text-gold/50" size={32} />
+            <p className="font-display text-xl text-cream">No photos yet</p>
+            <p className="mt-2 font-body text-sm text-muted">
+              Share a moment below — approved photos will show up here.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-10 flex justify-center">
+              <Link
+                href="/gallery"
+                className="rounded-full border border-gold/30 bg-gold/10 px-6 py-2.5 font-body text-[10px] uppercase tracking-[0.22em] text-gold-soft transition hover:bg-gold/20"
+              >
+                View all photos
+              </Link>
+            </div>
+
+            <div className="space-y-14">
+              {groups.map((group) => (
+                <div key={group.key}>
+                  <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <p className="font-body text-[10px] uppercase tracking-[0.35em] text-gold/70">
+                        Event
+                      </p>
+                      <h3 className="mt-1 font-display text-3xl text-cream">
+                        {group.title}
+                      </h3>
+                    </div>
+                    {group.total > PREVIEW_PER_EVENT ? (
+                      <Link
+                        href={
+                          group.key === "unassigned"
+                            ? "/gallery"
+                            : `/gallery?event=${group.key}`
+                        }
+                        className="font-body text-[10px] uppercase tracking-[0.2em] text-gold-soft underline-offset-4 hover:underline"
+                      >
+                        View more ({group.total})
+                      </Link>
+                    ) : null}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                    {group.images.map((photo, i) => (
+                      <Link
+                        key={photo.id}
+                        href={
+                          group.key === "unassigned"
+                            ? "/gallery"
+                            : `/gallery?event=${group.key}`
+                        }
+                        className="block"
+                        aria-label={`View ${group.title} gallery`}
+                      >
+                        <MediaTile
+                          photo={photo}
+                          index={i}
+                          sizes="(max-width: 640px) 33vw, 280px"
+                        />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Full gallery page with filters + lightbox */
+export function GalleryFull() {
+  const searchParams = useSearchParams();
+  const eventFromUrl = searchParams.get("event") || "all";
+  const { gallery, events } = useGalleryData();
+  const [filterEventId, setFilterEventId] = useState(eventFromUrl);
+  const [active, setActive] = useState<GalleryImage | null>(null);
+
+  useEffect(() => {
+    setFilterEventId(eventFromUrl);
+  }, [eventFromUrl]);
+
   const visibleEvents = useMemo(
     () =>
       events.filter((event) =>
@@ -60,20 +263,21 @@ export function Gallery() {
 
   const filteredGallery = useMemo(() => {
     if (filterEventId === "all") return gallery;
+    if (filterEventId === "unassigned") {
+      return gallery.filter((image) => !image.eventId);
+    }
     return gallery.filter((image) => image.eventId === filterEventId);
   }, [filterEventId, gallery]);
 
   const groups = useMemo(() => {
     if (filterEventId !== "all") {
       const event = events.find((item) => item.id === filterEventId);
+      const title =
+        filterEventId === "unassigned"
+          ? "More moments"
+          : event?.name || "Photos";
       return filteredGallery.length
-        ? [
-            {
-              key: filterEventId,
-              title: event?.name || "Photos",
-              images: filteredGallery,
-            },
-          ]
+        ? [{ key: filterEventId, title, images: filteredGallery }]
         : [];
     }
 
@@ -96,29 +300,35 @@ export function Gallery() {
   }, [events, filterEventId, filteredGallery, gallery]);
 
   return (
-    <section id="gallery" className="section-pad relative">
+    <section className="section-pad relative">
       <div className="mx-auto max-w-6xl">
         <SectionHeading
           eyebrow="Moments"
-          title="Gallery"
+          title="Full gallery"
           subtitle={
             gallery.length
-              ? "Photos from each celebration"
+              ? "Every photo from the celebrations"
               : "Photos coming soon — check back later"
           }
         />
+
+        <div className="mb-8 flex justify-center">
+          <Link
+            href="/#gallery"
+            className="font-body text-[10px] uppercase tracking-[0.2em] text-muted hover:text-gold-soft"
+          >
+            ← Back to home
+          </Link>
+        </div>
 
         {gallery.length === 0 ? (
           <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">
             <Images className="mb-4 text-gold/50" size={32} />
             <p className="font-display text-xl text-cream">No photos yet</p>
-            <p className="mt-2 font-body text-sm text-muted">
-              Share a moment above — approved photos will show up here.
-            </p>
           </div>
         ) : (
           <>
-            {visibleEvents.length > 1 ? (
+            {visibleEvents.length > 0 ? (
               <div className="mb-10 flex flex-wrap justify-center gap-2">
                 <button
                   type="button"
@@ -152,7 +362,7 @@ export function Gallery() {
 
             <div className="space-y-14">
               {groups.map((group) => (
-                <div key={group.key}>
+                <div key={group.key} id={`event-${group.key}`}>
                   {filterEventId === "all" ? (
                     <div className="mb-5 text-center">
                       <p className="font-body text-[10px] uppercase tracking-[0.35em] text-gold/70">
@@ -164,48 +374,15 @@ export function Gallery() {
                     </div>
                   ) : null}
 
-                  <div className="columns-1 gap-4 sm:columns-2 lg:columns-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
                     {group.images.map((photo, i) => (
-                      <motion.button
+                      <MediaTile
                         key={photo.id}
-                        type="button"
-                        initial={{ opacity: 0, y: 24 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: "-40px" }}
-                        transition={{ duration: 0.6, delay: i * 0.06 }}
-                        onClick={() => setActive(photo)}
-                        className={cn(
-                          "group relative mb-4 block w-full overflow-hidden rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-gold",
-                          photo.aspect === "portrait" && "aspect-[3/4]",
-                          photo.aspect === "landscape" && "aspect-[4/3]",
-                          photo.aspect === "square" && "aspect-square",
-                        )}
-                        aria-label={`Open ${photo.alt}`}
-                      >
-                        {photo.kind === "video" ? (
-                          <video
-                            src={photo.src}
-                            className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
-                            muted
-                            playsInline
-                            preload="metadata"
-                          />
-                        ) : (
-                          <Image
-                            src={photo.src}
-                            alt={photo.alt}
-                            fill
-                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                            className="object-cover transition duration-700 group-hover:scale-105"
-                          />
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-                        <div className="absolute inset-0 gold-border rounded-2xl" />
-                        <span className="absolute bottom-4 left-4 font-body text-[10px] uppercase tracking-[0.25em] text-gold-soft/90">
-                          {photo.kind === "video" ? "Video · " : ""}
-                          {photo.alt}
-                        </span>
-                      </motion.button>
+                        photo={photo}
+                        index={i}
+                        onOpen={() => setActive(photo)}
+                        sizes="(max-width: 640px) 50vw, 33vw"
+                      />
                     ))}
                   </div>
                 </div>
