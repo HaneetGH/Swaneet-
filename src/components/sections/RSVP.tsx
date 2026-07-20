@@ -17,6 +17,7 @@ import { SectionHeading } from "@/components/ui/SectionHeading";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { useInvite } from "@/lib/invite-context";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { cn } from "@/lib/utils";
 
 const schema = z
@@ -130,6 +131,9 @@ function pickMessage(attendance: FormValues["attendance"]): ThankYouMessage {
 
 export function RSVP() {
   const invite = useInvite();
+  const { enabled, ready } = useFeatureFlags();
+  const rsvpOn = enabled("rsvp");
+  const accommodationOn = enabled("accommodation");
   const [user, setUser] = useState<User | null>(null);
   const [success, setSuccess] = useState(false);
   const [message, setMessage] = useState<ThankYouMessage | null>(null);
@@ -334,6 +338,12 @@ export function RSVP() {
     }
   };
 
+  useEffect(() => {
+    if (!accommodationOn) {
+      setValue("needsAccommodation", "no");
+    }
+  }, [accommodationOn, setValue]);
+
   return (
     <section id="rsvp" className="section-pad relative">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(107,29,42,0.18),transparent_55%)]" />
@@ -341,9 +351,21 @@ export function RSVP() {
         <SectionHeading
           eyebrow="Kindly reply"
           title="RSVP"
-          subtitle={`Sign in with Google, then RSVP. Please reply via ${familyList}.`}
+          subtitle={
+            ready && !rsvpOn
+              ? "RSVP is temporarily closed for this invite."
+              : `Sign in with Google, then RSVP. Please reply via ${familyList}.`
+          }
         />
 
+        {ready && !rsvpOn ? (
+          <GlassCard glow>
+            <p className="py-8 text-center font-body text-sm text-muted">
+              The host has turned off RSVP for this page. Please check back
+              later or contact the family.
+            </p>
+          </GlassCard>
+        ) : (
         <GlassCard glow>
           <AnimatePresence mode="wait">
             {success && message ? (
@@ -540,6 +562,7 @@ export function RSVP() {
                   </select>
                 </div>
 
+                {accommodationOn ? (
                 <div className="rounded-2xl border border-gold/25 bg-[#100e14] p-4">
                   <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
                     Accommodation
@@ -693,6 +716,7 @@ export function RSVP() {
                     </div>
                   ) : null}
                 </div>
+                ) : null}
 
                 <div>
                   <label
@@ -756,6 +780,7 @@ export function RSVP() {
             )}
           </AnimatePresence>
         </GlassCard>
+        )}
       </div>
     </section>
   );

@@ -12,6 +12,8 @@ import {
 import { Button } from "@/components/ui/Button";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import type { ManagedEvent } from "@/lib/types";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
 const MAX_FILES = 5;
@@ -31,6 +33,8 @@ function safeFilename(name: string) {
 }
 
 export function GuestPhotoShare() {
+  const { enabled, ready } = useFeatureFlags();
+  const invite = useInvite();
   const inputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<User | null>(null);
   const [events, setEvents] = useState<ManagedEvent[]>([]);
@@ -153,6 +157,7 @@ export function GuestPhotoShare() {
         },
         body: JSON.stringify({
           media,
+          inviteTier: invite?.tier,
           ...(eventMode === "existing"
             ? { eventId }
             : { newEventName: newEventName.trim() }),
@@ -193,10 +198,18 @@ export function GuestPhotoShare() {
         <SectionHeading
           eyebrow="Share"
           title="Add a photo"
-          subtitle="Pick an event (or create one), then upload — we’ll review before it appears"
+          subtitle={
+            ready && !enabled("guest_photos")
+              ? "Photo sharing is temporarily closed for this invite."
+              : "Pick an event (or create one), then upload — we’ll review before it appears"
+          }
         />
 
-        {done ? (
+        {ready && !enabled("guest_photos") ? (
+          <div className="rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-5 py-10 text-center font-body text-sm text-muted">
+            The host has turned off guest photo uploads here.
+          </div>
+        ) : done ? (
           <div className="rounded-2xl border border-gold/25 bg-gold/10 px-5 py-8 text-center">
             <Check className="mx-auto mb-3 text-gold" size={28} />
             <p className="font-display text-2xl text-cream">Thank you</p>

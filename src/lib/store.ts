@@ -28,6 +28,7 @@ import type {
   ContentStore,
   EmailKind,
   EmailLogEntry,
+  FeatureFlags,
   GalleryImage,
   GuestActivityAction,
   GuestLogin,
@@ -38,6 +39,7 @@ import type {
   StayHotel,
 } from "@/lib/types";
 import { sortEventsByDateTime } from "@/lib/datetime";
+import { normalizeFeatureFlags } from "@/lib/feature-flags";
 import { wedding } from "@/data/wedding";
 import { hashPin } from "@/lib/pin";
 import type { VerifiedGuest } from "@/lib/firebase/admin";
@@ -69,6 +71,7 @@ export function defaultStore(): ContentStore {
     hotels: [],
     totalRooms: 0,
     rsvpBanner: {},
+    featureFlags: undefined,
     emailOtps: {},
     admins: [],
     guestLogins: [],
@@ -245,6 +248,7 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     rsvpBanner: {
       imageUrl: raw.rsvpBanner?.imageUrl?.trim() || undefined,
     },
+    featureFlags: normalizeFeatureFlags(raw.featureFlags),
     emailOtps: raw.emailOtps ?? {},
     admins,
     guestLogins,
@@ -439,6 +443,21 @@ export async function setRsvpBannerImage(
   };
   await writeStore(store);
   return store.rsvpBanner;
+}
+
+export async function getFeatureFlags(): Promise<FeatureFlags> {
+  const store = await readStore();
+  return normalizeFeatureFlags(store.featureFlags);
+}
+
+export async function updateFeatureFlags(
+  flags: FeatureFlags,
+): Promise<FeatureFlags> {
+  const store = await readStore();
+  const next = normalizeFeatureFlags(flags);
+  store.featureFlags = next;
+  await writeStore(store);
+  return next;
 }
 
 export async function listEvents(): Promise<ManagedEvent[]> {

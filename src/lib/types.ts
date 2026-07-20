@@ -107,6 +107,20 @@ export type EmailOtpEntry = {
   expiresAt: string;
 };
 
+/** Public surfaces that can have independent feature toggles */
+export type FeatureSite = "main" | "mehfil" | "laavan";
+
+export type FeatureKey =
+  | "rsvp"
+  | "accommodation"
+  | "gallery"
+  | "guest_photos"
+  | "stay_banner";
+
+export type SiteFeatureFlags = Record<FeatureKey, boolean>;
+
+export type FeatureFlags = Record<FeatureSite, SiteFeatureFlags>;
+
 /** Dashboard permissions for team members (master always has all) */
 export type AdminPermission =
   | "rsvp"
@@ -231,6 +245,8 @@ export type ContentStore = {
   rsvpBanner?: {
     imageUrl?: string;
   };
+  /** Master-controlled feature toggles per site */
+  featureFlags?: FeatureFlags;
   /** Pending email verification codes (hashed) */
   emailOtps?: Record<string, EmailOtpEntry>;
   /** Team admins created by master (not including master PIN) */

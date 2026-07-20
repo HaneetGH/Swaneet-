@@ -3,9 +3,11 @@
 import { BedDouble, Heart } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 
 /** Homepage shortcut to RSVP + stay, with optional uploaded image on top */
 export function RsvpStayBanner() {
+  const { enabled, ready } = useFeatureFlags();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,6 +24,10 @@ export function RsvpStayBanner() {
       active = false;
     };
   }, []);
+
+  if (ready && (!enabled("stay_banner") || !enabled("accommodation"))) {
+    return null;
+  }
 
   return (
     <div className="relative z-20 border-b border-gold/25 bg-[#120e16]/95">

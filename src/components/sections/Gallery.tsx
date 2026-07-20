@@ -15,6 +15,7 @@ import { wedding } from "@/data/wedding";
 import { sortEventsByDateTime } from "@/lib/datetime";
 import { trackGuestActivity } from "@/lib/guest-activity";
 import { useInvite } from "@/lib/invite-context";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import {
   getFirebaseAuth,
   isFirebaseClientConfigured,
@@ -282,6 +283,7 @@ function GalleryLoginGate({
 
 /** Compact homepage preview: up to 3 photos per event + View more */
 export function Gallery() {
+  const { enabled, ready: flagsReady } = useFeatureFlags();
   const { user, authReady, onAuthed } = useGuestUser();
   const { gallery, events, loading } = useGalleryData(user);
 
@@ -321,15 +323,25 @@ export function Gallery() {
           eyebrow="Moments"
           title="Gallery"
           subtitle={
-            !user
-              ? "Sign in with Google to view wedding photos"
-              : gallery.length
-                ? "A glimpse from each celebration — open the full gallery for more"
-                : "Photos coming soon — check back later"
+            flagsReady && !enabled("gallery")
+              ? "Gallery is temporarily closed for this invite"
+              : !user
+                ? "Sign in with Google to view wedding photos"
+                : gallery.length
+                  ? "A glimpse from each celebration — open the full gallery for more"
+                  : "Photos coming soon — check back later"
           }
         />
 
-        {!authReady ? (
+        {flagsReady && !enabled("gallery") ? (
+          <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">
+            <Images className="mb-4 text-gold/50" size={32} />
+            <p className="font-display text-xl text-cream">Gallery closed</p>
+            <p className="mt-2 font-body text-sm text-muted">
+              The host has turned off gallery viewing for this page.
+            </p>
+          </div>
+        ) : !authReady ? (
           <p className="text-center font-body text-sm text-muted">Loading…</p>
         ) : !user ? (
           <GalleryLoginGate onAuthed={onAuthed} />
@@ -411,6 +423,7 @@ export function Gallery() {
 export function GalleryFull() {
   const searchParams = useSearchParams();
   const eventFromUrl = searchParams.get("event") || "all";
+  const { enabled, ready: flagsReady } = useFeatureFlags();
   const { user, authReady, onAuthed } = useGuestUser();
   const { gallery, events, loading } = useGalleryData(user);
   const [filterEventId, setFilterEventId] = useState(eventFromUrl);
@@ -473,11 +486,13 @@ export function GalleryFull() {
           eyebrow="Moments"
           title="Full gallery"
           subtitle={
-            !user
-              ? "Sign in with Google to view wedding photos"
-              : gallery.length
-                ? "Every photo from the celebrations"
-                : "Photos coming soon — check back later"
+            flagsReady && !enabled("gallery")
+              ? "Gallery is temporarily closed"
+              : !user
+                ? "Sign in with Google to view wedding photos"
+                : gallery.length
+                  ? "Every photo from the celebrations"
+                  : "Photos coming soon — check back later"
           }
         />
 
@@ -490,7 +505,12 @@ export function GalleryFull() {
           </Link>
         </div>
 
-        {!authReady ? (
+        {flagsReady && !enabled("gallery") ? (
+          <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">
+            <Images className="mb-4 text-gold/50" size={32} />
+            <p className="font-display text-xl text-cream">Gallery closed</p>
+          </div>
+        ) : !authReady ? (
           <p className="text-center font-body text-sm text-muted">
             Loading…
           </p>

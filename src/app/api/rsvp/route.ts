@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { notifyOwner } from "@/lib/email";
+import {
+  featureSiteFromInviteTier,
+  isFeatureEnabled,
+} from "@/lib/feature-flags";
 import { verifyBearerToken } from "@/lib/firebase/admin";
 import {
   findAccommodationByGuest,
+  getFeatureFlags,
   listRsvps,
   recordGuestLogin,
   upsertAccommodationForGuest,
@@ -87,6 +92,23 @@ export async function POST(request: Request) {
       );
     }
 
+    const flags = await getFeatureFlags();
+    const site = featureSiteFromInviteTier(parsed.data.inviteTier);
+    if (!isFeatureEnabled(flags, site, "rsvp")) {
+      return NextResponse.json(
+        { error: "RSVP is turned off for this invite right now" },
+        { status: 403 },
+      );
+    }
+
+    const stayAllowed = isFeatureEnabled(flags, site, "accommodation");
+    if (parsed.data.needsAccommodation && !stayAllowed) {
+      return NextResponse.json(
+        { error: "Accommodation booking is turned off for this invite" },
+        { status: 403 },
+      );
+    }
+
     const { rsvp, updated } = await upsertRsvpForGuest(
       { uid: guest.uid, email: guest.email },
       {
@@ -114,7 +136,7 @@ export async function POST(request: Request) {
     let accommodation = null;
     let stayUpdated = false;
 
-    if (parsed.data.needsAccommodation && parsed.data.stay) {
+    if (parsed.data.needsAccommodation && parsed.data.stay && stayAllowed) {
       const stayResult = await upsertAccommodationForGuest(
         { uid: guest.uid, email: guest.email },
         {

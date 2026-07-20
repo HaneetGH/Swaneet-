@@ -6,8 +6,14 @@ import {
   resolveAccommodationUser,
 } from "@/lib/auth";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
+import { notifyOwner } from "@/lib/email";
+import {
+  featureSiteFromInviteTier,
+  isFeatureEnabled,
+} from "@/lib/feature-flags";
 import {
   addAccommodation,
+  getFeatureFlags,
   getRoomInventory,
   listAccommodations,
   listHotels,
@@ -15,7 +21,6 @@ import {
   setTotalRooms,
   upsertAccommodationForGuest,
 } from "@/lib/store";
-import { notifyOwner } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +114,15 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
+    }
+
+    const flags = await getFeatureFlags();
+    const site = featureSiteFromInviteTier(parsed.data.inviteTier);
+    if (!isFeatureEnabled(flags, site, "accommodation")) {
+      return NextResponse.json(
+        { error: "Accommodation booking is turned off for this invite" },
+        { status: 403 },
+      );
     }
 
     let requestEntry;

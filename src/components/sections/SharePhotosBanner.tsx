@@ -1,9 +1,16 @@
 "use client";
 
 import { Camera } from "lucide-react";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 
 /** Slim homepage strip so guests see photo share without scrolling to gallery */
 export function SharePhotosBanner() {
+  const { enabled, ready } = useFeatureFlags();
+
+  if (ready && !enabled("guest_photos")) {
+    return null;
+  }
+
   return (
     <div className="relative z-20 border-y border-gold/25 bg-[#120e16]/95">
       <a

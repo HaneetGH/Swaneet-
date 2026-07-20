@@ -25,6 +25,7 @@ import type {
 } from "@/lib/types";
 import { AccommodationManager } from "@/components/dashboard/AccommodationManager";
 import { ChangePinForm } from "@/components/dashboard/ChangePinForm";
+import { FeatureFlagsManager } from "@/components/dashboard/FeatureFlagsManager";
 import { RsvpBannerManager } from "@/components/dashboard/RsvpBannerManager";
 import { EmailLogManager } from "@/components/dashboard/EmailLogManager";
 import { EventsManager } from "@/components/dashboard/EventsManager";
@@ -122,7 +123,7 @@ export function DashboardShell({
     if (session.kind === "master") {
       items.push({ id: "team", label: "Team", Icon: Shield, count: 0 });
       items.push({ id: "emails", label: "Email status", Icon: Mail, count: 0 });
-      items.push({ id: "settings", label: "Master PIN", Icon: KeyRound, count: 0 });
+      items.push({ id: "settings", label: "Master", Icon: KeyRound, count: 0 });
     }
     return items;
   }, [session, rsvps.length, accommodations.length, gallery]);
@@ -222,6 +223,7 @@ export function DashboardShell({
         ) : activeTab === "settings" ? (
           <div>
             <ChangePinForm />
+            <FeatureFlagsManager />
             <RsvpBannerManager />
           </div>
         ) : (

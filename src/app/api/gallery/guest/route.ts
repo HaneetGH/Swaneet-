@@ -15,6 +15,7 @@ const schema = z
   .object({
     eventId: z.string().trim().optional().default(""),
     newEventName: z.string().trim().max(80).optional().default(""),
+    inviteTier: z.enum(["mehfil", "laavan"]).optional(),
     media: z
       .array(
         z.object({
@@ -47,6 +48,20 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: parsed.error.issues[0]?.message || "Invalid photos" },
         { status: 400 },
+      );
+    }
+
+    const { getFeatureFlags } = await import("@/lib/store");
+    const {
+      featureSiteFromInviteTier,
+      isFeatureEnabled,
+    } = await import("@/lib/feature-flags");
+    const flags = await getFeatureFlags();
+    const site = featureSiteFromInviteTier(parsed.data.inviteTier);
+    if (!isFeatureEnabled(flags, site, "guest_photos")) {
+      return NextResponse.json(
+        { error: "Guest photo uploads are turned off for this invite" },
+        { status: 403 },
       );
     }
 
