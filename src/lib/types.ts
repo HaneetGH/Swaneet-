@@ -17,6 +17,9 @@ export type ManagedEvent = {
 
 export type GalleryStatus = "approved" | "pending" | "rejected";
 
+/** Public surfaces: main wedding site + bride invite links */
+export type FeatureSite = "main" | "mehfil" | "laavan";
+
 export type GalleryImage = {
   id: string;
   /** Managed event this photo/video belongs to */
@@ -34,6 +37,15 @@ export type GalleryImage = {
   createdAt: string;
 };
 
+export type RsvpDayResponse = {
+  /** ISO-ish key from parseDisplayDate, e.g. 2026-08-09 */
+  dateKey: string;
+  /** Display date, e.g. 9th August 2026 */
+  date: string;
+  label?: string;
+  attendance: "yes" | "no" | "maybe";
+};
+
 export type RsvpEntry = {
   id: string;
   name: string;
@@ -47,10 +59,14 @@ export type RsvpEntry = {
   email?: string;
   authUid?: string;
   authEmail?: string;
+  /** Which invite page this RSVP belongs to */
+  inviteSite?: FeatureSite;
   /** Bride invite path used (mehfil / laavan); omit for main site */
   inviteSide?: "bride" | "groom";
   inviteTier?: "mehfil" | "laavan";
   inviteSlug?: string;
+  /** One answer per celebration day on that invite */
+  dayResponses?: RsvpDayResponse[];
   createdAt: string;
 };
 
@@ -100,15 +116,14 @@ export type AccommodationRequest = {
   inviteSide?: "bride" | "groom";
   inviteTier?: "mehfil" | "laavan";
   inviteSlug?: string;
+  /** Which invite page this stay belongs to */
+  inviteSite?: FeatureSite;
 };
 
 export type EmailOtpEntry = {
   hash: string;
   expiresAt: string;
 };
-
-/** Public surfaces that can have independent feature toggles */
-export type FeatureSite = "main" | "mehfil" | "laavan";
 
 export type FeatureKey =
   | "rsvp"
@@ -184,34 +199,40 @@ export type GuestLogin = {
   inviteSlug?: string;
 };
 
-/** Dashboard view: login record + linked RSVP / stay / uploads */
-export type GuestProfile = GuestLogin & {
-  rsvp?: {
-    id: string;
-    name: string;
-    guests: number;
-    attendance: RsvpEntry["attendance"];
-    createdAt: string;
-    inviteSide?: "bride" | "groom";
-    inviteTier?: "mehfil" | "laavan";
-    inviteSlug?: string;
-  } | null;
-  stay?: {
-    id: string;
-    name: string;
-    status: AccommodationStatus;
-    people: number;
-    rooms: number;
-    createdAt: string;
-    inviteSide?: "bride" | "groom";
-    inviteTier?: "mehfil" | "laavan";
-    inviteSlug?: string;
-  } | null;
-  photoUploads: number;
-  /** Best-known invite path for this guest */
+/** Linked RSVP summary on a guest profile row */
+export type GuestProfileRsvp = {
+  id: string;
+  name: string;
+  guests: number;
+  attendance: RsvpEntry["attendance"];
+  createdAt: string;
   inviteSide?: "bride" | "groom";
   inviteTier?: "mehfil" | "laavan";
   inviteSlug?: string;
+  inviteSite?: FeatureSite;
+};
+
+export type GuestProfileStay = {
+  id: string;
+  name: string;
+  status: AccommodationStatus;
+  people: number;
+  rooms: number;
+  createdAt: string;
+  inviteSide?: "bride" | "groom";
+  inviteTier?: "mehfil" | "laavan";
+  inviteSlug?: string;
+  inviteSite?: FeatureSite;
+};
+
+/** Dashboard view: login record + linked RSVP / stay / uploads */
+export type GuestProfile = GuestLogin & {
+  rsvp?: GuestProfileRsvp | null;
+  /** All RSVPs from this Google account (one per invite site) */
+  rsvps?: GuestProfileRsvp[];
+  stay?: GuestProfileStay | null;
+  stays?: GuestProfileStay[];
+  photoUploads: number;
 };
 
 export type EmailKind =

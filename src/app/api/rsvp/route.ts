@@ -8,8 +8,15 @@ import {
 } from "@/lib/feature-flags";
 import { verifyBearerToken } from "@/lib/firebase/admin";
 import {
+  deriveOverallAttendance,
+  inviteSiteFromPayload,
+  rsvpDaysForSite,
+  siteLabel,
+} from "@/lib/rsvp-days";
+import {
   findAccommodationByGuest,
   getFeatureFlags,
+  listEvents,
   listRsvps,
   recordGuestLogin,
   upsertAccommodationForGuest,
@@ -27,18 +34,27 @@ const staySchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
+const dayResponseSchema = z.object({
+  dateKey: z.string().trim().min(1),
+  date: z.string().trim().min(1),
+  label: z.string().trim().max(80).optional(),
+  attendance: z.enum(["yes", "no", "maybe"]),
+});
+
 const rsvpSchema = z
   .object({
     name: z.string().min(2),
     guests: z.coerce.number().min(1).max(20),
-    attendance: z.enum(["yes", "no", "maybe"]),
+    attendance: z.enum(["yes", "no", "maybe"]).optional(),
     meal: z.enum(["vegetarian", "non-vegetarian", "no-preference"]).optional(),
     notes: z.string().max(500).optional(),
     contactFamily: z.string().optional(),
     needsAccommodation: z.boolean(),
+    inviteSite: z.enum(["main", "mehfil", "laavan"]).optional(),
     inviteSide: z.enum(["bride", "groom"]).optional(),
     inviteTier: z.enum(["mehfil", "laavan"]).optional(),
     inviteSlug: z.string().trim().max(80).optional(),
+    dayResponses: z.array(dayResponseSchema).max(20).optional(),
     stay: staySchema.optional(),
   })
   .superRefine((data, ctx) => {
@@ -47,6 +63,13 @@ const rsvpSchema = z
         code: "custom",
         message: "Stay details are required when you need accommodation",
         path: ["stay"],
+      });
+    }
+    if (!data.attendance && (!data.dayResponses || data.dayResponses.length === 0)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Please select your attendance",
+        path: ["attendance"],
       });
     }
   });
@@ -92,8 +115,17 @@ export async function POST(request: Request) {
       );
     }
 
+    const inviteSite = inviteSiteFromPayload({
+      inviteSite: parsed.data.inviteSite,
+      inviteTier: parsed.data.inviteTier,
+      inviteSide: parsed.data.inviteSide,
+    });
+
     const flags = await getFeatureFlags();
-    const site = featureSiteFromInviteTier(parsed.data.inviteTier);
+    const site =
+      inviteSite !== "main"
+        ? inviteSite
+        : featureSiteFromInviteTier(parsed.data.inviteTier);
     if (!isFeatureEnabled(flags, site, "rsvp")) {
       return NextResponse.json(
         { error: "RSVP is turned off for this invite right now" },
@@ -109,19 +141,59 @@ export async function POST(request: Request) {
       );
     }
 
+    const mainEvents = site === "main" ? await listEvents() : undefined;
+    const allowedDays = rsvpDaysForSite(site, mainEvents);
+    const allowedKeys = new Set(allowedDays.map((d) => d.dateKey));
+
+    let dayResponses = parsed.data.dayResponses?.filter((day) =>
+      allowedKeys.has(day.dateKey),
+    );
+
+    if (!dayResponses?.length) {
+      // Single overall answer → apply to every day on this invite
+      const overall = parsed.data.attendance || "yes";
+      dayResponses = allowedDays.map((day) => ({
+        dateKey: day.dateKey,
+        date: day.date,
+        label: day.label,
+        attendance: overall,
+      }));
+    } else {
+      // Fill any missing invite days with "maybe" so the record is complete
+      const byKey = new Map(dayResponses.map((d) => [d.dateKey, d]));
+      dayResponses = allowedDays.map((day) => {
+        const existing = byKey.get(day.dateKey);
+        return {
+          dateKey: day.dateKey,
+          date: day.date,
+          label: day.label,
+          attendance: existing?.attendance || "maybe",
+        };
+      });
+    }
+
+    const attendance =
+      parsed.data.attendance || deriveOverallAttendance(dayResponses);
+
     const { rsvp, updated } = await upsertRsvpForGuest(
       { uid: guest.uid, email: guest.email },
       {
         name: parsed.data.name.trim(),
         guests: parsed.data.guests,
-        attendance: parsed.data.attendance,
+        attendance,
         meal: parsed.data.meal,
         notes: parsed.data.notes?.trim() || undefined,
         contactFamily: parsed.data.contactFamily?.trim() || undefined,
         needsAccommodation: parsed.data.needsAccommodation,
-        inviteSide: parsed.data.inviteSide,
-        inviteTier: parsed.data.inviteTier,
+        inviteSite: site,
+        inviteSide:
+          parsed.data.inviteSide ||
+          (site === "mehfil" || site === "laavan" ? "bride" : undefined),
+        inviteTier:
+          parsed.data.inviteTier ||
+          (site === "mehfil" || site === "laavan" ? site : undefined),
         inviteSlug: parsed.data.inviteSlug,
+        dayResponses,
       },
     );
 
@@ -151,8 +223,13 @@ export async function POST(request: Request) {
           contactFamily: parsed.data.contactFamily?.trim() || undefined,
           rsvpId: rsvp.id,
           status: "pending",
-          inviteSide: parsed.data.inviteSide,
-          inviteTier: parsed.data.inviteTier,
+          inviteSite: site,
+          inviteSide:
+            parsed.data.inviteSide ||
+            (site === "mehfil" || site === "laavan" ? "bride" : undefined),
+          inviteTier:
+            parsed.data.inviteTier ||
+            (site === "mehfil" || site === "laavan" ? site : undefined),
           inviteSlug: parsed.data.inviteSlug,
         },
       );
@@ -160,9 +237,16 @@ export async function POST(request: Request) {
       stayUpdated = stayResult.updated;
       await recordGuestLogin(guest, "stay").catch(() => undefined);
     } else {
-      // Still return existing stay if they previously requested one
-      accommodation = await findAccommodationByGuest(guest.uid, guest.email);
+      accommodation = await findAccommodationByGuest(
+        guest.uid,
+        guest.email,
+        site,
+      );
     }
+
+    const daySummary = dayResponses
+      .map((d) => `${d.date}: ${d.attendance}`)
+      .join("; ");
 
     const action = updated ? "updated" : "new";
     await notifyOwner({
@@ -173,14 +257,16 @@ export async function POST(request: Request) {
         : updated
           ? "RSVP updated"
           : "New RSVP",
-      summary: `${rsvp.name} ${updated ? "updated their" : "submitted an"} RSVP${
+      summary: `${rsvp.name} ${updated ? "updated their" : "submitted an"} RSVP on ${siteLabel(site)}${
         parsed.data.needsAccommodation ? " and accommodation" : ""
       }.`,
       details: [
         `Name: ${rsvp.name}`,
         `Email: ${guest.email}`,
+        `Site: ${siteLabel(site)}`,
         `Guests: ${rsvp.guests}`,
-        `Attendance: ${rsvp.attendance}`,
+        `Overall: ${rsvp.attendance}`,
+        daySummary ? `Days: ${daySummary}` : "",
         rsvp.meal ? `Meal: ${rsvp.meal}` : "",
         rsvp.needsAccommodation ? "Needs accommodation: yes" : "Needs accommodation: no",
         accommodation

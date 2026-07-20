@@ -146,6 +146,7 @@ export async function POST(request: Request) {
           inviteSide: parsed.data.inviteSide,
           inviteTier: parsed.data.inviteTier,
           inviteSlug: parsed.data.inviteSlug,
+          inviteSite: site,
         },
       );
       requestEntry = result.accommodation;
@@ -173,6 +174,7 @@ export async function POST(request: Request) {
         inviteSide: parsed.data.inviteSide,
         inviteTier: parsed.data.inviteTier,
         inviteSlug: parsed.data.inviteSlug,
+        inviteSite: site,
       });
     }
 

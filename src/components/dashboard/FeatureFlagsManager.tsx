@@ -21,7 +21,7 @@ export function FeatureFlagsManager() {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/feature-flags")
+    fetch("/api/feature-flags", { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error("load failed");
         return res.json();
@@ -85,8 +85,8 @@ export function FeatureFlagsManager() {
         <h2 className="font-display text-2xl text-cream">Feature flags</h2>
       </div>
       <p className="mb-5 font-body text-sm text-muted">
-        Turn features on or off for each invite surface. Changes apply after
-        save — guests on that link will see or hide the feature.
+        Turn features on or off per invite. After save, guests see changes on the
+        next page load — no redeploy needed.
       </p>
 
       <div className="mb-5 flex flex-wrap gap-2">

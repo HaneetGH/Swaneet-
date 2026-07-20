@@ -23,7 +23,14 @@ const flagsSchema = z.object({
 export async function GET() {
   try {
     const flags = await getFeatureFlags();
-    return NextResponse.json({ flags });
+    return NextResponse.json(
+      { flags },
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      },
+    );
   } catch (error) {
     console.error("GET /api/feature-flags failed", error);
     return NextResponse.json(

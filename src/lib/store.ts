@@ -29,6 +29,7 @@ import type {
   EmailKind,
   EmailLogEntry,
   FeatureFlags,
+  FeatureSite,
   GalleryImage,
   GuestActivityAction,
   GuestLogin,
@@ -40,6 +41,13 @@ import type {
 } from "@/lib/types";
 import { sortEventsByDateTime } from "@/lib/datetime";
 import { normalizeFeatureFlags } from "@/lib/feature-flags";
+import {
+  deriveOverallAttendance,
+  isBrideFeatureSite,
+  inviteSitesShareRsvp,
+  mergeDayResponses,
+  resolveEntryInviteSite,
+} from "@/lib/rsvp-days";
 import { wedding } from "@/data/wedding";
 import { hashPin } from "@/lib/pin";
 import type { VerifiedGuest } from "@/lib/firebase/admin";
@@ -496,23 +504,39 @@ function matchesGuest(
 export async function findRsvpByGuest(
   uid: string,
   email?: string,
+  inviteSite: FeatureSite = "main",
 ): Promise<RsvpEntry | null> {
   const rsvps = await listRsvps();
-  return (
-    rsvps.find((item) => matchesGuest(item, uid, email)) ||
-    null
-  );
+  const matches = rsvps.filter((item) => {
+    if (!matchesGuest(item, uid, email)) return false;
+    const site = resolveEntryInviteSite(item);
+    return inviteSitesShareRsvp(site, inviteSite);
+  });
+  if (!matches.length) return null;
+  // Prefer the record with the most day answers (shared bride RSVP), then newest
+  return [...matches].sort((a, b) => {
+    const days = (b.dayResponses?.length || 0) - (a.dayResponses?.length || 0);
+    if (days !== 0) return days;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  })[0];
 }
 
 export async function findAccommodationByGuest(
   uid: string,
   email?: string,
+  inviteSite: FeatureSite = "main",
 ): Promise<AccommodationRequest | null> {
   const stays = await listAccommodations();
-  return (
-    stays.find((item) => matchesGuest(item, uid, email)) ||
-    null
-  );
+  const matches = stays.filter((item) => {
+    if (!matchesGuest(item, uid, email)) return false;
+    const site = resolveEntryInviteSite(item);
+    return inviteSitesShareRsvp(site, inviteSite);
+  });
+  if (!matches.length) return null;
+  return [...matches].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )[0];
 }
 
 export async function addRsvp(
@@ -562,20 +586,79 @@ export async function updateRsvp(
   return updated;
 }
 
-/** Create or update RSVP for the same Google guest (one RSVP per account). */
+/** Create or update RSVP — main is separate; mehfil↔laavan share one bride RSVP. */
 export async function upsertRsvpForGuest(
   guest: { uid: string; email: string },
   entry: Omit<RsvpEntry, "id" | "createdAt" | "authUid" | "authEmail" | "email">,
 ): Promise<{ rsvp: RsvpEntry; updated: boolean }> {
-  const existing = await findRsvpByGuest(guest.uid, guest.email);
+  const inviteSite: FeatureSite =
+    entry.inviteSite ||
+    (entry.inviteTier === "mehfil" || entry.inviteTier === "laavan"
+      ? entry.inviteTier
+      : "main");
+  const existing = await findRsvpByGuest(guest.uid, guest.email, inviteSite);
+
+  const dayResponses = isBrideFeatureSite(inviteSite)
+    ? mergeDayResponses(existing?.dayResponses, entry.dayResponses)
+    : entry.dayResponses;
+
+  const attendance = dayResponses?.length
+    ? deriveOverallAttendance(dayResponses)
+    : entry.attendance;
+
+  // Prefer mehfil label if the shared record already covers mehfil days
+  const keepMehfilLabel =
+    isBrideFeatureSite(inviteSite) &&
+    (existing?.inviteTier === "mehfil" ||
+      resolveEntryInviteSite(existing || {}) === "mehfil") &&
+    inviteSite === "laavan";
+
   const payload = {
     ...entry,
+    inviteSite: keepMehfilLabel ? ("mehfil" as const) : inviteSite,
+    inviteTier: keepMehfilLabel
+      ? ("mehfil" as const)
+      : entry.inviteTier ||
+        (inviteSite === "mehfil" || inviteSite === "laavan"
+          ? inviteSite
+          : undefined),
+    inviteSlug: keepMehfilLabel
+      ? existing?.inviteSlug || entry.inviteSlug
+      : entry.inviteSlug,
+    inviteSide:
+      entry.inviteSide ||
+      (isBrideFeatureSite(inviteSite) ? ("bride" as const) : undefined),
+    dayResponses,
+    attendance,
     email: guest.email,
     authUid: guest.uid,
     authEmail: guest.email,
   };
 
   if (existing) {
+    // Collapse duplicate bride RSVPs from the earlier per-site model
+    if (isBrideFeatureSite(inviteSite)) {
+      const all = await listRsvps();
+      const dupes = all.filter(
+        (item) =>
+          item.id !== existing.id &&
+          matchesGuest(item, guest.uid, guest.email) &&
+          isBrideFeatureSite(resolveEntryInviteSite(item)),
+      );
+      for (const dupe of dupes) {
+        payload.dayResponses = mergeDayResponses(
+          payload.dayResponses,
+          dupe.dayResponses,
+        );
+        await deleteRsvp(dupe.id);
+      }
+      if (dupes.length) {
+        payload.attendance = deriveOverallAttendance(
+          payload.dayResponses || [],
+        );
+      }
+    }
+
     const rsvp = await updateRsvp(existing.id, payload);
     return { rsvp: rsvp!, updated: true };
   }
@@ -886,7 +969,7 @@ export async function updateAccommodation(
   return updated;
 }
 
-/** Create or update stay for the same Google guest (one stay request per account). */
+/** Create or update stay — main separate; mehfil↔laavan share one bride stay. */
 export async function upsertAccommodationForGuest(
   guest: { uid: string; email?: string; phone?: string },
   entry: Omit<
@@ -894,12 +977,44 @@ export async function upsertAccommodationForGuest(
     "id" | "createdAt" | "authUid" | "authEmail" | "authPhone"
   > & { status?: AccommodationRequest["status"] },
 ): Promise<{ accommodation: AccommodationRequest; updated: boolean }> {
-  const existing = await findAccommodationByGuest(guest.uid, guest.email);
+  const inviteSite: FeatureSite =
+    entry.inviteSite ||
+    (entry.inviteTier === "mehfil" || entry.inviteTier === "laavan"
+      ? entry.inviteTier
+      : "main");
+  const existing = await findAccommodationByGuest(
+    guest.uid,
+    guest.email,
+    inviteSite,
+  );
   const email = entry.email || guest.email || "";
 
+  const keepMehfilLabel =
+    isBrideFeatureSite(inviteSite) &&
+    (existing?.inviteTier === "mehfil" ||
+      resolveEntryInviteSite(existing || {}) === "mehfil") &&
+    inviteSite === "laavan";
+
+  const resolvedSite = keepMehfilLabel ? ("mehfil" as const) : inviteSite;
+  const resolvedTier = keepMehfilLabel
+    ? ("mehfil" as const)
+    : entry.inviteTier ||
+      (inviteSite === "mehfil" || inviteSite === "laavan" ? inviteSite : undefined);
+
   if (existing) {
-    // Guest edits keep status pending unless family already confirmed/declined —
-    // only overwrite guest-owned fields; keep hotel confirmation details.
+    if (isBrideFeatureSite(inviteSite)) {
+      const all = await listAccommodations();
+      const dupes = all.filter(
+        (item) =>
+          item.id !== existing.id &&
+          matchesGuest(item, guest.uid, guest.email) &&
+          isBrideFeatureSite(resolveEntryInviteSite(item)),
+      );
+      for (const dupe of dupes) {
+        await deleteAccommodation(dupe.id);
+      }
+    }
+
     const accommodation = await updateAccommodation(existing.id, {
       name: entry.name,
       phone: entry.phone,
@@ -914,10 +1029,15 @@ export async function upsertAccommodationForGuest(
       authUid: guest.uid,
       authEmail: guest.email,
       authPhone: guest.phone,
-      inviteSide: entry.inviteSide ?? existing.inviteSide,
-      inviteTier: entry.inviteTier ?? existing.inviteTier,
-      inviteSlug: entry.inviteSlug ?? existing.inviteSlug,
-      // If family already decided, keep that status; otherwise stay pending
+      inviteSide:
+        entry.inviteSide ||
+        existing.inviteSide ||
+        (isBrideFeatureSite(inviteSite) ? "bride" : undefined),
+      inviteTier: resolvedTier ?? existing.inviteTier,
+      inviteSlug: keepMehfilLabel
+        ? existing.inviteSlug || entry.inviteSlug
+        : entry.inviteSlug ?? existing.inviteSlug,
+      inviteSite: resolvedSite,
       status:
         existing.status === "confirmed" || existing.status === "declined"
           ? existing.status
@@ -932,6 +1052,11 @@ export async function upsertAccommodationForGuest(
     authUid: guest.uid,
     authEmail: guest.email,
     authPhone: guest.phone,
+    inviteSite: resolvedSite,
+    inviteTier: resolvedTier,
+    inviteSide:
+      entry.inviteSide ||
+      (isBrideFeatureSite(inviteSite) ? "bride" : undefined),
   });
   return { accommodation, updated: false };
 }
@@ -1087,20 +1212,20 @@ export async function listGuestProfiles(): Promise<GuestProfile[]> {
   const emailKey = (value?: string) => value?.trim().toLowerCase() || "";
 
   return guests.map((guest) => {
-    const rsvp =
-      rsvps.find(
-        (item) =>
-          item.authUid === guest.uid ||
-          (guest.email &&
-            emailKey(item.authEmail || item.email) === emailKey(guest.email)),
-      ) || null;
-    const stay =
-      stays.find(
-        (item) =>
-          item.authUid === guest.uid ||
-          (guest.email &&
-            emailKey(item.authEmail || item.email) === emailKey(guest.email)),
-      ) || null;
+    const matchedRsvps = rsvps.filter(
+      (item) =>
+        item.authUid === guest.uid ||
+        (guest.email &&
+          emailKey(item.authEmail || item.email) === emailKey(guest.email)),
+    );
+    const matchedStays = stays.filter(
+      (item) =>
+        item.authUid === guest.uid ||
+        (guest.email &&
+          emailKey(item.authEmail || item.email) === emailKey(guest.email)),
+    );
+    const rsvp = matchedRsvps[0] || null;
+    const stay = matchedStays[0] || null;
     const photoUploads = store.gallery.filter(
       (image) =>
         image.source === "guest" &&
@@ -1135,33 +1260,36 @@ export async function listGuestProfiles(): Promise<GuestProfile[]> {
       guest.inviteSide ||
       (inviteTier ? ("bride" as const) : undefined);
 
+    const mapRsvp = (item: (typeof matchedRsvps)[number]) => ({
+      id: item.id,
+      name: item.name,
+      guests: item.guests,
+      attendance: item.attendance,
+      createdAt: item.createdAt,
+      inviteSide: item.inviteSide,
+      inviteTier: item.inviteTier,
+      inviteSlug: item.inviteSlug,
+      inviteSite: item.inviteSite,
+    });
+    const mapStay = (item: (typeof matchedStays)[number]) => ({
+      id: item.id,
+      name: item.name,
+      status: item.status,
+      people: item.people,
+      rooms: item.rooms,
+      createdAt: item.createdAt,
+      inviteSide: item.inviteSide,
+      inviteTier: item.inviteTier,
+      inviteSlug: item.inviteSlug,
+      inviteSite: item.inviteSite,
+    });
+
     return {
       ...guest,
-      rsvp: rsvp
-        ? {
-            id: rsvp.id,
-            name: rsvp.name,
-            guests: rsvp.guests,
-            attendance: rsvp.attendance,
-            createdAt: rsvp.createdAt,
-            inviteSide: rsvp.inviteSide,
-            inviteTier: rsvp.inviteTier,
-            inviteSlug: rsvp.inviteSlug,
-          }
-        : null,
-      stay: stay
-        ? {
-            id: stay.id,
-            name: stay.name,
-            status: stay.status,
-            people: stay.people,
-            rooms: stay.rooms,
-            createdAt: stay.createdAt,
-            inviteSide: stay.inviteSide,
-            inviteTier: stay.inviteTier,
-            inviteSlug: stay.inviteSlug,
-          }
-        : null,
+      rsvp: rsvp ? mapRsvp(rsvp) : null,
+      rsvps: matchedRsvps.map(mapRsvp),
+      stay: stay ? mapStay(stay) : null,
+      stays: matchedStays.map(mapStay),
       photoUploads,
       inviteSide,
       inviteTier,

@@ -9,6 +9,7 @@ import {
   sourceBadgeClass,
   sourceFromRsvp,
 } from "@/lib/invite-source";
+import { inviteSitesShareRsvp, resolveEntryInviteSite } from "@/lib/rsvp-days";
 import { cn } from "@/lib/utils";
 
 type RsvpManagerProps = {
@@ -37,10 +38,10 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
   const filtered = useMemo(() => {
     return rsvps.filter((item) => {
       if (filter !== "all" && item.attendance !== filter) return false;
-      if (sourceFilter === "main" && item.inviteTier) return false;
-      if (sourceFilter === "mehfil" && item.inviteTier !== "mehfil") return false;
-      if (sourceFilter === "laavan" && item.inviteTier !== "laavan") return false;
-      return true;
+      const site = resolveEntryInviteSite(item);
+      if (sourceFilter === "all") return true;
+      // Bride cards share RSVP — show under both Mehfil and Laavan filters
+      return inviteSitesShareRsvp(site, sourceFilter);
     });
   }, [rsvps, filter, sourceFilter]);
 
@@ -49,17 +50,19 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
     const maybe = rsvps.filter((r) => r.attendance === "maybe");
     const declined = rsvps.filter((r) => r.attendance === "no");
     const guestCount = attending.reduce((sum, r) => sum + r.guests, 0);
-    const mehfil = rsvps.filter((r) => r.inviteTier === "mehfil").length;
-    const laavan = rsvps.filter((r) => r.inviteTier === "laavan").length;
-    const main = rsvps.filter((r) => !r.inviteTier).length;
+    const siteOf = (r: RsvpEntry) => resolveEntryInviteSite(r);
+    const bride = rsvps.filter((r) =>
+      inviteSitesShareRsvp(siteOf(r), "mehfil"),
+    ).length;
+    const main = rsvps.filter((r) => siteOf(r) === "main").length;
     return {
       total: rsvps.length,
       attending: attending.length,
       maybe: maybe.length,
       declined: declined.length,
       guestCount,
-      mehfil,
-      laavan,
+      mehfil: bride,
+      laavan: bride,
       main,
     };
   }, [rsvps]);
@@ -79,7 +82,7 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
             <h2 className="font-display text-2xl text-cream">RSVP list</h2>
           </div>
           <p className="mt-1 font-body text-sm text-muted">
-            Guests who replied — badge shows which invite link they used
+            Guests who replied — bride Mehfil & Laavan share one RSVP; main stays separate
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -112,9 +115,9 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
         {(
           [
             ["all", `Every source`],
-            ["main", `Main site (${stats.main})`],
-            ["mehfil", `Mehfil (${stats.mehfil})`],
-            ["laavan", `Laavan (${stats.laavan})`],
+            ["main", `Main / guy (${stats.main})`],
+            ["mehfil", `Bride · Mehfil (${stats.mehfil})`],
+            ["laavan", `Bride · Laavan (${stats.laavan})`],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -199,6 +202,22 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
                     <p className="mt-2 font-body text-sm leading-relaxed text-muted">
                       “{rsvp.notes}”
                     </p>
+                  ) : null}
+                  {rsvp.dayResponses && rsvp.dayResponses.length > 0 ? (
+                    <ul className="mt-2 space-y-1">
+                      {rsvp.dayResponses.map((day) => (
+                        <li
+                          key={day.dateKey}
+                          className="font-body text-xs text-muted"
+                        >
+                          {day.date}
+                          {day.label ? ` · ${day.label}` : ""}:{" "}
+                          <span className="text-cream/90">
+                            {attendanceLabel[day.attendance]}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   ) : null}
                   <p className="mt-2 font-body text-[11px] text-muted/70">
                     {new Date(rsvp.createdAt).toLocaleString()}

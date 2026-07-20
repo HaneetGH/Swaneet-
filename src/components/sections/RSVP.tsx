@@ -18,7 +18,13 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { useInvite } from "@/lib/invite-context";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import {
+  deriveOverallAttendance,
+  rsvpDaysForSite,
+  type RsvpDayOption,
+} from "@/lib/rsvp-days";
 import { cn } from "@/lib/utils";
+import type { RsvpDayResponse } from "@/lib/types";
 
 const schema = z
   .object({
@@ -131,7 +137,7 @@ function pickMessage(attendance: FormValues["attendance"]): ThankYouMessage {
 
 export function RSVP() {
   const invite = useInvite();
-  const { enabled, ready } = useFeatureFlags();
+  const { enabled, ready, site } = useFeatureFlags();
   const rsvpOn = enabled("rsvp");
   const accommodationOn = enabled("accommodation");
   const [user, setUser] = useState<User | null>(null);
@@ -142,6 +148,15 @@ export function RSVP() {
   const [hasExisting, setHasExisting] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [wasUpdate, setWasUpdate] = useState(false);
+  const [dayAnswers, setDayAnswers] = useState<
+    Record<string, "yes" | "no" | "maybe">
+  >({});
+
+  const siteDays = useMemo<RsvpDayOption[]>(
+    () => rsvpDaysForSite(site, invite?.events),
+    [site, invite?.events],
+  );
+  const multiDay = siteDays.length > 1;
 
   const onAuthed = useCallback((next: User) => {
     setUser(next);
@@ -169,7 +184,18 @@ export function RSVP() {
     },
   });
 
-  // Prefill from Google + load prior RSVP/stay when signing in again
+  // Default day answers when the invite days change
+  useEffect(() => {
+    setDayAnswers((prev) => {
+      const next: Record<string, "yes" | "no" | "maybe"> = {};
+      for (const day of siteDays) {
+        next[day.dateKey] = prev[day.dateKey] || "yes";
+      }
+      return next;
+    });
+  }, [siteDays]);
+
+  // Prefill from Google + load prior RSVP/stay for THIS invite site only
   useEffect(() => {
     if (!user) {
       setHasExisting(false);
@@ -183,7 +209,7 @@ export function RSVP() {
         const token = await getGuestIdToken();
         if (!token || cancelled) return;
 
-        const res = await fetch("/api/rsvp/me", {
+        const res = await fetch(`/api/rsvp/me?site=${site}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok || cancelled) {
@@ -200,6 +226,7 @@ export function RSVP() {
             notes?: string;
             contactFamily?: string;
             needsAccommodation?: boolean;
+            dayResponses?: RsvpDayResponse[];
           } | null;
           accommodation?: {
             phone?: string;
@@ -215,15 +242,24 @@ export function RSVP() {
 
         if (data.rsvp) {
           setHasExisting(true);
+          const overall = data.rsvp.attendance || "yes";
+          const answers: Record<string, "yes" | "no" | "maybe"> = {};
+          for (const day of siteDays) {
+            const saved = data.rsvp.dayResponses?.find(
+              (d) => d.dateKey === day.dateKey,
+            );
+            answers[day.dateKey] = saved?.attendance || overall;
+          }
+          setDayAnswers(answers);
           reset({
             name: data.rsvp.name || user.displayName || "",
             guests: data.rsvp.guests || 1,
-            attendance: data.rsvp.attendance || "yes",
+            attendance: overall,
             meal: data.rsvp.meal || "no-preference",
             notes: data.rsvp.notes || "",
             contactFamily: data.rsvp.contactFamily || "",
             needsAccommodation:
-              data.rsvp.needsAccommodation || data.accommodation
+              data.rsvp.needsAccommodation || Boolean(data.accommodation)
                 ? "yes"
                 : "no",
             stayPhone: data.accommodation?.phone || "",
@@ -261,7 +297,7 @@ export function RSVP() {
     return () => {
       cancelled = true;
     };
-  }, [user, reset, setValue]);
+  }, [user, reset, setValue, site, siteDays]);
 
   const needsAccommodation = watch("needsAccommodation");
   const guests = watch("guests");
@@ -285,6 +321,24 @@ export function RSVP() {
         return;
       }
 
+      const dayResponses: RsvpDayResponse[] = multiDay
+        ? siteDays.map((day) => ({
+            dateKey: day.dateKey,
+            date: day.date,
+            label: day.label,
+            attendance: dayAnswers[day.dateKey] || "yes",
+          }))
+        : siteDays.map((day) => ({
+            dateKey: day.dateKey,
+            date: day.date,
+            label: day.label,
+            attendance: data.attendance,
+          }));
+
+      const overall = multiDay
+        ? deriveOverallAttendance(dayResponses)
+        : data.attendance;
+
       const res = await fetch("/api/rsvp", {
         method: "POST",
         headers: {
@@ -294,14 +348,16 @@ export function RSVP() {
         body: JSON.stringify({
           name: data.name,
           guests: data.guests,
-          attendance: data.attendance,
+          attendance: overall,
           meal: data.meal,
           notes: data.notes,
           contactFamily: data.contactFamily,
           needsAccommodation: data.needsAccommodation === "yes",
+          inviteSite: site,
           inviteSide: invite ? "bride" : undefined,
           inviteTier: invite?.tier,
           inviteSlug: invite?.slug,
+          dayResponses,
           stay:
             data.needsAccommodation === "yes"
               ? {
@@ -329,7 +385,7 @@ export function RSVP() {
         return;
       }
       setWasUpdate(Boolean(payload.updated));
-      setMessage(pickMessage(data.attendance));
+      setMessage(pickMessage(overall));
       setStaySubmitted(Boolean(payload.accommodation) && data.needsAccommodation === "yes");
       setHasExisting(true);
       setSuccess(true);
@@ -354,7 +410,9 @@ export function RSVP() {
           subtitle={
             ready && !rsvpOn
               ? "RSVP is temporarily closed for this invite."
-              : `Sign in with Google, then RSVP. Please reply via ${familyList}.`
+              : invite
+                ? `Sign in with Google, then RSVP. Mehfil & Laavan share your reply for the same days — main wedding site stays separate. Please reply via ${familyList}.`
+                : `Sign in with Google, then RSVP for this invite only. Please reply via ${familyList}.`
           }
         />
 
@@ -525,24 +583,94 @@ export function RSVP() {
                     ) : null}
                   </div>
 
-                  <div>
-                    <label
-                      htmlFor="attendance"
-                      className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
-                    >
-                      Attendance
-                    </label>
-                    <select
-                      id="attendance"
-                      className={cn(fieldClass, "appearance-none")}
-                      {...register("attendance")}
-                    >
-                      <option value="yes">Joyfully attending</option>
-                      <option value="maybe">Hopefully attending</option>
-                      <option value="no">Unable to attend</option>
-                    </select>
-                  </div>
+                  {!multiDay ? (
+                    <div>
+                      <label
+                        htmlFor="attendance"
+                        className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
+                      >
+                        Attendance
+                        {siteDays[0] ? (
+                          <span className="normal-case tracking-normal text-muted/80">
+                            {" "}
+                            · {siteDays[0].date}
+                          </span>
+                        ) : null}
+                      </label>
+                      <select
+                        id="attendance"
+                        className={cn(fieldClass, "appearance-none")}
+                        {...register("attendance")}
+                      >
+                        <option value="yes">Joyfully attending</option>
+                        <option value="maybe">Hopefully attending</option>
+                        <option value="no">Unable to attend</option>
+                      </select>
+                    </div>
+                  ) : null}
                 </div>
+
+                {multiDay ? (
+                  <div className="space-y-3 rounded-2xl border border-gold/25 bg-[#100e14] p-4">
+                    <div>
+                      <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
+                        Days
+                      </p>
+                      <p className="mt-1 font-body text-sm text-cream">
+                        One reply per celebration day on this invite
+                      </p>
+                    </div>
+                    {siteDays.map((day) => (
+                      <div
+                        key={day.dateKey}
+                        className="grid gap-2 border-t border-gold/10 pt-3 first:border-t-0 first:pt-0 sm:grid-cols-[1fr_auto] sm:items-center"
+                      >
+                        <div>
+                          <p className="font-body text-sm text-cream">
+                            {day.date}
+                            {day.label ? (
+                              <span className="text-muted"> · {day.label}</span>
+                            ) : null}
+                          </p>
+                          <p className="mt-0.5 font-body text-xs text-muted">
+                            {day.eventNames.join(" · ")}
+                          </p>
+                        </div>
+                        <select
+                          className={cn(
+                            fieldClass,
+                            "appearance-none sm:min-w-[12rem]",
+                          )}
+                          value={dayAnswers[day.dateKey] || "yes"}
+                          onChange={(e) => {
+                            const value = e.target.value as
+                              | "yes"
+                              | "no"
+                              | "maybe";
+                            const next = {
+                              ...dayAnswers,
+                              [day.dateKey]: value,
+                            };
+                            setDayAnswers(next);
+                            setValue(
+                              "attendance",
+                              deriveOverallAttendance(
+                                siteDays.map((d) => ({
+                                  attendance: next[d.dateKey] || "yes",
+                                })),
+                              ),
+                            );
+                          }}
+                          aria-label={`Attendance for ${day.date}`}
+                        >
+                          <option value="yes">Joyfully attending</option>
+                          <option value="maybe">Hopefully attending</option>
+                          <option value="no">Unable to attend</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
 
                 <div>
                   <label

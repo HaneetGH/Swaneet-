@@ -16,6 +16,13 @@ import {
   inviteSourceDetail,
   sourceFromRsvp,
 } from "@/lib/invite-source";
+import {
+  deriveOverallAttendance,
+  inviteSiteFromPayload,
+  inviteSitesShareRsvp,
+  mergeDayResponses,
+  rsvpDaysForSite,
+} from "@/lib/rsvp-days";
 
 describe("bride invites", () => {
   it("resolves mehfil and laavan slugs", () => {
@@ -108,5 +115,86 @@ describe("invite source labels", () => {
         }),
       ),
     ).toContain("all-functions");
+  });
+});
+
+describe("rsvp days per invite site", () => {
+  it("gives mehfil more days than laavan and one answer slot per calendar day", () => {
+    const mehfilDays = rsvpDaysForSite("mehfil");
+    const laavanDays = rsvpDaysForSite("laavan");
+    expect(mehfilDays.length).toBeGreaterThan(laavanDays.length);
+    expect(new Set(mehfilDays.map((d) => d.dateKey)).size).toBe(
+      mehfilDays.length,
+    );
+    expect(laavanDays.some((d) => d.dateKey.includes("08-12"))).toBe(true);
+  });
+
+  it("derives overall attendance from day replies", () => {
+    expect(
+      deriveOverallAttendance([
+        { attendance: "no" },
+        { attendance: "maybe" },
+      ]),
+    ).toBe("maybe");
+    expect(
+      deriveOverallAttendance([
+        { attendance: "no" },
+        { attendance: "yes" },
+      ]),
+    ).toBe("yes");
+    expect(
+      deriveOverallAttendance([{ attendance: "no" }, { attendance: "no" }]),
+    ).toBe("no");
+  });
+
+  it("maps invite payload to site", () => {
+    expect(inviteSiteFromPayload({ inviteTier: "mehfil" })).toBe("mehfil");
+    expect(inviteSiteFromPayload({ inviteSite: "main" })).toBe("main");
+    expect(inviteSiteFromPayload({})).toBe("main");
+  });
+
+  it("shares RSVP across bride cards only, not main", () => {
+    expect(inviteSitesShareRsvp("mehfil", "laavan")).toBe(true);
+    expect(inviteSitesShareRsvp("laavan", "mehfil")).toBe(true);
+    expect(inviteSitesShareRsvp("main", "mehfil")).toBe(false);
+    expect(inviteSitesShareRsvp("mehfil", "main")).toBe(false);
+  });
+
+  it("merges day answers so laavan updates keep mehfil-only days", () => {
+    const merged = mergeDayResponses(
+      [
+        {
+          dateKey: "2026-08-09",
+          date: "9th August 2026",
+          attendance: "yes",
+        },
+        {
+          dateKey: "2026-08-12",
+          date: "12th August 2026",
+          attendance: "maybe",
+        },
+      ],
+      [
+        {
+          dateKey: "2026-08-12",
+          date: "12th August 2026",
+          attendance: "yes",
+        },
+        {
+          dateKey: "2026-08-13",
+          date: "13th August 2026",
+          attendance: "no",
+        },
+      ],
+    );
+    expect(merged.find((d) => d.dateKey === "2026-08-09")?.attendance).toBe(
+      "yes",
+    );
+    expect(merged.find((d) => d.dateKey === "2026-08-12")?.attendance).toBe(
+      "yes",
+    );
+    expect(merged.find((d) => d.dateKey === "2026-08-13")?.attendance).toBe(
+      "no",
+    );
   });
 });

@@ -21,7 +21,7 @@ export function useFeatureFlags() {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/feature-flags")
+    fetch("/api/feature-flags", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { flags?: FeatureFlags } | null) => {
         if (alive && data?.flags) setFlags(data.flags);

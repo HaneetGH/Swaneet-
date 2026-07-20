@@ -110,8 +110,14 @@ export function GuestLoginsManager() {
             const downloaded =
               (stats?.galleryDownloads || 0) > 0 ||
               guest.sources.includes("gallery_download");
-            const didRsvp = Boolean(guest.rsvp) || guest.sources.includes("rsvp");
-            const didStay = Boolean(guest.stay) || guest.sources.includes("stay");
+            const didRsvp =
+              Boolean(guest.rsvp) ||
+              (guest.rsvps && guest.rsvps.length > 0) ||
+              guest.sources.includes("rsvp");
+            const didStay =
+              Boolean(guest.stay) ||
+              (guest.stays && guest.stays.length > 0) ||
+              guest.sources.includes("stay");
             const didPhotos =
               guest.photoUploads > 0 || guest.sources.includes("photos");
             const source = {
@@ -204,17 +210,28 @@ export function GuestLoginsManager() {
                         <p className="font-body text-[10px] uppercase tracking-[0.18em] text-muted">
                           RSVP
                         </p>
-                        {guest.rsvp ? (
-                          <>
-                            <p className="mt-1 font-body text-sm text-cream">
-                              {guest.rsvp.attendance.toUpperCase()} ·{" "}
-                              {guest.rsvp.guests} guest
-                              {guest.rsvp.guests === 1 ? "" : "s"}
-                            </p>
-                            <p className="mt-1 font-body text-[11px] text-muted">
-                              {formatWhen(guest.rsvp.createdAt)}
-                            </p>
-                          </>
+                        {(guest.rsvps && guest.rsvps.length > 0) || guest.rsvp ? (
+                          <ul className="mt-1 space-y-1.5">
+                            {(guest.rsvps && guest.rsvps.length > 0
+                              ? guest.rsvps
+                              : guest.rsvp
+                                ? [guest.rsvp]
+                                : []
+                            ).map((item) => (
+                              <li key={item.id} className="font-body text-sm text-cream">
+                                <span className="text-muted">
+                                  {item.inviteTier === "mehfil"
+                                    ? "Mehfil"
+                                    : item.inviteTier === "laavan"
+                                      ? "Laavan"
+                                      : "Main"}
+                                  :{" "}
+                                </span>
+                                {item.attendance.toUpperCase()} · {item.guests}{" "}
+                                guest{item.guests === 1 ? "" : "s"}
+                              </li>
+                            ))}
+                          </ul>
                         ) : (
                           <p className="mt-1 font-body text-sm text-muted">
                             Not submitted
