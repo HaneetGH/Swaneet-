@@ -117,6 +117,26 @@ async function main() {
   );
 
   results.push(
+    await check("GET /api/gallery/file requires auth", async () => {
+      const res = await fetch(`${BASE}/api/gallery/file/not-a-real-id`);
+      return {
+        ok: res.status === 401,
+        detail: `status ${res.status} (expected 401)`,
+      };
+    }),
+  );
+
+  results.push(
+    await check("GET /api/rsvp/me requires Google auth", async () => {
+      const res = await fetch(`${BASE}/api/rsvp/me?site=main`);
+      return {
+        ok: res.status === 401,
+        detail: `status ${res.status} (expected 401)`,
+      };
+    }),
+  );
+
+  results.push(
     await check("PUT /api/feature-flags requires master", async () => {
       const res = await fetch(`${BASE}/api/feature-flags`, {
         method: "PUT",
@@ -141,6 +161,34 @@ async function main() {
           attendance: "yes",
           needsAccommodation: false,
         }),
+      });
+      return {
+        ok: res.status === 401,
+        detail: `status ${res.status} (expected 401)`,
+      };
+    }),
+  );
+
+  results.push(
+    await check("POST /api/auth/email/send requires Google auth", async () => {
+      const res = await fetch(`${BASE}/api/auth/email/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "test@example.com" }),
+      });
+      return {
+        ok: res.status === 401,
+        detail: `status ${res.status} (expected 401)`,
+      };
+    }),
+  );
+
+  results.push(
+    await check("POST /api/gallery/guest requires Google auth", async () => {
+      const res = await fetch(`${BASE}/api/gallery/guest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: "x", media: [] }),
       });
       return {
         ok: res.status === 401,

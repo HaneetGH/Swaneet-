@@ -130,9 +130,18 @@ export function AccommodationRequestPanel({
     setEmailBusy(true);
     setEmailError("");
     try {
+      const token = await getGuestIdToken();
+      if (!token) {
+        setEmailError("Please sign in with Google again");
+        setUser(null);
+        return;
+      }
       const res = await fetch("/api/auth/email/send", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ email }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -153,9 +162,18 @@ export function AccommodationRequestPanel({
     setEmailBusy(true);
     setEmailError("");
     try {
+      const token = await getGuestIdToken();
+      if (!token) {
+        setEmailError("Please sign in with Google again");
+        setUser(null);
+        return;
+      }
       const res = await fetch("/api/auth/email/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         credentials: "include",
         body: JSON.stringify({ email, code: emailCode }),
       });

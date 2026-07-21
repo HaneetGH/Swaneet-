@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyBearerToken } from "@/lib/firebase/admin";
+import { isGuestAuthFailure, requireGuestAuth } from "@/lib/require-guest";
 import { recordGuestLogin } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -18,10 +18,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const guest = await verifyBearerToken(request);
-  if (!guest) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const guest = await requireGuestAuth(request);
+  if (isGuestAuthFailure(guest)) return guest;
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {

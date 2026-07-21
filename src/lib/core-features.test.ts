@@ -28,6 +28,11 @@ import {
   galleryImageIdFromDetail,
   mergeDownloadedMedia,
 } from "@/lib/guest-downloads";
+import {
+  createGalleryAccessToken,
+  toProxiedGalleryImage,
+  verifyGalleryAccessToken,
+} from "@/lib/gallery-access";
 
 describe("bride invites", () => {
   it("resolves mehfil and laavan slugs", () => {
@@ -233,5 +238,33 @@ describe("guest download tracking", () => {
       ],
     });
     expect(collected.map((d) => d.imageId)).toEqual(["c", "a"]);
+  });
+});
+
+describe("gallery access tokens", () => {
+  it("signs and verifies a short-lived access token", () => {
+    const token = createGalleryAccessToken("uid-1", "mehfil");
+    const claims = verifyGalleryAccessToken(token);
+    expect(claims?.uid).toBe("uid-1");
+    expect(claims?.site).toBe("mehfil");
+    expect(verifyGalleryAccessToken("tampered.token")).toBeNull();
+  });
+
+  it("rewrites gallery src to the authenticated proxy", () => {
+    const proxied = toProxiedGalleryImage(
+      {
+        id: "img-1",
+        eventId: "e1",
+        alt: "test",
+        src: "https://example.public.blob.vercel-storage.com/secret.jpg",
+        aspect: "square",
+        kind: "image",
+        status: "approved",
+        createdAt: new Date().toISOString(),
+      },
+      "tok",
+    );
+    expect(proxied.src).toBe("/api/gallery/file/img-1?access=tok");
+    expect(proxied.src.includes("blob.vercel-storage.com")).toBe(false);
   });
 });

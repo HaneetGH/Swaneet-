@@ -486,6 +486,13 @@ export async function listGallery(options?: {
   return store.gallery.filter((image) => image.status === "approved");
 }
 
+export async function getGalleryImageById(
+  id: string,
+): Promise<GalleryImage | null> {
+  const store = await readStore();
+  return store.gallery.find((image) => image.id === id) || null;
+}
+
 export async function listRsvps(): Promise<RsvpEntry[]> {
   if (hasDatabase()) {
     return listRsvpsFromDb();
@@ -1299,7 +1306,8 @@ export async function listGuestProfiles(): Promise<GuestProfile[]> {
         if (!image) return null;
         return {
           id: image.id,
-          src: image.src,
+          // Dashboard uses session cookie — never expose raw Blob URLs in the UI
+          src: `/api/gallery/file/${encodeURIComponent(image.id)}`,
           alt: image.alt,
           kind: image.kind,
           at: item.at,

@@ -6,7 +6,7 @@ import {
   featureSiteFromInviteTier,
   isFeatureEnabled,
 } from "@/lib/feature-flags";
-import { verifyBearerToken } from "@/lib/firebase/admin";
+import { isGuestAuthFailure, requireGuestAuth } from "@/lib/require-guest";
 import {
   deriveOverallAttendance,
   inviteSiteFromPayload,
@@ -90,13 +90,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const guest = await verifyBearerToken(request);
-    if (!guest) {
-      return NextResponse.json(
-        { error: "Please sign in with Google to RSVP" },
-        { status: 401 },
-      );
-    }
+    const guestOrErr = await requireGuestAuth(request);
+    if (isGuestAuthFailure(guestOrErr)) return guestOrErr;
+    const guest = guestOrErr;
     if (!guest.email) {
       return NextResponse.json(
         { error: "Your Google account needs an email address to RSVP" },

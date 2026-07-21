@@ -207,14 +207,18 @@ function useGuestUser() {
   return { user, authReady, onAuthed };
 }
 
-function useGalleryData(user: User | null) {
+function useGalleryData(
+  user: User | null,
+  galleryEnabled: boolean,
+  site: "main" | "mehfil" | "laavan",
+) {
   const invite = useInvite();
   const [gallery, setGallery] = useState<GalleryImage[]>([]);
   const [events, setEvents] = useState<ManagedEvent[]>(fallbackEvents);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !galleryEnabled) {
       setGallery([]);
       setLoading(false);
       return;
@@ -229,8 +233,9 @@ function useGalleryData(user: User | null) {
         if (!token || !alive) return;
 
         const [galleryRes, eventsRes] = await Promise.all([
-          fetch("/api/gallery", {
+          fetch(`/api/gallery?site=${encodeURIComponent(site)}`, {
             headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
           }),
           fetch("/api/events"),
         ]);
@@ -259,7 +264,7 @@ function useGalleryData(user: User | null) {
     return () => {
       alive = false;
     };
-  }, [user, invite?.slug]);
+  }, [user, invite?.slug, galleryEnabled, site]);
 
   return { gallery, events, loading };
 }
@@ -283,9 +288,10 @@ function GalleryLoginGate({
 
 /** Compact homepage preview: up to 3 photos per event + View more */
 export function Gallery() {
-  const { enabled, ready: flagsReady } = useFeatureFlags();
+  const { enabled, ready: flagsReady, site } = useFeatureFlags();
+  const galleryOn = flagsReady && enabled("gallery");
   const { user, authReady, onAuthed } = useGuestUser();
-  const { gallery, events, loading } = useGalleryData(user);
+  const { gallery, events, loading } = useGalleryData(user, galleryOn, site);
 
   const groups = useMemo(() => {
     const result: {
@@ -341,7 +347,7 @@ export function Gallery() {
               The host has turned off gallery viewing for this page.
             </p>
           </div>
-        ) : !authReady ? (
+        ) : !authReady || !flagsReady ? (
           <p className="text-center font-body text-sm text-muted">Loading…</p>
         ) : !user ? (
           <GalleryLoginGate onAuthed={onAuthed} />
@@ -423,9 +429,10 @@ export function Gallery() {
 export function GalleryFull() {
   const searchParams = useSearchParams();
   const eventFromUrl = searchParams.get("event") || "all";
-  const { enabled, ready: flagsReady } = useFeatureFlags();
+  const { enabled, ready: flagsReady, site } = useFeatureFlags();
+  const galleryOn = flagsReady && enabled("gallery");
   const { user, authReady, onAuthed } = useGuestUser();
-  const { gallery, events, loading } = useGalleryData(user);
+  const { gallery, events, loading } = useGalleryData(user, galleryOn, site);
   const [filterEventId, setFilterEventId] = useState(eventFromUrl);
   const [active, setActive] = useState<GalleryImage | null>(null);
 
@@ -510,7 +517,7 @@ export function GalleryFull() {
             <Images className="mb-4 text-gold/50" size={32} />
             <p className="font-display text-xl text-cream">Gallery closed</p>
           </div>
-        ) : !authReady ? (
+        ) : !authReady || !flagsReady ? (
           <p className="text-center font-body text-sm text-muted">
             Loading…
           </p>

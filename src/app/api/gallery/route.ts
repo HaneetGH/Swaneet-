@@ -1,11 +1,26 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requirePermission, sessionHasPermission, getAdminSession } from "@/lib/auth";
-import { verifyBearerToken } from "@/lib/firebase/admin";
-import { listGallery, readStore, writeStore } from "@/lib/store";
-import type { GalleryImage } from "@/lib/types";
+import {
+  getAdminSession,
+  requirePermission,
+  sessionHasPermission,
+} from "@/lib/auth";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+import {
+  createGalleryAccessToken,
+  toProxiedGalleryImages,
+} from "@/lib/gallery-access";
+import { isGuestAuthFailure, requireGuestAuth } from "@/lib/require-guest";
+import {
+  getFeatureFlags,
+  listGallery,
+  readStore,
+  writeStore,
+} from "@/lib/store";
+import type { FeatureSite, GalleryImage } from "@/lib/types";
 import { saveUploadedImage } from "@/lib/uploads";
+import { verifyBearerToken } from "@/lib/firebase/admin";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -44,30 +59,60 @@ function mediaKind(file: File): GalleryImage["kind"] {
   return file.type.startsWith("video/") ? "video" : "image";
 }
 
+function parseSiteParam(value: string | null): FeatureSite {
+  if (value === "mehfil" || value === "laavan" || value === "main") return value;
+  return "main";
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const eventId = searchParams.get("eventId");
   const wantsAll = searchParams.get("all") === "1";
+  const site = parseSiteParam(searchParams.get("site"));
   const session = await getAdminSession();
-  const guest = await verifyBearerToken(request);
 
-  // Gallery is private — guests need Google login; team uses dashboard session
-  if (!session && !guest) {
-    return NextResponse.json(
-      { error: "Please sign in with Google to view the gallery" },
-      { status: 401 },
-    );
+  let guest = null as Awaited<ReturnType<typeof verifyBearerToken>>;
+  if (!session) {
+    const guestOrErr = await requireGuestAuth(request);
+    if (isGuestAuthFailure(guestOrErr)) return guestOrErr;
+    guest = guestOrErr;
+  } else {
+    // Admin dashboard may also send a guest token; ignore failures
+    guest = await verifyBearerToken(request);
   }
 
-  const includePending =
-    wantsAll &&
+  const isAdminViewer =
+    Boolean(session) &&
     (sessionHasPermission(session, "gallery_review") ||
       sessionHasPermission(session, "gallery_upload"));
+
+  // Guests: feature flag must be on for this invite surface
+  if (guest && !isAdminViewer) {
+    const flags = await getFeatureFlags();
+    if (!isFeatureEnabled(flags, site, "gallery")) {
+      return NextResponse.json(
+        { error: "Gallery is turned off for this invite" },
+        { status: 403 },
+      );
+    }
+  }
+
+  const includePending = wantsAll && isAdminViewer;
   const gallery = await listGallery({ includePending });
   const filtered = eventId
     ? gallery.filter((image) => image.eventId === eventId)
     : gallery;
-  return NextResponse.json({ gallery: filtered });
+
+  // Never return raw Blob URLs to browsers — serve via authenticated proxy
+  const accessToken = guest
+    ? createGalleryAccessToken(guest.uid, site)
+    : isAdminViewer
+      ? createGalleryAccessToken("admin", site)
+      : null;
+
+  return NextResponse.json({
+    gallery: toProxiedGalleryImages(filtered, accessToken),
+  });
 }
 
 /** Register media already uploaded to Blob (preferred for videos / large files). */

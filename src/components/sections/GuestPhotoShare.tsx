@@ -140,6 +140,10 @@ export function GuestPhotoShare() {
           handleUploadUrl: "/api/gallery/guest/upload",
           headers: { Authorization: `Bearer ${token}` },
           contentType: item.file.type || "image/jpeg",
+          clientPayload: JSON.stringify({
+            inviteTier: invite?.tier,
+            site: invite?.tier || "main",
+          }),
         });
         media.push({
           src: blob.url,

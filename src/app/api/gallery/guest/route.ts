@@ -1,9 +1,9 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyBearerToken } from "@/lib/firebase/admin";
 import { notifyOwner } from "@/lib/email";
 import { resolveGuestEvent } from "@/lib/guest-event";
+import { isGuestAuthFailure, requireGuestAuth } from "@/lib/require-guest";
 import { readStore, recordGuestLogin, writeStore } from "@/lib/store";
 import type { GalleryImage } from "@/lib/types";
 
@@ -35,13 +35,8 @@ const schema = z
 
 export async function POST(request: Request) {
   try {
-    const guest = await verifyBearerToken(request);
-    if (!guest) {
-      return NextResponse.json(
-        { error: "Please sign in with Google to share photos" },
-        { status: 401 },
-      );
-    }
+    const guest = await requireGuestAuth(request);
+    if (isGuestAuthFailure(guest)) return guest;
 
     const parsed = schema.safeParse(await request.json());
     if (!parsed.success) {
