@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { sendAccommodationEmail } from "@/lib/email";
+import { buildSharedRoomRoommateContacts } from "@/lib/shared-room-email";
 import {
   deleteAccommodation,
   getRoomInventory,
+  listAccommodations,
+  listRsvps,
   updateAccommodation,
 } from "@/lib/store";
 
@@ -72,7 +75,18 @@ export async function PUT(request: Request, { params }: Params) {
 
     let emailResult: { sent: boolean; error?: string } = { sent: false };
     if (parsed.data.sendEmail) {
-      const result = await sendAccommodationEmail(updated);
+      let roommates = undefined;
+      if (updated.roomGroupId) {
+        const [allStays, rsvps] = await Promise.all([
+          listAccommodations(),
+          listRsvps(),
+        ]);
+        const group = allStays.filter(
+          (item) => item.roomGroupId === updated.roomGroupId,
+        );
+        roommates = buildSharedRoomRoommateContacts(group, rsvps, updated.id);
+      }
+      const result = await sendAccommodationEmail(updated, { roommates });
       if (result.ok) {
         const withEmail = await updateAccommodation(id, { emailSentAt: now });
         emailResult = { sent: true };

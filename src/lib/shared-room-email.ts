@@ -67,6 +67,34 @@ export type SharedRoomEmailRecipient = {
   source: "stay" | "rsvp";
 };
 
+export type SharedRoomRoommateContact = {
+  name: string;
+  phone?: string;
+  email?: string;
+};
+
+/**
+ * Contact card for everyone else in the shared room (phone + email).
+ * Email falls back to linked RSVP when the stay has none.
+ */
+export function buildSharedRoomRoommateContacts(
+  allStays: AccommodationRequest[],
+  rsvps: RsvpEntry[],
+  excludeStayId: string,
+): SharedRoomRoommateContact[] {
+  return allStays
+    .filter((stay) => stay.id !== excludeStayId)
+    .map((stay) => {
+      const resolved = resolveNotifyEmailForStay(stay, rsvps);
+      const phone = stay.phone?.trim() || undefined;
+      return {
+        name: stay.name,
+        phone,
+        email: resolved?.email,
+      };
+    });
+}
+
 /**
  * Exactly one recipient per stay request in the share (n stays → n emails).
  * Never drops a guest just because another stay uses the same address.

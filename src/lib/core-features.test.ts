@@ -38,7 +38,10 @@ import {
   parseEventTimeBounds,
 } from "@/lib/calendar";
 import { computeRoomInventory } from "@/lib/store";
-import { collectSharedRoomEmailRecipients } from "@/lib/shared-room-email";
+import {
+  buildSharedRoomRoommateContacts,
+  collectSharedRoomEmailRecipients,
+} from "@/lib/shared-room-email";
 import type { AccommodationRequest, RsvpEntry, StayHotel } from "@/lib/types";
 
 describe("bride invites", () => {
@@ -450,5 +453,52 @@ describe("shared room inventory", () => {
     const recipients = collectSharedRoomEmailRecipients(stays, []);
     expect(recipients).toHaveLength(2);
     expect(recipients.map((r) => r.name).sort()).toEqual(["Asha", "Bir"]);
+  });
+
+  it("includes roommate phone and email for shared-room emails", () => {
+    const stays: AccommodationRequest[] = [
+      {
+        id: "s1",
+        name: "Asha",
+        phone: "111",
+        email: "asha@example.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        roomGroupId: "g1",
+      },
+      {
+        id: "s2",
+        name: "Bir",
+        phone: "222",
+        email: "",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        rsvpId: "r2",
+        roomGroupId: "g1",
+      },
+    ];
+    const rsvps: RsvpEntry[] = [
+      {
+        id: "r2",
+        name: "Bir",
+        guests: 1,
+        attendance: "yes",
+        email: "bir@example.com",
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    const forAsha = buildSharedRoomRoommateContacts(stays, rsvps, "s1");
+    expect(forAsha).toEqual([
+      { name: "Bir", phone: "222", email: "bir@example.com" },
+    ]);
   });
 });

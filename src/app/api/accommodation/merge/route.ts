@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { sendAccommodationEmail } from "@/lib/email";
-import { collectSharedRoomEmailRecipients } from "@/lib/shared-room-email";
+import { collectSharedRoomEmailRecipients, buildSharedRoomRoommateContacts } from "@/lib/shared-room-email";
 import {
   listRsvps,
   mergeStaysIntoSharedRoom,
@@ -23,7 +23,7 @@ const schema = z.object({
  * Does not delete any request. Deducts 1 inventory room.
  * Rejects anyone who already has rooms assigned.
  * Emails every stay in the share (n requests → n emails).
- * Each guest is told they have a room and who they share it with.
+ * Each guest is told they have a room, who they share with, and roommate phone/email.
  */
 export async function POST(request: Request) {
   try {
@@ -74,10 +74,18 @@ export async function POST(request: Request) {
     }
 
     for (const recipient of recipients) {
-      const mailed = await sendAccommodationEmail({
-        ...recipient.stay,
-        email: recipient.email,
-      });
+      const roommates = buildSharedRoomRoommateContacts(
+        result.stays,
+        rsvps,
+        recipient.stay.id,
+      );
+      const mailed = await sendAccommodationEmail(
+        {
+          ...recipient.stay,
+          email: recipient.email,
+        },
+        { roommates },
+      );
       if (mailed.ok) {
         emailResults.push({
           email: recipient.email,
@@ -116,7 +124,7 @@ export async function POST(request: Request) {
 
     let message = `Shared 1 room for ${names}. All ${totalGuests} requests kept.`;
     if (sentCount === totalGuests && failed.length === 0) {
-      message += ` Sent ${sentCount} email${sentCount === 1 ? "" : "s"} — each guest told they have a room and who they share with.`;
+      message += ` Sent ${sentCount} email${sentCount === 1 ? "" : "s"} — each includes roommate phone & email.`;
     } else if (sentCount > 0) {
       message += ` Sent ${sentCount}/${totalGuests} emails.`;
       if (failed.length) {

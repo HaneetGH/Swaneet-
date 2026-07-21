@@ -5,6 +5,7 @@ import type {
   GalleryImage,
 } from "@/lib/types";
 import { PERMISSION_LABELS } from "@/lib/roles";
+import type { SharedRoomRoommateContact } from "@/lib/shared-room-email";
 import { appendEmailLog } from "@/lib/store";
 
 function formatDate(value: string) {
@@ -120,11 +121,20 @@ export async function sendResendEmail(input: {
 
 export async function sendAccommodationEmail(
   request: AccommodationRequest,
+  options?: {
+    /** Other guests in a shared room — phone + email for coordination */
+    roommates?: SharedRoomRoommateContact[];
+  },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const to = request.email || request.authEmail;
+  const roommates = (options?.roommates || []).filter((r) => r.name?.trim());
   const sharingWith =
-    request.roomShareWith?.filter(Boolean).join(", ") || "";
-  const isSharedRoom = Boolean(request.roomGroupId && sharingWith);
+    roommates.map((r) => r.name).filter(Boolean).join(", ") ||
+    request.roomShareWith?.filter(Boolean).join(", ") ||
+    "";
+  const isSharedRoom = Boolean(
+    request.roomGroupId && (sharingWith || roommates.length > 0),
+  );
 
   const subject =
     request.status === "confirmed"
@@ -154,13 +164,28 @@ export async function sendAccommodationEmail(
         ? "We’re unable to arrange accommodation for this request."
         : "Update on your accommodation request.";
 
-  const roomArrangementLine = (() => {
-    if (isSharedRoom) {
-      return [
-        "Important: one room is shared — please coordinate with the others.",
-        `You are sharing with: ${sharingWith}`,
-      ].join("\n");
+  const roommateContactsBlock = (() => {
+    if (!isSharedRoom) return null;
+    if (roommates.length === 0) {
+      return `You are sharing with: ${sharingWith}`;
     }
+    const lines = roommates.map((mate) => {
+      const parts = [
+        mate.name,
+        mate.phone ? `Phone: ${mate.phone}` : null,
+        mate.email ? `Email: ${mate.email}` : null,
+      ].filter(Boolean);
+      return `• ${parts.join(" · ")}`;
+    });
+    return [
+      "Important: one room is shared — please coordinate with the others.",
+      "Roommate contacts:",
+      ...lines,
+    ].join("\n");
+  })();
+
+  const roomArrangementLine = (() => {
+    if (isSharedRoom) return roommateContactsBlock;
     if (typeof request.roomsAssigned === "number" && request.roomsAssigned > 0) {
       return `Rooms arranged for you: ${request.roomsAssigned}`;
     }
