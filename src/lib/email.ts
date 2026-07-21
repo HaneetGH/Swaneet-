@@ -139,12 +139,28 @@ export async function sendAccommodationEmail(
     return { ok: false, error };
   }
 
+  const sharingWith =
+    request.roomShareWith?.filter(Boolean).join(", ") || "";
+  const isSharedRoom = Boolean(request.roomGroupId && sharingWith);
+
   const statusLine =
     request.status === "confirmed"
-      ? "Your stay has been confirmed."
+      ? isSharedRoom
+        ? "Your stay has been confirmed — you’ll share one room with family."
+        : "Your stay has been confirmed."
       : request.status === "declined"
         ? "We’re unable to arrange accommodation for this request."
         : "Update on your accommodation request.";
+
+  const roomArrangementLine = (() => {
+    if (isSharedRoom) {
+      return `Sharing one room with: ${sharingWith}`;
+    }
+    if (typeof request.roomsAssigned === "number" && request.roomsAssigned > 0) {
+      return `Rooms arranged for you: ${request.roomsAssigned}`;
+    }
+    return `Guests: ${request.people} · Rooms requested: ${request.rooms}`;
+  })();
 
   const details =
     request.status === "confirmed"
@@ -152,9 +168,8 @@ export async function sendAccommodationEmail(
           request.hotelName ? `Hotel / stay: ${request.hotelName}` : null,
           request.hotelAddress ? `Address: ${request.hotelAddress}` : null,
           request.roomDetails ? `Room / hotel details:\n${request.roomDetails}` : null,
-          typeof request.roomsAssigned === "number" && request.roomsAssigned > 0
-            ? `Rooms arranged for you: ${request.roomsAssigned}`
-            : `Guests: ${request.people} · Rooms requested: ${request.rooms}`,
+          roomArrangementLine,
+          `Guests on your request: ${request.people}`,
           `Check-in: ${formatDate(request.checkIn)}`,
           `Check-out: ${formatDate(request.checkOut)}`,
           request.adminNotes ? `Message from family:\n${request.adminNotes}` : null,
