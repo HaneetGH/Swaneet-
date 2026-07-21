@@ -353,7 +353,7 @@ describe("shared room inventory", () => {
     expect(inv.available).toBe(4);
   });
 
-  it("emails every shared guest using stay or linked RSVP contact", () => {
+  it("sends one email per stay request (n requests → n emails)", () => {
     const stays: AccommodationRequest[] = [
       {
         id: "s1",
@@ -368,36 +368,22 @@ describe("shared room inventory", () => {
         status: "confirmed",
         rsvpId: "r1",
         roomGroupId: "g1",
-        roomShareWith: ["Bir", "Chitra"],
+        roomShareWith: ["Bir"],
       },
       {
         id: "s2",
         name: "Bir",
         phone: "2",
-        email: "bir@example.com",
+        email: "",
         people: 1,
         rooms: 1,
         checkIn: "2026-08-12",
         checkOut: "2026-08-13",
         createdAt: new Date().toISOString(),
         status: "confirmed",
-        authUid: "uid-bir",
+        rsvpId: "r2",
         roomGroupId: "g1",
-        roomShareWith: ["Asha", "Chitra"],
-      },
-      {
-        id: "s3",
-        name: "Chitra",
-        phone: "3",
-        email: "chitra@example.com",
-        people: 1,
-        rooms: 1,
-        checkIn: "2026-08-12",
-        checkOut: "2026-08-13",
-        createdAt: new Date().toISOString(),
-        status: "confirmed",
-        roomGroupId: "g1",
-        roomShareWith: ["Asha", "Bir"],
+        roomShareWith: ["Asha"],
       },
     ];
     const rsvps: RsvpEntry[] = [
@@ -406,7 +392,7 @@ describe("shared room inventory", () => {
         name: "Asha",
         guests: 1,
         attendance: "yes",
-        email: "asha-rsvp@example.com",
+        email: "asha@example.com",
         createdAt: new Date().toISOString(),
       },
       {
@@ -414,19 +400,55 @@ describe("shared room inventory", () => {
         name: "Bir",
         guests: 1,
         attendance: "yes",
-        authUid: "uid-bir",
-        authEmail: "bir-rsvp@example.com",
+        email: "bir@example.com",
         createdAt: new Date().toISOString(),
       },
     ];
 
     const recipients = collectSharedRoomEmailRecipients(stays, rsvps);
+    expect(recipients).toHaveLength(2);
+    expect(recipients.map((r) => r.name).sort()).toEqual(["Asha", "Bir"]);
     expect(recipients.map((r) => r.email).sort()).toEqual([
-      "asha-rsvp@example.com",
+      "asha@example.com",
       "bir@example.com",
-      "chitra@example.com",
     ]);
-    expect(recipients.find((r) => r.name === "Asha")?.source).toBe("rsvp");
-    expect(recipients.find((r) => r.name === "Bir")?.source).toBe("stay");
+    expect(recipients.every((r) => r.source === "rsvp")).toBe(true);
+  });
+
+  it("still sends n emails even if two guests share the same address", () => {
+    const stays: AccommodationRequest[] = [
+      {
+        id: "s1",
+        name: "Asha",
+        phone: "1",
+        email: "family@example.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        roomGroupId: "g1",
+        roomShareWith: ["Bir"],
+      },
+      {
+        id: "s2",
+        name: "Bir",
+        phone: "2",
+        email: "family@example.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        roomGroupId: "g1",
+        roomShareWith: ["Asha"],
+      },
+    ];
+
+    const recipients = collectSharedRoomEmailRecipients(stays, []);
+    expect(recipients).toHaveLength(2);
+    expect(recipients.map((r) => r.name).sort()).toEqual(["Asha", "Bir"]);
   });
 });

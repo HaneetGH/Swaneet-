@@ -68,20 +68,20 @@ export type SharedRoomEmailRecipient = {
 };
 
 /**
- * One email per guest in the shared room.
+ * Exactly one recipient per stay request in the share (n stays → n emails).
+ * Never drops a guest just because another stay uses the same address.
  * Uses stay contact, or linked RSVP email when the stay has none.
  */
 export function collectSharedRoomEmailRecipients(
   stays: AccommodationRequest[],
   rsvps: RsvpEntry[],
 ): SharedRoomEmailRecipient[] {
-  const byEmail = new Map<string, SharedRoomEmailRecipient>();
+  const recipients: SharedRoomEmailRecipient[] = [];
 
   for (const stay of stays) {
     const resolved = resolveNotifyEmailForStay(stay, rsvps);
     if (!resolved) continue;
-    if (byEmail.has(resolved.email)) continue;
-    byEmail.set(resolved.email, {
+    recipients.push({
       email: resolved.email,
       stay,
       name: stay.name,
@@ -89,5 +89,5 @@ export function collectSharedRoomEmailRecipients(
     });
   }
 
-  return [...byEmail.values()];
+  return recipients;
 }

@@ -22,7 +22,8 @@ const schema = z.object({
  * Merge stay requests into one shared room (any people mix you choose).
  * Does not delete any request. Deducts 1 inventory room.
  * Rejects anyone who already has rooms assigned.
- * Emails every unique stay + linked RSVP contact in the share.
+ * Emails every stay in the share (n requests → n emails).
+ * Each guest is told they have a room and who they share it with.
  */
 export async function POST(request: Request) {
   try {
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
     const rsvps = await listRsvps();
     const recipients = collectSharedRoomEmailRecipients(result.stays, rsvps);
     const coveredStayIds = new Set(recipients.map((r) => r.stay.id));
+    const totalGuests = result.stays.length;
 
     const emailResults: Array<{
       email: string;
@@ -112,17 +114,17 @@ export async function POST(request: Request) {
     const failed = emailResults.filter((row) => !row.sent);
     const names = result.stays.map((s) => s.name).join(", ");
 
-    let message = `Shared 1 room for ${names}. All requests kept.`;
-    if (sentCount > 0 && failed.length === 0) {
-      message += ` Confirmation emailed to all ${sentCount} guest${sentCount === 1 ? "" : "s"} (stay/RSVP).`;
+    let message = `Shared 1 room for ${names}. All ${totalGuests} requests kept.`;
+    if (sentCount === totalGuests && failed.length === 0) {
+      message += ` Sent ${sentCount} email${sentCount === 1 ? "" : "s"} — each guest told they have a room and who they share with.`;
     } else if (sentCount > 0) {
-      message += ` Emailed ${sentCount}/${result.stays.length} guests in the share.`;
+      message += ` Sent ${sentCount}/${totalGuests} emails.`;
       if (failed.length) {
         message += ` Missing/failed: ${failed.map((f) => f.name || f.email).join(", ")}.`;
       }
     } else {
       message +=
-        " No confirmation emails sent — each guest needs an email on their stay or RSVP.";
+        " No emails sent — each guest needs an email on their stay or RSVP.";
       if (failed[0]?.error) {
         message += ` (${failed[0].error})`;
       }

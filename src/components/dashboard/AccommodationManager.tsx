@@ -423,7 +423,7 @@ export function AccommodationManager({
     const names = mergeSelection.selected.map((item) => item.name).join(", ");
     if (
       !confirm(
-        `Assign ONE room to:\n${names}\n\nTotal people on these requests: ${mergeSelection.people}\n(You decide if that room fits — we don’t store a people limit.)\n\n• All ${mergeSelection.count} stay requests are kept (nothing deleted)\n• Only 1 room is taken from inventory\n• Confirmation email goes to every stay + linked RSVP contact in this share\n• Anyone who already has a room assigned stays out`,
+        `Assign ONE room to:\n${names}\n\nTotal people on these requests: ${mergeSelection.people}\n(You decide if that room fits — we don’t store a people limit.)\n\n• All ${mergeSelection.count} stay requests are kept (nothing deleted)\n• Only 1 room is taken from inventory\n• ${mergeSelection.count} emails go out (one per guest) — each told they have a room and who they share with\n• Anyone who already has a room assigned stays out`,
       )
     ) {
       return;
@@ -670,8 +670,9 @@ export function AccommodationManager({
             <p className="mt-1 font-body text-xs leading-relaxed text-muted">
               Tick 2 or more requests (any mix — e.g. three singles, or a couple
               + one more). You decide if they fit in one room. We confirm every
-              selected request, keep all records, email every guest’s stay and
-              linked RSVP contact, and subtract only{" "}
+              selected request, keep all records, send one email per guest
+              (stay or linked RSVP) telling them they have a room and who they
+              share with, and subtract only{" "}
               <span className="text-cream">1 room</span> from inventory.
               Requests that already have a room assigned stay untouched.
             </p>

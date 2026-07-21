@@ -122,9 +122,15 @@ export async function sendAccommodationEmail(
   request: AccommodationRequest,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const to = request.email || request.authEmail;
+  const sharingWith =
+    request.roomShareWith?.filter(Boolean).join(", ") || "";
+  const isSharedRoom = Boolean(request.roomGroupId && sharingWith);
+
   const subject =
     request.status === "confirmed"
-      ? "Your #Swaneet accommodation details"
+      ? isSharedRoom
+        ? "Your #Swaneet shared room details"
+        : "Your #Swaneet accommodation details"
       : "Update on your #Swaneet accommodation request";
 
   if (!to) {
@@ -139,14 +145,10 @@ export async function sendAccommodationEmail(
     return { ok: false, error };
   }
 
-  const sharingWith =
-    request.roomShareWith?.filter(Boolean).join(", ") || "";
-  const isSharedRoom = Boolean(request.roomGroupId && sharingWith);
-
   const statusLine =
     request.status === "confirmed"
       ? isSharedRoom
-        ? "Your stay has been confirmed — you’ll share one room with family."
+        ? `You have been given a hotel room for #Swaneet. You will share this one room with ${sharingWith}.`
         : "Your stay has been confirmed."
       : request.status === "declined"
         ? "We’re unable to arrange accommodation for this request."
@@ -154,7 +156,10 @@ export async function sendAccommodationEmail(
 
   const roomArrangementLine = (() => {
     if (isSharedRoom) {
-      return `Sharing one room with: ${sharingWith}`;
+      return [
+        "Important: one room is shared — please coordinate with the others.",
+        `You are sharing with: ${sharingWith}`,
+      ].join("\n");
     }
     if (typeof request.roomsAssigned === "number" && request.roomsAssigned > 0) {
       return `Rooms arranged for you: ${request.roomsAssigned}`;
@@ -206,7 +211,9 @@ export async function sendAccommodationEmail(
   const html = `
     <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
       <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
-      <h1 style="font-weight: 400; font-size: 28px;">Your hotel details</h1>
+      <h1 style="font-weight: 400; font-size: 28px;">${
+        isSharedRoom ? "Your shared room" : "Your hotel details"
+      }</h1>
       <p>Dear ${escapeHtml(request.name)},</p>
       <p>${escapeHtml(statusLine)}</p>
       <div style="background: #f7f1e6; padding: 16px 18px; border-radius: 12px; margin: 16px 0;">
