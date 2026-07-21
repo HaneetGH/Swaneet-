@@ -3,8 +3,13 @@ import type {
   AdminPermission,
   EmailKind,
   GalleryImage,
+  ManagedEvent,
 } from "@/lib/types";
 import { PERMISSION_LABELS } from "@/lib/roles";
+import {
+  formatEventsItinerary,
+  resolveEventsForStayEmail,
+} from "@/lib/email-itinerary";
 import type { SharedRoomRoommateContact } from "@/lib/shared-room-email";
 import { appendEmailLog } from "@/lib/store";
 
@@ -124,6 +129,8 @@ export async function sendAccommodationEmail(
   options?: {
     /** Other guests in a shared room — phone + email for coordination */
     roommates?: SharedRoomRoommateContact[];
+    /** Wedding events itinerary (loaded automatically when omitted) */
+    events?: ManagedEvent[];
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const to = request.email || request.authEmail;
@@ -192,6 +199,14 @@ export async function sendAccommodationEmail(
     return `Guests: ${request.people} · Rooms requested: ${request.rooms}`;
   })();
 
+  const events =
+    options?.events ??
+    (request.status === "confirmed"
+      ? await resolveEventsForStayEmail(request)
+      : []);
+  const itinerary =
+    request.status === "confirmed" ? formatEventsItinerary(events) : "";
+
   const details =
     request.status === "confirmed"
       ? [
@@ -202,6 +217,7 @@ export async function sendAccommodationEmail(
           `Guests on your request: ${request.people}`,
           `Check-in: ${formatDate(request.checkIn)}`,
           `Check-out: ${formatDate(request.checkOut)}`,
+          itinerary || null,
           request.adminNotes ? `Message from family:\n${request.adminNotes}` : null,
         ]
           .filter(Boolean)

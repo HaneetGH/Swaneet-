@@ -37,12 +37,18 @@ import {
   buildCalendarWindow,
   parseEventTimeBounds,
 } from "@/lib/calendar";
+import { formatEventsItinerary } from "@/lib/email-itinerary";
 import { computeRoomInventory } from "@/lib/store";
 import {
   buildSharedRoomRoommateContacts,
   collectSharedRoomEmailRecipients,
 } from "@/lib/shared-room-email";
-import type { AccommodationRequest, RsvpEntry, StayHotel } from "@/lib/types";
+import type {
+  AccommodationRequest,
+  ManagedEvent,
+  RsvpEntry,
+  StayHotel,
+} from "@/lib/types";
 
 describe("bride invites", () => {
   it("resolves mehfil and laavan slugs", () => {
@@ -500,5 +506,46 @@ describe("shared room inventory", () => {
     expect(forAsha).toEqual([
       { name: "Bir", phone: "222", email: "bir@example.com" },
     ]);
+  });
+});
+
+describe("stay email itinerary", () => {
+  it("formats all events with venue, location, and maps link", () => {
+    const events: ManagedEvent[] = [
+      {
+        id: "e1",
+        name: "Mehndi",
+        date: "9th August 2026",
+        day: "Sunday",
+        time: "2:00 PM Onwards",
+        venue: "Panipat",
+        venueDetail: "",
+        address: "Panipat, Haryana",
+        description: "",
+        icon: "sparkles",
+      },
+      {
+        id: "e2",
+        name: "Anand Karaj",
+        date: "13th August 2026",
+        day: "Thursday",
+        time: "10:00 AM",
+        venue: "Maple Garden",
+        venueDetail: "Jagadhri",
+        address: "Buria Road, Jagadhri",
+        description: "",
+        icon: "heart",
+      },
+    ];
+    const text = formatEventsItinerary(events);
+    expect(text).toContain("Wedding itinerary (with locations)");
+    expect(text).toContain("1. Mehndi");
+    expect(text).toContain("Venue: Panipat");
+    expect(text).toContain("Location: Panipat, Haryana");
+    expect(text).toContain("2. Anand Karaj");
+    expect(text).toContain("Venue: Maple Garden · Jagadhri");
+    expect(text).toContain("Location: Buria Road, Jagadhri");
+    expect(text).toContain("Maps: https://www.google.com/maps/search/");
+    expect(text).toContain(encodeURIComponent("Maple Garden"));
   });
 });
