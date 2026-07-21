@@ -33,6 +33,10 @@ import {
   toProxiedGalleryImage,
   verifyGalleryAccessToken,
 } from "@/lib/gallery-access";
+import {
+  buildCalendarWindow,
+  parseEventTimeBounds,
+} from "@/lib/calendar";
 
 describe("bride invites", () => {
   it("resolves mehfil and laavan slugs", () => {
@@ -266,5 +270,32 @@ describe("gallery access tokens", () => {
     );
     expect(proxied.src).toBe("/api/gallery/file/img-1?access=tok");
     expect(proxied.src.includes("blob.vercel-storage.com")).toBe(false);
+  });
+});
+
+describe("add to calendar", () => {
+  it("parses time ranges and onwards times", () => {
+    expect(parseEventTimeBounds("11:00 AM – 1:00 PM")).toEqual({
+      start: "11:00",
+      end: "13:00",
+      onwards: false,
+    });
+    expect(parseEventTimeBounds("8:00 PM Onwards").start).toBe("20:00");
+    expect(parseEventTimeBounds("8:00 PM Onwards").onwards).toBe(true);
+  });
+
+  it("builds a calendar window for wedding dinner", () => {
+    const window = buildCalendarWindow({
+      name: "Wedding Dinner",
+      date: "12th August 2026",
+      time: "8:00 PM Onwards",
+      venue: "Maple Garden",
+      venueDetail: "A Unit of Sukhmani Resort",
+      address: "Buria Road, Jagadhri",
+      description: "Wednesday Night · Wedding Dinner",
+    });
+    expect(window?.startLocal).toBe("20260812T200000");
+    expect(window?.title).toContain("Wedding Dinner");
+    expect(window?.location).toContain("Maple Garden");
   });
 });

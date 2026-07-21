@@ -19,6 +19,7 @@ import {
 } from "@/lib/datetime";
 import type { EventIcon, ManagedEvent } from "@/lib/types";
 import { SectionHeading } from "@/components/ui/SectionHeading";
+import { AddAllToCalendar, AddToCalendar } from "@/components/ui/AddToCalendar";
 import { cn } from "@/lib/utils";
 import { useInvite } from "@/lib/invite-context";
 
@@ -181,6 +182,10 @@ export function Events() {
             );
           })}
         </ol>
+
+        <AddAllToCalendar
+          events={events.filter((event) => !isEventDone(event))}
+        />
       </div>
     </section>
   );
@@ -288,8 +293,8 @@ function EventDetails({
 
       <div
         className={cn(
-          "mt-4",
-          align === "right" && "md:flex md:justify-end",
+          "mt-4 flex flex-col gap-3",
+          align === "right" && "md:items-end",
         )}
       >
         <a
@@ -304,6 +309,7 @@ function EventDetails({
           Get directions
           <ExternalLink size={12} aria-hidden />
         </a>
+        {!done ? <AddToCalendar event={event} align={align} /> : null}
       </div>
 
       {event.description ? (
