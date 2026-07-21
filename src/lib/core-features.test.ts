@@ -38,7 +38,8 @@ import {
   parseEventTimeBounds,
 } from "@/lib/calendar";
 import { computeRoomInventory } from "@/lib/store";
-import type { AccommodationRequest, StayHotel } from "@/lib/types";
+import { collectSharedRoomEmailRecipients } from "@/lib/shared-room-email";
+import type { AccommodationRequest, RsvpEntry, StayHotel } from "@/lib/types";
 
 describe("bride invites", () => {
   it("resolves mehfil and laavan slugs", () => {
@@ -350,5 +351,82 @@ describe("shared room inventory", () => {
     const inv = computeRoomInventory(stays, [hotel]);
     expect(inv.assigned).toBe(1);
     expect(inv.available).toBe(4);
+  });
+
+  it("emails every shared guest using stay or linked RSVP contact", () => {
+    const stays: AccommodationRequest[] = [
+      {
+        id: "s1",
+        name: "Asha",
+        phone: "1",
+        email: "",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        rsvpId: "r1",
+        roomGroupId: "g1",
+        roomShareWith: ["Bir", "Chitra"],
+      },
+      {
+        id: "s2",
+        name: "Bir",
+        phone: "2",
+        email: "bir@example.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        authUid: "uid-bir",
+        roomGroupId: "g1",
+        roomShareWith: ["Asha", "Chitra"],
+      },
+      {
+        id: "s3",
+        name: "Chitra",
+        phone: "3",
+        email: "chitra@example.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        roomGroupId: "g1",
+        roomShareWith: ["Asha", "Bir"],
+      },
+    ];
+    const rsvps: RsvpEntry[] = [
+      {
+        id: "r1",
+        name: "Asha",
+        guests: 1,
+        attendance: "yes",
+        email: "asha-rsvp@example.com",
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "r2",
+        name: "Bir",
+        guests: 1,
+        attendance: "yes",
+        authUid: "uid-bir",
+        authEmail: "bir-rsvp@example.com",
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    const recipients = collectSharedRoomEmailRecipients(stays, rsvps);
+    expect(recipients.map((r) => r.email).sort()).toEqual([
+      "asha-rsvp@example.com",
+      "bir@example.com",
+      "chitra@example.com",
+    ]);
+    expect(recipients.find((r) => r.name === "Asha")?.source).toBe("rsvp");
+    expect(recipients.find((r) => r.name === "Bir")?.source).toBe("stay");
   });
 });

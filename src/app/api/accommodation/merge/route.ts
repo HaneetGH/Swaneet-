@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { sendAccommodationEmail } from "@/lib/email";
+import { collectSharedRoomEmailRecipients } from "@/lib/shared-room-email";
 import {
+  listRsvps,
   mergeStaysIntoSharedRoom,
   updateAccommodation,
 } from "@/lib/store";
@@ -20,7 +22,7 @@ const schema = z.object({
  * Merge stay requests into one shared room (any people mix you choose).
  * Does not delete any request. Deducts 1 inventory room.
  * Rejects anyone who already has rooms assigned.
- * Emails every guest in the share (same as Save & email on a single stay).
+ * Emails every unique stay + linked RSVP contact in the share.
  */
 export async function POST(request: Request) {
   try {
@@ -42,32 +44,67 @@ export async function POST(request: Request) {
 
     const result = await mergeStaysIntoSharedRoom(parsed.data);
     const now = new Date().toISOString();
+    const rsvps = await listRsvps();
+    const recipients = collectSharedRoomEmailRecipients(result.stays, rsvps);
+    const coveredStayIds = new Set(recipients.map((r) => r.stay.id));
 
     const emailResults: Array<{
-      id: string;
+      email: string;
       name: string;
+      stayId: string;
+      source: "stay" | "rsvp";
       sent: boolean;
       error?: string;
     }> = [];
 
     let stays = result.stays;
+
     for (const stay of result.stays) {
-      const mailed = await sendAccommodationEmail(stay);
+      if (coveredStayIds.has(stay.id)) continue;
+      emailResults.push({
+        email: "",
+        name: stay.name,
+        stayId: stay.id,
+        source: "stay",
+        sent: false,
+        error: "No email on stay or linked RSVP",
+      });
+    }
+
+    for (const recipient of recipients) {
+      const mailed = await sendAccommodationEmail({
+        ...recipient.stay,
+        email: recipient.email,
+      });
       if (mailed.ok) {
-        const withEmail = await updateAccommodation(stay.id, {
-          emailSentAt: now,
+        emailResults.push({
+          email: recipient.email,
+          name: recipient.name,
+          stayId: recipient.stay.id,
+          source: recipient.source,
+          sent: true,
         });
-        if (withEmail) {
-          stays = stays.map((row) => (row.id === stay.id ? withEmail : row));
-        }
-        emailResults.push({ id: stay.id, name: stay.name, sent: true });
       } else {
         emailResults.push({
-          id: stay.id,
-          name: stay.name,
+          email: recipient.email,
+          name: recipient.name,
+          stayId: recipient.stay.id,
+          source: recipient.source,
           sent: false,
           error: mailed.error,
         });
+      }
+    }
+
+    const sentStayIds = new Set(
+      emailResults.filter((row) => row.sent).map((row) => row.stayId),
+    );
+    for (const stayId of sentStayIds) {
+      const withEmail = await updateAccommodation(stayId, {
+        emailSentAt: now,
+      });
+      if (withEmail) {
+        stays = stays.map((row) => (row.id === stayId ? withEmail : row));
       }
     }
 
@@ -76,16 +113,16 @@ export async function POST(request: Request) {
     const names = result.stays.map((s) => s.name).join(", ");
 
     let message = `Shared 1 room for ${names}. All requests kept.`;
-    if (sentCount === emailResults.length) {
-      message += ` Confirmation emailed to all ${sentCount}.`;
+    if (sentCount > 0 && failed.length === 0) {
+      message += ` Confirmation emailed to all ${sentCount} guest${sentCount === 1 ? "" : "s"} (stay/RSVP).`;
     } else if (sentCount > 0) {
-      message += ` Emailed ${sentCount}/${emailResults.length}.`;
+      message += ` Emailed ${sentCount}/${result.stays.length} guests in the share.`;
       if (failed.length) {
-        message += ` Failed: ${failed.map((f) => f.name).join(", ")}.`;
+        message += ` Missing/failed: ${failed.map((f) => f.name || f.email).join(", ")}.`;
       }
     } else {
       message +=
-        " No confirmation emails sent — check each guest has an email, then use Save & email.";
+        " No confirmation emails sent — each guest needs an email on their stay or RSVP.";
       if (failed[0]?.error) {
         message += ` (${failed[0].error})`;
       }
