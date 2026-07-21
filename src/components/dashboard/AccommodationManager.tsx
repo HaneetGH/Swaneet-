@@ -1,6 +1,6 @@
 "use client";
 
-import { BedDouble, Mail, Plus, Save, Trash2 } from "lucide-react";
+import { BedDouble, Mail, Plus, Save, Trash2, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   AccommodationRequest,
@@ -79,6 +79,10 @@ export function AccommodationManager({
   const [drafts, setDrafts] = useState<Record<string, StayDraft>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [mergeIds, setMergeIds] = useState<string[]>([]);
+  const [mergeHotelId, setMergeHotelId] = useState("");
+  const [mergeRoomDetails, setMergeRoomDetails] = useState("");
+  const [merging, setMerging] = useState(false);
 
   useEffect(() => {
     fetch("/api/accommodation")
@@ -101,6 +105,12 @@ export function AccommodationManager({
       )
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!mergeHotelId && (inventory.hotels || []).length === 1) {
+      setMergeHotelId(inventory.hotels[0]!.id);
+    }
+  }, [inventory.hotels, mergeHotelId]);
 
   const filtered = useMemo(
     () =>
@@ -362,6 +372,7 @@ export function AccommodationManager({
     };
     if (res.ok) {
       setItems((prev) => prev.filter((item) => item.id !== id));
+      setMergeIds((prev) => prev.filter((x) => x !== id));
       if (data.inventory) {
         setInventory({
           ...emptyInventory,
@@ -370,6 +381,97 @@ export function AccommodationManager({
         });
       }
       if (openId === id) setOpenId(null);
+    }
+  };
+
+  /** Eligible for shared-room merge: keep assigned rooms out of the pool. */
+  const canMergeStay = (item: AccommodationRequest) => {
+    if (item.status === "declined") return false;
+    if (typeof item.roomsAssigned === "number" && item.roomsAssigned > 0) {
+      return false;
+    }
+    if (item.roomGroupId) return false;
+    return true;
+  };
+
+  const toggleMergeId = (id: string) => {
+    setMergeIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 10) {
+        setMessage("Select at most 10 stay requests for one shared room.");
+        return prev;
+      }
+      return [...prev, id];
+    });
+  };
+
+  const mergeSelection = useMemo(() => {
+    const selected = items.filter((item) => mergeIds.includes(item.id));
+    const people = selected.reduce((sum, item) => sum + (item.people || 0), 0);
+    return { selected, people, count: selected.length };
+  }, [items, mergeIds]);
+
+  const onMergeSharedRoom = async () => {
+    if (mergeIds.length < 2) {
+      setMessage("Select at least 2 stay requests to put in one room.");
+      return;
+    }
+    if (!mergeHotelId) {
+      setMessage("Choose which hotel the shared room is from.");
+      return;
+    }
+    const names = mergeSelection.selected.map((item) => item.name).join(", ");
+    if (
+      !confirm(
+        `Assign ONE room to:\n${names}\n\nTotal people on these requests: ${mergeSelection.people}\n(You decide if that room fits — we don’t store a people limit.)\n\n• All ${mergeSelection.count} stay requests are kept (nothing deleted)\n• Only 1 room is taken from inventory\n• Anyone who already has a room assigned stays out`,
+      )
+    ) {
+      return;
+    }
+
+    setMerging(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/accommodation/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: mergeIds,
+          hotelId: mergeHotelId,
+          roomDetails: mergeRoomDetails.trim() || undefined,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        stays?: AccommodationRequest[];
+        inventory?: RoomInventory;
+      };
+      if (!res.ok) {
+        setMessage(data.error || "Could not merge into one room");
+        return;
+      }
+      if (data.stays?.length) {
+        const byId = new Map(data.stays.map((stay) => [stay.id, stay]));
+        setItems((prev) => prev.map((item) => byId.get(item.id) || item));
+      }
+      if (data.inventory) {
+        setInventory({
+          ...emptyInventory,
+          ...data.inventory,
+          hotels: data.inventory.hotels || [],
+        });
+      }
+      setMergeIds([]);
+      setMergeRoomDetails("");
+      setMessage(
+        data.message ||
+          "Shared room saved. All stay requests kept; 1 room deducted.",
+      );
+    } catch {
+      setMessage("Could not merge into one room. Please try again.");
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -558,11 +660,96 @@ export function AccommodationManager({
         ))}
       </div>
 
+      <div className="mb-5 rounded-2xl border border-gold/25 bg-[#141018] p-4">
+        <div className="flex flex-wrap items-start gap-2">
+          <Users size={16} className="mt-0.5 text-gold" />
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-lg text-cream">
+              Share one room across stay requests
+            </p>
+            <p className="mt-1 font-body text-xs leading-relaxed text-muted">
+              Tick 2 or more requests (any mix — e.g. three singles, or a couple
+              + one more). You decide if they fit in one room. We confirm every
+              selected request, keep all records, and subtract only{" "}
+              <span className="text-cream">1 room</span> from inventory. Requests
+              that already have a room assigned stay untouched.
+            </p>
+          </div>
+        </div>
+
+        {mergeSelection.count > 0 ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <label className="block">
+              <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                Hotel for this shared room
+              </span>
+              <select
+                className={cn(fieldClass, "appearance-none")}
+                value={mergeHotelId}
+                onChange={(e) => setMergeHotelId(e.target.value)}
+              >
+                <option value="">Select hotel…</option>
+                {(inventory.hotels || []).map((hotel) => (
+                  <option key={hotel.id} value={hotel.id}>
+                    {hotel.name} · {hotel.available} free / {hotel.totalRooms}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                Room note (optional)
+              </span>
+              <input
+                className={fieldClass}
+                value={mergeRoomDetails}
+                onChange={(e) => setMergeRoomDetails(e.target.value)}
+                placeholder="e.g. Room 204 — family suite"
+              />
+            </label>
+            <div className="flex flex-col gap-2">
+              <p className="font-body text-xs text-gold-soft">
+                {mergeSelection.count} request
+                {mergeSelection.count === 1 ? "" : "s"} ·{" "}
+                {mergeSelection.people} people total
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={merging || mergeSelection.count < 2 || !mergeHotelId}
+                  onClick={onMergeSharedRoom}
+                >
+                  <BedDouble size={14} />
+                  {merging ? "Assigning…" : "Assign 1 shared room"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={merging}
+                  onClick={() => {
+                    setMergeIds([]);
+                    setMergeRoomDetails("");
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 font-body text-xs text-muted">
+            Use the checkboxes on eligible requests below to start a share.
+          </p>
+        )}
+      </div>
+
       <div className="space-y-4">
         {filtered.map((item) => {
           const draft = draftFor(item);
           const open = openId === item.id;
           const status = (item.status || "pending") as AccommodationStatus;
+          const mergeable = canMergeStay(item);
+          const mergeChecked = mergeIds.includes(item.id);
 
           return (
             <div
@@ -570,28 +757,67 @@ export function AccommodationManager({
               className="rounded-2xl border border-gold/20 bg-[#141018] p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 text-left"
-                  onClick={() => setOpenId(open ? null : item.id)}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-display text-xl text-cream">{item.name}</p>
-                    <span
-                      className={cn(
-                        "rounded-full border px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em]",
-                        statusStyle[status],
-                      )}
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  {mergeable ? (
+                    <label
+                      className="mt-1.5 flex shrink-0 cursor-pointer items-center"
+                      title="Include in shared room"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {status}
-                    </span>
-                    {status === "confirmed" && item.roomsAssigned ? (
-                      <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-gold-soft">
-                        {item.roomsAssigned} room
-                        {item.roomsAssigned === 1 ? "" : "s"}
-                        {item.hotelName ? ` · ${item.hotelName}` : ""}
+                      <input
+                        type="checkbox"
+                        checked={mergeChecked}
+                        onChange={() => toggleMergeId(item.id)}
+                        className="h-4 w-4 accent-[#c4a35a]"
+                      />
+                      <span className="sr-only">Share room with others</span>
+                    </label>
+                  ) : (
+                    <span
+                      className="mt-1.5 h-4 w-4 shrink-0"
+                      aria-hidden
+                      title={
+                        item.roomGroupId
+                          ? "Already in a shared room"
+                          : typeof item.roomsAssigned === "number" &&
+                              item.roomsAssigned > 0
+                            ? "Already has rooms assigned"
+                            : undefined
+                      }
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => setOpenId(open ? null : item.id)}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-display text-xl text-cream">
+                        {item.name}
+                      </p>
+                      <span
+                        className={cn(
+                          "rounded-full border px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em]",
+                          statusStyle[status],
+                        )}
+                      >
+                        {status}
                       </span>
-                    ) : null}
+                      {item.roomGroupId ? (
+                        <span className="rounded-full border border-sky-300/35 bg-sky-400/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-sky-100">
+                          Shared room
+                          {item.roomGroupRole === "primary"
+                            ? " · holds inventory"
+                            : ""}
+                        </span>
+                      ) : null}
+                      {status === "confirmed" && item.roomsAssigned ? (
+                        <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-gold-soft">
+                          {item.roomsAssigned} room
+                          {item.roomsAssigned === 1 ? "" : "s"}
+                          {item.hotelName ? ` · ${item.hotelName}` : ""}
+                        </span>
+                      ) : null}
                     {item.inviteTier ? (
                       <span className="rounded-full border border-rose-300/30 bg-rose-400/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-rose-100">
                         Bride · {item.inviteTier}
@@ -626,7 +852,13 @@ export function AccommodationManager({
                       Guest note: “{item.notes}”
                     </p>
                   ) : null}
+                  {item.roomShareWith && item.roomShareWith.length > 0 ? (
+                    <p className="mt-2 font-body text-xs text-sky-100/90">
+                      Sharing room with: {item.roomShareWith.join(", ")}
+                    </p>
+                  ) : null}
                 </button>
+                </div>
                 <button
                   type="button"
                   onClick={() => onDelete(item.id)}

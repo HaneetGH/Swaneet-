@@ -703,11 +703,19 @@ export function computeRoomInventory(
   accommodations: AccommodationRequest[],
   hotels: StayHotel[],
 ): RoomInventory {
+  const countedGroups = new Set<string>();
+
   const hotelRows = hotels.map((hotel) => {
     const assigned = accommodations.reduce((sum, item) => {
       if (item.status !== "confirmed") return sum;
       if (typeof item.roomsAssigned !== "number" || item.roomsAssigned <= 0) {
         return sum;
+      }
+      // Shared room: only the primary's roomsAssigned counts once
+      if (item.roomGroupId) {
+        if (item.roomGroupRole === "member") return sum;
+        if (countedGroups.has(item.roomGroupId)) return sum;
+        countedGroups.add(item.roomGroupId);
       }
       if (item.hotelId) {
         return item.hotelId === hotel.id ? sum + item.roomsAssigned : sum;
@@ -981,6 +989,146 @@ export async function updateAccommodation(
   return updated;
 }
 
+/**
+ * Put multiple stay requests in one shared physical room.
+ * - Any combination of requests (e.g. 1+1+1 people, or 2+1, etc.)
+ * - You decide capacity yourself — we do not store people-per-room limits
+ * - Never deletes any request
+ * - Rejects anyone who already has roomsAssigned > 0 (their assignment stays)
+ * - Deducts exactly 1 inventory room via the primary member
+ *
+ * Production (Neon): updates ONLY the selected accommodation rows via
+ * upsertAccommodationToDb — does not rewrite content_store guest lists
+ * and never touches data/content.json.
+ */
+export async function mergeStaysIntoSharedRoom(input: {
+  ids: string[];
+  hotelId: string;
+  roomDetails?: string;
+  adminNotes?: string;
+}): Promise<{
+  stays: AccommodationRequest[];
+  inventory: RoomInventory;
+  roomGroupId: string;
+}> {
+  // On Vercel, refuse Neon — never fall back to local file (would not see prod data)
+  if (isVercelRuntime() && !hasDatabase()) {
+    throw new Error(
+      "Database is not connected. Shared-room assign needs Neon so guest stays are not lost.",
+    );
+  }
+
+  const uniqueIds = [...new Set(input.ids.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueIds.length < 2) {
+    throw new Error("Select at least 2 stay requests to share one room.");
+  }
+  if (uniqueIds.length > 10) {
+    throw new Error("Select at most 10 stay requests for one shared room.");
+  }
+
+  const hotelId = input.hotelId.trim();
+  if (!hotelId) throw new Error("Select a hotel for the shared room.");
+
+  const all = await listAccommodations();
+  const selected = uniqueIds.map((id) => {
+    const row = all.find((item) => item.id === id);
+    if (!row) throw new Error(`Stay request not found: ${id}`);
+    return row;
+  });
+
+  for (const row of selected) {
+    if (row.status === "declined") {
+      throw new Error(
+        `${row.name}'s request is declined — leave them out of the merge.`,
+      );
+    }
+    if (typeof row.roomsAssigned === "number" && row.roomsAssigned > 0) {
+      throw new Error(
+        `${row.name} already has ${row.roomsAssigned} room(s) assigned. Do not merge people who already have a room — their assignment is kept as-is.`,
+      );
+    }
+    if (row.roomGroupId) {
+      throw new Error(
+        `${row.name} is already in a shared room. Leave them out or undo that share first.`,
+      );
+    }
+  }
+
+  const inventory = await getRoomInventory();
+  const hotelRow = inventory.hotels.find((hotel) => hotel.id === hotelId);
+  if (!hotelRow) {
+    throw new Error("Selected hotel was not found. Add the hotel first.");
+  }
+  if (hotelRow.available < 1) {
+    throw new Error(
+      `No rooms left at ${hotelRow.name}. Available: ${hotelRow.available}.`,
+    );
+  }
+
+  const store = await readStore();
+  const hotel = (store.hotels || []).find((item) => item.id === hotelId);
+  if (!hotel) throw new Error("Selected hotel was not found.");
+
+  // Primary = most people requested, then earliest request
+  const ordered = [...selected].sort((a, b) => {
+    if (b.people !== a.people) return b.people - a.people;
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+  const primary = ordered[0]!;
+  const shareNames = ordered.map((item) => item.name);
+  const roomGroupId = `roomgrp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const now = new Date().toISOString();
+  const shareNote = `Sharing 1 room with: ${shareNames.join(", ")}`;
+  const roomDetails =
+    input.roomDetails?.trim() ||
+    `Shared room for ${shareNames.join(", ")}`;
+  const adminNotes = [input.adminNotes?.trim(), shareNote]
+    .filter(Boolean)
+    .join(" · ");
+
+  // Spread each existing row so guest-submitted fields are never dropped
+  const nextRows: AccommodationRequest[] = ordered.map((row) => {
+    const isPrimary = row.id === primary.id;
+    return {
+      ...row,
+      status: "confirmed" as const,
+      hotelId,
+      hotelName: hotel.name,
+      hotelAddress: hotel.address || row.hotelAddress,
+      roomDetails,
+      adminNotes: [row.adminNotes, adminNotes].filter(Boolean).join(" · "),
+      roomGroupId,
+      roomGroupRole: isPrimary ? ("primary" as const) : ("member" as const),
+      roomShareWith: shareNames.filter((name) => name !== row.name),
+      // Only primary holds the inventory room — members keep request, 0 rooms
+      roomsAssigned: isPrimary ? 1 : 0,
+      confirmedAt: now,
+    };
+  });
+
+  if (hasDatabase()) {
+    // Prod path: row-level upsert only — other stays / RSVPs untouched
+    for (const row of nextRows) {
+      await upsertAccommodationToDb(row);
+    }
+  } else {
+    // Local-dev fallback only (no DATABASE_URL)
+    const nextStore = await readStore();
+    for (const row of nextRows) {
+      const index = nextStore.accommodations.findIndex((item) => item.id === row.id);
+      if (index === -1) throw new Error(`Stay request not found: ${row.id}`);
+      nextStore.accommodations[index] = row;
+    }
+    await writeStore(nextStore);
+  }
+
+  return {
+    stays: nextRows,
+    inventory: await getRoomInventory(),
+    roomGroupId,
+  };
+}
+
 /** Create or update stay — main separate; mehfil↔laavan share one bride stay. */
 export async function upsertAccommodationForGuest(
   guest: { uid: string; email?: string; phone?: string },
@@ -1023,6 +1171,12 @@ export async function upsertAccommodationForGuest(
           isBrideFeatureSite(resolveEntryInviteSite(item)),
       );
       for (const dupe of dupes) {
+        // Never delete a stay that already has a room or is confirmed
+        if (dupe.status === "confirmed" || dupe.status === "declined") continue;
+        if (typeof dupe.roomsAssigned === "number" && dupe.roomsAssigned > 0) {
+          continue;
+        }
+        if (dupe.roomGroupId) continue;
         await deleteAccommodation(dupe.id);
       }
     }

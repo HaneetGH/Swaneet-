@@ -37,6 +37,8 @@ import {
   buildCalendarWindow,
   parseEventTimeBounds,
 } from "@/lib/calendar";
+import { computeRoomInventory } from "@/lib/store";
+import type { AccommodationRequest, StayHotel } from "@/lib/types";
 
 describe("bride invites", () => {
   it("resolves mehfil and laavan slugs", () => {
@@ -297,5 +299,56 @@ describe("add to calendar", () => {
     expect(window?.startLocal).toBe("20260812T200000");
     expect(window?.title).toContain("Wedding Dinner");
     expect(window?.location).toContain("Maple Garden");
+  });
+});
+
+describe("shared room inventory", () => {
+  it("counts only 1 room when several confirmed stays share a group", () => {
+    const hotel: StayHotel = {
+      id: "h1",
+      name: "Test Hotel",
+      totalRooms: 5,
+      createdAt: new Date().toISOString(),
+    };
+    const base = {
+      phone: "999",
+      email: "a@b.com",
+      rooms: 1,
+      checkIn: "2026-08-12",
+      checkOut: "2026-08-13",
+      createdAt: new Date().toISOString(),
+      status: "confirmed" as const,
+      hotelId: "h1",
+      roomGroupId: "g1",
+    };
+    const stays: AccommodationRequest[] = [
+      {
+        ...base,
+        id: "1",
+        name: "A",
+        people: 2,
+        roomGroupRole: "primary",
+        roomsAssigned: 1,
+      },
+      {
+        ...base,
+        id: "2",
+        name: "B",
+        people: 1,
+        roomGroupRole: "member",
+        roomsAssigned: 0,
+      },
+      {
+        ...base,
+        id: "3",
+        name: "C",
+        people: 1,
+        roomGroupRole: "member",
+        roomsAssigned: 0,
+      },
+    ];
+    const inv = computeRoomInventory(stays, [hotel]);
+    expect(inv.assigned).toBe(1);
+    expect(inv.available).toBe(4);
   });
 });

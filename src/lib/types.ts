@@ -118,6 +118,14 @@ export type AccommodationRequest = {
   inviteSlug?: string;
   /** Which invite page this stay belongs to */
   inviteSite?: FeatureSite;
+  /**
+   * Shared-room group. All members keep their own stay request (never deleted).
+   * Only the primary counts roomsAssigned toward inventory.
+   */
+  roomGroupId?: string;
+  roomGroupRole?: "primary" | "member";
+  /** Display names of people sharing this room */
+  roomShareWith?: string[];
 };
 
 export type EmailOtpEntry = {
