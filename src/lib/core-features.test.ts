@@ -37,7 +37,8 @@ import {
   buildCalendarWindow,
   parseEventTimeBounds,
 } from "@/lib/calendar";
-import { formatEventsItinerary } from "@/lib/email-itinerary";
+import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinerary";
+import { buildStayConfirmationParts } from "@/lib/email-stay-template";
 import { computeRoomInventory } from "@/lib/store";
 import {
   buildSharedRoomRoommateContacts,
@@ -510,12 +511,12 @@ describe("shared room inventory", () => {
 });
 
 describe("stay email itinerary", () => {
-  it("formats all events with venue, location, and maps link", () => {
+  it("formats upcoming events with venue, location, and maps link", () => {
     const events: ManagedEvent[] = [
       {
         id: "e1",
         name: "Mehndi",
-        date: "9th August 2026",
+        date: "9th August 2099",
         day: "Sunday",
         time: "2:00 PM Onwards",
         venue: "Panipat",
@@ -527,7 +528,7 @@ describe("stay email itinerary", () => {
       {
         id: "e2",
         name: "Anand Karaj",
-        date: "13th August 2026",
+        date: "13th August 2099",
         day: "Thursday",
         time: "10:00 AM",
         venue: "Maple Garden",
@@ -538,7 +539,7 @@ describe("stay email itinerary", () => {
       },
     ];
     const text = formatEventsItinerary(events);
-    expect(text).toContain("Wedding itinerary (with locations)");
+    expect(text).toContain("Upcoming wedding itinerary");
     expect(text).toContain("1. Mehndi");
     expect(text).toContain("Venue: Panipat");
     expect(text).toContain("Location: Panipat, Haryana");
@@ -547,5 +548,101 @@ describe("stay email itinerary", () => {
     expect(text).toContain("Location: Buria Road, Jagadhri");
     expect(text).toContain("Maps: https://www.google.com/maps/search/");
     expect(text).toContain(encodeURIComponent("Maple Garden"));
+  });
+
+  it("skips events that are already done", () => {
+    const events: ManagedEvent[] = [
+      {
+        id: "past",
+        name: "Old Mehndi",
+        date: "9th August 2020",
+        day: "Sunday",
+        time: "2:00 PM",
+        venue: "Panipat",
+        venueDetail: "",
+        address: "Panipat",
+        description: "",
+        icon: "sparkles",
+        done: true,
+      },
+      {
+        id: "future",
+        name: "Anand Karaj",
+        date: "13th August 2099",
+        day: "Thursday",
+        time: "10:00 AM",
+        venue: "Maple Garden",
+        venueDetail: "",
+        address: "Buria Road, Jagadhri",
+        description: "",
+        icon: "heart",
+      },
+    ];
+    expect(filterUpcomingEvents(events).map((e) => e.id)).toEqual(["future"]);
+    const text = formatEventsItinerary(events);
+    expect(text).not.toContain("Old Mehndi");
+    expect(text).toContain("Anand Karaj");
+  });
+
+  it("renders polished wedding HTML for shared-room confirmations", () => {
+    const request: AccommodationRequest = {
+      id: "s1",
+      name: "Asha",
+      phone: "111",
+      email: "asha@example.com",
+      people: 1,
+      rooms: 1,
+      checkIn: "2026-08-12",
+      checkOut: "2026-08-13",
+      createdAt: new Date().toISOString(),
+      status: "confirmed",
+      hotelName: "Maple Garden",
+      hotelAddress: "Buria Road, Jagadhri",
+      roomGroupId: "g1",
+      roomShareWith: ["Bir"],
+    };
+    const { html, text } = buildStayConfirmationParts({
+      request,
+      statusLine: "You will share this one room with Bir.",
+      isSharedRoom: true,
+      roommates: [
+        { name: "Bir", phone: "222", email: "bir@example.com" },
+      ],
+      events: [
+        {
+          id: "done-event",
+          name: "Already done",
+          date: "1st January 2020",
+          day: "Wednesday",
+          time: "10:00 AM",
+          venue: "Old place",
+          venueDetail: "",
+          address: "Somewhere",
+          description: "",
+          icon: "star",
+          done: true,
+        },
+        {
+          id: "live",
+          name: "Wedding Dinner",
+          date: "12th August 2099",
+          day: "Wednesday",
+          time: "8:00 PM Onwards",
+          venue: "Maple Garden",
+          venueDetail: "Sukhmani Resort",
+          address: "Buria Road, Jagadhri",
+          description: "",
+          icon: "moon",
+        },
+      ],
+    });
+    expect(html).toContain("#Swaneet");
+    expect(html).toContain("Your shared room");
+    expect(html).toContain("Your roommates");
+    expect(html).toContain("Open in Maps");
+    expect(html).toContain("Wedding Dinner");
+    expect(html).not.toContain("Already done");
+    expect(text).toContain("Bir");
+    expect(text).not.toContain("Already done");
   });
 });

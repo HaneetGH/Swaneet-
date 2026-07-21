@@ -3,12 +3,15 @@ import {
   eventsForInvite,
   getBrideInvite,
 } from "@/data/bride-invites";
+import { isEventDone } from "@/lib/datetime";
 import { resolveEntryInviteSite } from "@/lib/rsvp-days";
 import { listEvents } from "@/lib/store";
 import type { AccommodationRequest, ManagedEvent } from "@/lib/types";
 
 /** Google Maps search URL from venue + address for easy tracking. */
-export function eventMapsUrl(event: Pick<ManagedEvent, "venue" | "venueDetail" | "address" | "name">): string | null {
+export function eventMapsUrl(
+  event: Pick<ManagedEvent, "venue" | "venueDetail" | "address" | "name">,
+): string | null {
   const query = [event.venue, event.venueDetail, event.address, event.name]
     .map((part) => part?.trim())
     .filter(Boolean)
@@ -17,11 +20,17 @@ export function eventMapsUrl(event: Pick<ManagedEvent, "venue" | "venueDetail" |
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
-/** Plain-text wedding itinerary with full location for each event. */
-export function formatEventsItinerary(events: ManagedEvent[]): string {
-  if (!events.length) return "";
+/** Drop events already finished (marked done or past schedule). */
+export function filterUpcomingEvents(events: ManagedEvent[]): ManagedEvent[] {
+  return events.filter((event) => !isEventDone(event));
+}
 
-  const blocks = events.map((event, index) => {
+/** Plain-text wedding itinerary with full location for each upcoming event. */
+export function formatEventsItinerary(events: ManagedEvent[]): string {
+  const upcoming = filterUpcomingEvents(events);
+  if (!upcoming.length) return "";
+
+  const blocks = upcoming.map((event, index) => {
     const venueLine = [event.venue, event.venueDetail]
       .map((part) => part?.trim())
       .filter(Boolean)
@@ -40,24 +49,28 @@ export function formatEventsItinerary(events: ManagedEvent[]): string {
       .join("\n");
   });
 
-  return ["Wedding itinerary (with locations)", ...blocks].join("\n\n");
+  return ["Upcoming wedding itinerary", ...blocks].join("\n\n");
 }
 
 /**
  * Events to include on a stay email:
  * - Bride invite guests → their mehfil/laavan schedule
  * - Everyone else → full managed wedding timeline from the dashboard
+ * Always excludes events that are already done / past.
  */
 export async function resolveEventsForStayEmail(
   stay: Pick<AccommodationRequest, "inviteSite" | "inviteTier" | "inviteSlug">,
 ): Promise<ManagedEvent[]> {
   const site = resolveEntryInviteSite(stay);
+  let events: ManagedEvent[] = [];
   if (site === "mehfil" || site === "laavan") {
     const invite =
       (stay.inviteSlug ? getBrideInvite(stay.inviteSlug) : null) ||
       brideInvites.find((item) => item.tier === site) ||
       null;
-    if (invite) return eventsForInvite(invite);
+    if (invite) events = eventsForInvite(invite);
+  } else {
+    events = await listEvents();
   }
-  return listEvents();
+  return filterUpcomingEvents(events);
 }

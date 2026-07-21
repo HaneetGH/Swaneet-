@@ -6,23 +6,10 @@ import type {
   ManagedEvent,
 } from "@/lib/types";
 import { PERMISSION_LABELS } from "@/lib/roles";
-import {
-  formatEventsItinerary,
-  resolveEventsForStayEmail,
-} from "@/lib/email-itinerary";
+import { resolveEventsForStayEmail } from "@/lib/email-itinerary";
+import { buildStayConfirmationParts } from "@/lib/email-stay-template";
 import type { SharedRoomRoommateContact } from "@/lib/shared-room-email";
 import { appendEmailLog } from "@/lib/store";
-
-function formatDate(value: string) {
-  if (!value) return "—";
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
 
 /** Default From for stay confirms, team invites, OTP, photo notes */
 export const DEFAULT_EMAIL_FROM =
@@ -171,98 +158,19 @@ export async function sendAccommodationEmail(
         ? "We’re unable to arrange accommodation for this request."
         : "Update on your accommodation request.";
 
-  const roommateContactsBlock = (() => {
-    if (!isSharedRoom) return null;
-    if (roommates.length === 0) {
-      return `You are sharing with: ${sharingWith}`;
-    }
-    const lines = roommates.map((mate) => {
-      const parts = [
-        mate.name,
-        mate.phone ? `Phone: ${mate.phone}` : null,
-        mate.email ? `Email: ${mate.email}` : null,
-      ].filter(Boolean);
-      return `• ${parts.join(" · ")}`;
-    });
-    return [
-      "Important: one room is shared — please coordinate with the others.",
-      "Roommate contacts:",
-      ...lines,
-    ].join("\n");
-  })();
-
-  const roomArrangementLine = (() => {
-    if (isSharedRoom) return roommateContactsBlock;
-    if (typeof request.roomsAssigned === "number" && request.roomsAssigned > 0) {
-      return `Rooms arranged for you: ${request.roomsAssigned}`;
-    }
-    return `Guests: ${request.people} · Rooms requested: ${request.rooms}`;
-  })();
-
   const events =
     options?.events ??
     (request.status === "confirmed"
       ? await resolveEventsForStayEmail(request)
       : []);
-  const itinerary =
-    request.status === "confirmed" ? formatEventsItinerary(events) : "";
 
-  const details =
-    request.status === "confirmed"
-      ? [
-          request.hotelName ? `Hotel / stay: ${request.hotelName}` : null,
-          request.hotelAddress ? `Address: ${request.hotelAddress}` : null,
-          request.roomDetails ? `Room / hotel details:\n${request.roomDetails}` : null,
-          roomArrangementLine,
-          `Guests on your request: ${request.people}`,
-          `Check-in: ${formatDate(request.checkIn)}`,
-          `Check-out: ${formatDate(request.checkOut)}`,
-          itinerary || null,
-          request.adminNotes ? `Message from family:\n${request.adminNotes}` : null,
-        ]
-          .filter(Boolean)
-          .join("\n\n")
-      : [
-          `Requested: ${formatDate(request.checkIn)} → ${formatDate(request.checkOut)}`,
-          `Guests: ${request.people} · Rooms: ${request.rooms}`,
-          request.adminNotes ? `Message: ${request.adminNotes}` : null,
-        ]
-          .filter(Boolean)
-          .join("\n\n");
-
-  const text = [
-    `Dear ${request.name},`,
-    "",
+  const { text, html } = buildStayConfirmationParts({
+    request,
     statusLine,
-    "",
-    details,
-    "",
-    "With love,",
-    "#Swaneet · Haneet & Swarandeep",
-  ].join("\n");
-
-  const htmlDetails = details
-    .split("\n\n")
-    .map(
-      (block) =>
-        `<p style="margin: 0 0 12px; white-space: pre-wrap;">${escapeHtml(block)}</p>`,
-    )
-    .join("");
-
-  const html = `
-    <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
-      <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
-      <h1 style="font-weight: 400; font-size: 28px;">${
-        isSharedRoom ? "Your shared room" : "Your hotel details"
-      }</h1>
-      <p>Dear ${escapeHtml(request.name)},</p>
-      <p>${escapeHtml(statusLine)}</p>
-      <div style="background: #f7f1e6; padding: 16px 18px; border-radius: 12px; margin: 16px 0;">
-        ${htmlDetails || "<p>Details will follow from the family.</p>"}
-      </div>
-      <p>With love,<br/>Haneet &amp; Swarandeep</p>
-    </div>
-  `;
+    isSharedRoom,
+    roommates,
+    events,
+  });
 
   return sendResendEmail({
     kind: "stay",
