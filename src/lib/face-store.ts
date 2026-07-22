@@ -153,6 +153,7 @@ function normalizePersonName(name: string) {
 export async function mergeFacePeople(
   sourceId: string,
   targetId: string,
+  options?: { reinforce?: boolean },
 ): Promise<FacePerson> {
   if (sourceId === targetId) {
     throw new Error("Cannot merge a person with themselves");
@@ -166,13 +167,14 @@ export async function mergeFacePeople(
   const movedImageIds = [...source.imageIds];
   const faceIds = [...new Set([...target.faceIds, ...source.faceIds])];
   const imageIds = [...new Set([...target.imageIds, ...source.imageIds])];
-  const merged: FacePerson = {
+  let merged: FacePerson = {
     ...target,
     name: target.name.trim() || source.name.trim(),
     faceIds,
     imageIds,
     representativeFaceId:
       target.representativeFaceId || source.representativeFaceId,
+    userConfirmed: true,
     updatedAt: now,
   };
   await saveFacePerson(merged);
@@ -194,7 +196,110 @@ export async function mergeFacePeople(
   });
 
   await deleteFacePerson(sourceId);
+
+  if (options?.reinforce !== false) {
+    merged = await reinforcePersonCluster(targetId, movedFaceIds);
+  }
   return merged;
+}
+
+/**
+ * Merge many people into one (survivor = most photos, or preferredId).
+ * Learns: marks userConfirmed and pulls in more Rekognition-similar faces.
+ */
+export async function mergeFacePeopleMany(
+  personIds: string[],
+  preferredTargetId?: string,
+): Promise<FacePerson> {
+  const unique = [...new Set(personIds.filter(Boolean))];
+  if (unique.length < 2) {
+    throw new Error("Select at least two faces to merge");
+  }
+
+  const people = (
+    await Promise.all(unique.map((id) => getFacePerson(id)))
+  ).filter((item): item is FacePerson => Boolean(item));
+
+  if (people.length < 2) {
+    throw new Error("Could not find enough people to merge");
+  }
+
+  let survivor =
+    (preferredTargetId &&
+      people.find((item) => item.id === preferredTargetId)) ||
+    people[0]!;
+  for (const candidate of people) {
+    if (candidate.imageIds.length > survivor.imageIds.length) {
+      survivor = candidate;
+    }
+  }
+
+  const seedFaceIds = people.flatMap((item) => item.faceIds);
+  for (const candidate of people) {
+    if (candidate.id === survivor.id) continue;
+    const stillThere = await getFacePerson(candidate.id);
+    if (!stillThere) continue;
+    survivor = await mergeFacePeople(candidate.id, survivor.id, {
+      reinforce: false,
+    });
+  }
+
+  return reinforcePersonCluster(survivor.id, seedFaceIds);
+}
+
+/**
+ * After an admin merge, search Rekognition for more faces that look like any
+ * seed face and fold those people into this cluster (same person).
+ */
+export async function reinforcePersonCluster(
+  personId: string,
+  seedFaceIds: string[],
+): Promise<FacePerson> {
+  let person = await getFacePerson(personId);
+  if (!person) throw new Error("Person not found");
+
+  person = {
+    ...person,
+    userConfirmed: true,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveFacePerson(person);
+
+  if (!isRekognitionConfigured()) return person;
+
+  const seeds = (seedFaceIds.length ? seedFaceIds : person.faceIds).slice(
+    0,
+    24,
+  );
+  const absorbed = new Set<string>();
+
+  for (const faceId of seeds) {
+    const similar = await searchSimilarFaces({
+      faceId,
+      threshold: 85,
+      maxFaces: 15,
+    });
+    for (const match of similar) {
+      const detection = await getFaceDetection(match.faceId);
+      if (!detection || detection.personId === personId) continue;
+      if (absorbed.has(detection.personId)) continue;
+      absorbed.add(detection.personId);
+      const other = await getFacePerson(detection.personId);
+      if (!other) continue;
+      // Only auto-absorb small clusters so we don’t swallow unrelated groups
+      if (other.faceIds.length > 8 && !other.userConfirmed) continue;
+      try {
+        person = await mergeFacePeople(other.id, personId, {
+          reinforce: false,
+        });
+      } catch {
+        /* person may already be gone */
+      }
+    }
+  }
+
+  const fresh = await getFacePerson(personId);
+  return fresh || person;
 }
 
 export async function listFaceMergeLogs(limit = 20): Promise<FaceMergeLog[]> {
@@ -380,18 +485,32 @@ async function assignFaceToPerson(input: {
   imageId: string;
   boundingBox: FaceDetection["boundingBox"];
 }): Promise<FacePerson> {
+  // Slightly looser than first pass so admin-confirmed clusters keep gathering
   const similar = await searchSimilarFaces({
     faceId: input.faceId,
-    threshold: 92,
-    maxFaces: 8,
+    threshold: 88,
+    maxFaces: 15,
   });
 
   let person: FacePerson | null = null;
   for (const match of similar) {
     const existingDetection = await getFaceDetection(match.faceId);
     if (!existingDetection) continue;
-    person = await getFacePerson(existingDetection.personId);
-    if (person) break;
+    const candidate = await getFacePerson(existingDetection.personId);
+    if (!candidate) continue;
+    if (!person) {
+      person = candidate;
+      continue;
+    }
+    // Prefer admin-confirmed merges, then larger clusters
+    if (candidate.userConfirmed && !person.userConfirmed) {
+      person = candidate;
+    } else if (
+      candidate.userConfirmed === person.userConfirmed &&
+      candidate.faceIds.length > person.faceIds.length
+    ) {
+      person = candidate;
+    }
   }
 
   const now = new Date().toISOString();

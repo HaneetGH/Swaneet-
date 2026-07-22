@@ -268,6 +268,8 @@ export type FacePerson = {
   representativeFaceId: string;
   faceIds: string[];
   imageIds: string[];
+  /** Set when an admin merged faces — prefer this cluster for future matches */
+  userConfirmed?: boolean;
   createdAt: string;
   updatedAt: string;
 };

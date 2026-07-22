@@ -13,6 +13,7 @@ import {
   listFaceMergeLogs,
   listFacePeople,
   mergeFacePeople,
+  mergeFacePeopleMany,
   renameFacePerson,
   undoLastFaceMerge,
 } from "@/lib/face-store";
@@ -97,8 +98,12 @@ const renameSchema = z.object({
 
 const mergeSchema = z.object({
   action: z.literal("merge"),
-  sourceId: z.string().trim().min(1),
-  targetId: z.string().trim().min(1),
+  /** Multi-select: merge all into one person */
+  personIds: z.array(z.string().trim().min(1)).min(2).optional(),
+  /** Optional survivor when using personIds */
+  targetId: z.string().trim().min(1).optional(),
+  /** Legacy pairwise */
+  sourceId: z.string().trim().min(1).optional(),
 });
 
 const undoSchema = z.object({
@@ -136,15 +141,35 @@ export async function PATCH(request: Request) {
       if (!parsed.success) {
         return NextResponse.json({ error: "Invalid merge" }, { status: 400 });
       }
-      const person = await mergeFacePeople(
-        parsed.data.sourceId,
-        parsed.data.targetId,
+
+      if (parsed.data.personIds && parsed.data.personIds.length >= 2) {
+        const person = await mergeFacePeopleMany(
+          parsed.data.personIds,
+          parsed.data.targetId,
+        );
+        return NextResponse.json({
+          person,
+          merged: true,
+          mergedCount: parsed.data.personIds.length,
+        });
+      }
+
+      if (parsed.data.sourceId && parsed.data.targetId) {
+        const person = await mergeFacePeople(
+          parsed.data.sourceId,
+          parsed.data.targetId,
+        );
+        return NextResponse.json({
+          person,
+          merged: true,
+          mergedFromIds: [parsed.data.sourceId],
+        });
+      }
+
+      return NextResponse.json(
+        { error: "Select at least two faces to merge" },
+        { status: 400 },
       );
-      return NextResponse.json({
-        person,
-        merged: true,
-        mergedFromIds: [parsed.data.sourceId],
-      });
     }
 
     if (body?.action === "undo_merge") {
@@ -371,36 +396,36 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    if (body?.action === "merge" || (body?.sourceId && body?.targetId)) {
-      const parsed = mergeSchema
-        .or(
-          z.object({
-            sourceId: z.string().trim().min(1),
-            targetId: z.string().trim().min(1),
-          }),
-        )
-        .safeParse(
-          body?.action === "merge" ? body : { action: "merge", ...body },
+    if (body?.action === "merge" || body?.personIds || (body?.sourceId && body?.targetId)) {
+      if (Array.isArray(body.personIds) && body.personIds.length >= 2) {
+        const person = await mergeFacePeopleMany(
+          body.personIds,
+          body.targetId,
         );
-      if (!parsed.success) {
-        return NextResponse.json({ error: "Invalid merge" }, { status: 400 });
+        return NextResponse.json({
+          person,
+          merged: true,
+          mergedCount: body.personIds.length,
+        });
       }
-      const data = parsed.data as {
-        sourceId: string;
-        targetId: string;
-      };
-      if (data.sourceId === data.targetId) {
-        return NextResponse.json(
-          { error: "Pick two different people to merge" },
-          { status: 400 },
-        );
+      if (body.sourceId && body.targetId) {
+        if (body.sourceId === body.targetId) {
+          return NextResponse.json(
+            { error: "Pick two different people to merge" },
+            { status: 400 },
+          );
+        }
+        const person = await mergeFacePeople(body.sourceId, body.targetId);
+        return NextResponse.json({
+          person,
+          merged: true,
+          mergedFromIds: [body.sourceId],
+        });
       }
-      const person = await mergeFacePeople(data.sourceId, data.targetId);
-      return NextResponse.json({
-        person,
-        merged: true,
-        mergedFromIds: [data.sourceId],
-      });
+      return NextResponse.json(
+        { error: "Select at least two faces to merge" },
+        { status: 400 },
+      );
     }
 
     // RSVP suggestions — use guest RSVP / Google email

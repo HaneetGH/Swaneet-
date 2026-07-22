@@ -99,7 +99,7 @@ export function FacesManager() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [mergeMode, setMergeMode] = useState(false);
-  const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
+  const [mergeSelectedIds, setMergeSelectedIds] = useState<string[]>([]);
   const [merging, setMerging] = useState(false);
   const [canUndoMerge, setCanUndoMerge] = useState(false);
   const [sendEmail, setSendEmail] = useState("");
@@ -212,13 +212,15 @@ export function FacesManager() {
     }
   };
 
-  const mergePeople = async (sourceId: string, targetId: string) => {
-    if (sourceId === targetId || merging) return;
-    const source = people.find((p) => p.id === sourceId);
-    const target = people.find((p) => p.id === targetId);
+  const mergeSelected = async () => {
+    if (mergeSelectedIds.length < 2 || merging) return;
+    const labels = mergeSelectedIds.map((id) => {
+      const row = people.find((p) => p.id === id);
+      return row?.name || "Unnamed";
+    });
     if (
       !confirm(
-        `Merge “${source?.name || "Unnamed"}” into “${target?.name || "Unnamed"}”?`,
+        `Merge ${mergeSelectedIds.length} faces into one person?\n\n${labels.join(", ")}\n\nThe system will remember they are the same person for future photos.`,
       )
     ) {
       return;
@@ -231,8 +233,7 @@ export function FacesManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "merge",
-          sourceId,
-          targetId,
+          personIds: mergeSelectedIds,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -240,9 +241,11 @@ export function FacesManager() {
         setError(data.error || "Could not merge");
         return;
       }
-      setMessage(`Merged into “${data.person?.name || target?.name || "person"}”`);
+      setMessage(
+        `Merged ${mergeSelectedIds.length} faces into “${data.person?.name || "one person"}” — future matches will learn from this`,
+      );
       setMergeMode(false);
-      setMergeSourceId(null);
+      setMergeSelectedIds([]);
       setCanUndoMerge(true);
       await loadPeople();
     } catch {
@@ -392,17 +395,9 @@ export function FacesManager() {
       void openPerson(id);
       return;
     }
-    if (!mergeSourceId) {
-      setMergeSourceId(id);
-      setMessage("Now tap the person to merge into");
-      return;
-    }
-    if (mergeSourceId === id) {
-      setMergeSourceId(null);
-      setMessage("Pick a different person as the source");
-      return;
-    }
-    void mergePeople(mergeSourceId, id);
+    setMergeSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
   };
 
   if (selectedId) {
@@ -644,8 +639,9 @@ export function FacesManager() {
         <h2 className="font-display text-2xl text-cream">Faces</h2>
       </div>
       <p className="mb-4 font-body text-sm text-muted">
-        Tap someone to name them or email their album. Use Merge to combine
-        duplicates (same name also merges). Guests can self-serve at /my-photos.
+        Tap someone to name them or email their album. Use Merge to select many
+        duplicates at once — the system remembers they are the same person.
+        Guests can self-serve at /my-photos.
       </p>
 
       <div className="mb-5 flex flex-wrap gap-2">
@@ -655,17 +651,28 @@ export function FacesManager() {
           disabled={merging}
           onClick={() => {
             setMergeMode((v) => !v);
-            setMergeSourceId(null);
+            setMergeSelectedIds([]);
             setMessage(
               mergeMode
                 ? ""
-                : "Merge mode: tap the first face, then the one to merge into",
+                : "Merge mode: tap every face that is the same person, then Merge selected",
             );
           }}
         >
           <Merge size={14} className="mr-1.5" />
           {mergeMode ? "Cancel merge" : "Merge faces"}
         </Button>
+        {mergeMode ? (
+          <Button
+            type="button"
+            disabled={merging || mergeSelectedIds.length < 2}
+            onClick={() => void mergeSelected()}
+          >
+            {merging
+              ? "Merging…"
+              : `Merge selected (${mergeSelectedIds.length})`}
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="outline"
@@ -693,9 +700,9 @@ export function FacesManager() {
 
       {mergeMode ? (
         <p className="mb-3 rounded-xl border border-gold/30 bg-gold/10 px-3 py-2 font-body text-xs text-gold-soft">
-          {mergeSourceId
-            ? "Now tap the person to keep (merge into)."
-            : "Tap the face to move first."}
+          Tap all faces that are the same person ({mergeSelectedIds.length}{" "}
+          selected). Then press Merge selected — future photos will learn from
+          this.
         </p>
       ) : null}
 
@@ -713,7 +720,7 @@ export function FacesManager() {
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {people.map((person) => {
-            const isSource = mergeSourceId === person.id;
+            const selected = mergeSelectedIds.includes(person.id);
             return (
               <button
                 key={person.id}
@@ -721,7 +728,7 @@ export function FacesManager() {
                 onClick={() => onPersonClick(person.id)}
                 className={cn(
                   "rounded-2xl border bg-[#141018] p-3 text-left transition",
-                  isSource
+                  selected
                     ? "border-gold ring-2 ring-gold/50"
                     : mergeMode
                       ? "border-gold/40 hover:border-gold"
@@ -746,7 +753,7 @@ export function FacesManager() {
                 <p className="font-body text-[10px] uppercase tracking-[0.16em] text-muted">
                   {person.photoCount} photo
                   {person.photoCount === 1 ? "" : "s"}
-                  {isSource ? " · selected" : ""}
+                  {selected ? " · selected" : ""}
                 </p>
               </button>
             );
