@@ -90,6 +90,9 @@ export function FacesManager() {
   const [nameDraft, setNameDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [merging, setMerging] = useState(false);
 
   const loadPeople = useCallback(async () => {
     setLoading(true);
@@ -154,19 +157,28 @@ export function FacesManager() {
         setError(data.error || "Could not save name");
         return;
       }
+      const person = data.person as { id: string; name: string } | undefined;
+      const merged = Boolean(data.merged);
+      if (merged && person?.id) {
+        const note = `Merged with others named “${person.name || nameDraft}” — photos combined.`;
+        await loadPeople();
+        await openPerson(person.id);
+        setMessage(note);
+        return;
+      }
       setMessage("Name saved");
       setAlbum((prev) =>
         prev
           ? {
               ...prev,
-              person: { ...prev.person, name: data.person?.name || nameDraft },
+              person: { ...prev.person, name: person?.name || nameDraft },
             }
           : prev,
       );
       setPeople((prev) =>
         prev.map((row) =>
           row.id === selectedId
-            ? { ...row, name: data.person?.name || nameDraft }
+            ? { ...row, name: person?.name || nameDraft }
             : row,
         ),
       );
@@ -174,6 +186,45 @@ export function FacesManager() {
       setError("Could not save name");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const mergePeople = async (sourceId: string, targetId: string) => {
+    if (sourceId === targetId || merging) return;
+    const source = people.find((p) => p.id === sourceId);
+    const target = people.find((p) => p.id === targetId);
+    const sourceLabel = source?.name || "Unnamed";
+    const targetLabel = target?.name || "Unnamed";
+    if (
+      !confirm(
+        `Merge “${sourceLabel}” into “${targetLabel}”? Photos will combine under one person.`,
+      )
+    ) {
+      return;
+    }
+
+    setMerging(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch("/api/face/people", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId, targetId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not merge");
+        return;
+      }
+      setMessage(`Merged into “${data.person?.name || targetLabel}”`);
+      await loadPeople();
+    } catch {
+      setError("Could not merge");
+    } finally {
+      setMerging(false);
+      setDragId(null);
+      setDropTargetId(null);
     }
   };
 
@@ -240,6 +291,9 @@ export function FacesManager() {
                     {saving ? "Saving…" : "Save name"}
                   </Button>
                 </div>
+                <p className="mt-2 font-body text-[11px] text-muted">
+                  Same name as another face merges them into one person.
+                </p>
                 {message ? (
                   <p className="mt-2 font-body text-xs text-gold-soft">
                     {message}
@@ -286,12 +340,14 @@ export function FacesManager() {
         <h2 className="font-display text-2xl text-cream">Faces</h2>
       </div>
       <p className="mb-6 font-body text-sm text-muted">
-        Every detected person from indexed photos. Open someone to see all their
-        pictures and give them a name. Turn on “Find my photos” and index uploads
-        first.
+        Every detected person from indexed photos. Drag one face onto another to
+        merge duplicates, or open someone and give both the same name.
       </p>
 
       {error ? <p className="mb-3 text-xs text-red-300">{error}</p> : null}
+      {message ? (
+        <p className="mb-3 text-xs text-gold-soft">{message}</p>
+      ) : null}
 
       {loading ? (
         <p className="font-body text-sm text-muted">Loading faces…</p>
@@ -301,33 +357,82 @@ export function FacesManager() {
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {people.map((person) => (
-            <button
-              key={person.id}
-              type="button"
-              onClick={() => void openPerson(person.id)}
-              className="rounded-2xl border border-gold/15 bg-[#141018] p-3 text-left transition hover:border-gold/40"
-            >
-              {person.preview ? (
-                <FaceCrop
-                  src={person.preview.src}
-                  alt={person.preview.alt}
-                  box={person.preview.boundingBox}
-                  className="mb-3 aspect-square w-full rounded-xl"
-                />
-              ) : (
-                <div className="mb-3 flex aspect-square w-full items-center justify-center rounded-xl bg-black/30">
-                  <UserRound className="text-gold/40" size={28} />
-                </div>
-              )}
-              <p className="truncate font-display text-lg text-cream">
-                {person.name || "Unnamed"}
-              </p>
-              <p className="font-body text-[10px] uppercase tracking-[0.16em] text-muted">
-                {person.photoCount} photo{person.photoCount === 1 ? "" : "s"}
-              </p>
-            </button>
-          ))}
+          {people.map((person) => {
+            const isDropTarget =
+              dropTargetId === person.id && dragId && dragId !== person.id;
+            return (
+              <button
+                key={person.id}
+                type="button"
+                draggable={!merging}
+                onDragStart={(e) => {
+                  setDragId(person.id);
+                  e.dataTransfer.setData("text/plain", person.id);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => {
+                  setDragId(null);
+                  setDropTargetId(null);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dragId && dragId !== person.id) {
+                    setDropTargetId(person.id);
+                  }
+                }}
+                onDragLeave={() => {
+                  setDropTargetId((prev) =>
+                    prev === person.id ? null : prev,
+                  );
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const sourceId =
+                    e.dataTransfer.getData("text/plain") || dragId;
+                  setDropTargetId(null);
+                  setDragId(null);
+                  if (sourceId && sourceId !== person.id) {
+                    void mergePeople(sourceId, person.id);
+                  }
+                }}
+                onClick={() => {
+                  if (dragId) return;
+                  void openPerson(person.id);
+                }}
+                className={cn(
+                  "rounded-2xl border bg-[#141018] p-3 text-left transition",
+                  isDropTarget
+                    ? "border-gold scale-[1.02] border-gold/70 ring-2 ring-gold/40"
+                    : dragId === person.id
+                      ? "border-gold/30 opacity-50"
+                      : "border-gold/15 hover:border-gold/40",
+                )}
+              >
+                {person.preview ? (
+                  <FaceCrop
+                    src={person.preview.src}
+                    alt={person.preview.alt}
+                    box={person.preview.boundingBox}
+                    className="mb-3 aspect-square w-full rounded-xl"
+                  />
+                ) : (
+                  <div className="mb-3 flex aspect-square w-full items-center justify-center rounded-xl bg-black/30">
+                    <UserRound className="text-gold/40" size={28} />
+                  </div>
+                )}
+                <p className="truncate font-display text-lg text-cream">
+                  {person.name || "Unnamed"}
+                </p>
+                <p className="font-body text-[10px] uppercase tracking-[0.16em] text-muted">
+                  {person.photoCount} photo
+                  {person.photoCount === 1 ? "" : "s"}
+                  {isDropTarget ? " · drop to merge" : ""}
+                </p>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

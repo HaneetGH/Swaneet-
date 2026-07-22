@@ -7,6 +7,7 @@ import {
   listFaceDetectionsFromDb,
   listFaceImageIndexFromDb,
   listFacePeopleFromDb,
+  deleteFacePersonFromDb,
   upsertFaceDetectionToDb,
   upsertFaceImageIndexToDb,
   upsertFacePersonToDb,
@@ -124,6 +125,123 @@ export async function saveFacePerson(person: FacePerson): Promise<FacePerson> {
   store.facePeople = list;
   await writeStore(store);
   return person;
+}
+
+export async function deleteFacePerson(id: string): Promise<void> {
+  if (hasDatabase()) {
+    await deleteFacePersonFromDb(id);
+    return;
+  }
+  const store = await readStore();
+  store.facePeople = (store.facePeople || []).filter((item) => item.id !== id);
+  await writeStore(store);
+}
+
+function normalizePersonName(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Merge source person into target. Target survives; source is deleted. */
+export async function mergeFacePeople(
+  sourceId: string,
+  targetId: string,
+): Promise<FacePerson> {
+  if (sourceId === targetId) {
+    throw new Error("Cannot merge a person with themselves");
+  }
+  const source = await getFacePerson(sourceId);
+  const target = await getFacePerson(targetId);
+  if (!source || !target) throw new Error("Person not found");
+
+  const now = new Date().toISOString();
+  const faceIds = [...new Set([...target.faceIds, ...source.faceIds])];
+  const imageIds = [...new Set([...target.imageIds, ...source.imageIds])];
+  const merged: FacePerson = {
+    ...target,
+    name: target.name.trim() || source.name.trim(),
+    faceIds,
+    imageIds,
+    representativeFaceId:
+      target.representativeFaceId || source.representativeFaceId,
+    updatedAt: now,
+  };
+  await saveFacePerson(merged);
+
+  const detections = await listFaceDetections();
+  for (const detection of detections) {
+    if (detection.personId === sourceId) {
+      await saveFaceDetection({ ...detection, personId: targetId });
+    }
+  }
+
+  await deleteFacePerson(sourceId);
+  return merged;
+}
+
+export async function renameFacePerson(
+  id: string,
+  name: string,
+): Promise<{ person: FacePerson; mergedFromIds: string[] }> {
+  const person = await getFacePerson(id);
+  if (!person) throw new Error("Person not found");
+
+  const trimmed = name.trim();
+  if (!trimmed) {
+    const updated: FacePerson = {
+      ...person,
+      name: "",
+      updatedAt: new Date().toISOString(),
+    };
+    await saveFacePerson(updated);
+    return { person: updated, mergedFromIds: [] };
+  }
+
+  const people = await listFacePeople();
+  const key = normalizePersonName(trimmed);
+  const sameName = people.filter(
+    (item) =>
+      item.id !== id &&
+      item.name.trim() &&
+      normalizePersonName(item.name) === key,
+  );
+
+  if (sameName.length === 0) {
+    const updated: FacePerson = {
+      ...person,
+      name: trimmed,
+      updatedAt: new Date().toISOString(),
+    };
+    await saveFacePerson(updated);
+    return { person: updated, mergedFromIds: [] };
+  }
+
+  // Keep the cluster with the most photos as survivor; merge the rest into it.
+  let survivor = person;
+  const candidates = [person, ...sameName];
+  for (const candidate of candidates) {
+    if (candidate.imageIds.length > survivor.imageIds.length) {
+      survivor = candidate;
+    }
+  }
+
+  const mergedFromIds: string[] = [];
+  survivor = {
+    ...survivor,
+    name: trimmed,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveFacePerson(survivor);
+
+  for (const candidate of candidates) {
+    if (candidate.id === survivor.id) continue;
+    // Re-fetch in case an earlier merge already deleted them
+    const stillThere = await getFacePerson(candidate.id);
+    if (!stillThere) continue;
+    survivor = await mergeFacePeople(candidate.id, survivor.id);
+    mergedFromIds.push(candidate.id);
+  }
+
+  return { person: survivor, mergedFromIds };
 }
 
 export async function listFaceDetections(): Promise<FaceDetection[]> {
@@ -303,21 +421,6 @@ export async function maybeIndexGalleryImage(
   } catch (error) {
     console.error("maybeIndexGalleryImage failed", image.id, error);
   }
-}
-
-export async function renameFacePerson(
-  id: string,
-  name: string,
-): Promise<FacePerson> {
-  const person = await getFacePerson(id);
-  if (!person) throw new Error("Person not found");
-  const updated: FacePerson = {
-    ...person,
-    name: name.trim(),
-    updatedAt: new Date().toISOString(),
-  };
-  await saveFacePerson(updated);
-  return updated;
 }
 
 /** Enroll selfie + search collection for matching gallery photos. */

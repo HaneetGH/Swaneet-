@@ -545,6 +545,12 @@ export async function upsertFacePersonToDb(
   );
 }
 
+export async function deleteFacePersonFromDb(id: string): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(`DELETE FROM face_people WHERE id = $1`, [id]);
+}
+
 export async function listFaceDetectionsFromDb(): Promise<
   import("@/lib/types").FaceDetection[]
 > {
