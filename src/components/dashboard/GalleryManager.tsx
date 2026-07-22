@@ -2,7 +2,7 @@
 
 import { upload } from "@vercel/blob/client";
 import Image from "next/image";
-import { Film, Images, Trash2, Upload, X } from "lucide-react";
+import { Film, Images, ScanFace, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GalleryImage, ManagedEvent } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +23,7 @@ type PreviewItem = {
 type GalleryManagerProps = {
   initialGallery: GalleryImage[];
   events: ManagedEvent[];
+  onOpenFaces?: () => void;
 };
 
 function isVideoFile(file: File) {
@@ -36,6 +37,7 @@ function safeFilename(name: string) {
 export function GalleryManager({
   initialGallery,
   events: initialEvents,
+  onOpenFaces,
 }: GalleryManagerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [gallery, setGallery] = useState(initialGallery);
@@ -52,6 +54,15 @@ export function GalleryManager({
   const [progress, setProgress] = useState("");
   const [dragging, setDragging] = useState(false);
   const [hasBlob, setHasBlob] = useState<boolean | null>(null);
+  const [faceBusy, setFaceBusy] = useState(false);
+  const [faceNote, setFaceNote] = useState("");
+  const [faceStats, setFaceStats] = useState<{
+    indexed: number;
+    failed: number;
+    total: number;
+    rekognitionReady: boolean;
+    sampleErrors: string[];
+  } | null>(null);
 
   useEffect(() => {
     setEvents(initialEvents);
@@ -69,6 +80,74 @@ export function GalleryManager({
       })
       .catch(() => setHasBlob(false));
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/face/reindex")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!alive || data.error) return;
+        setFaceStats({
+          indexed: data.indexed || 0,
+          failed: data.failed || 0,
+          total: data.total || 0,
+          rekognitionReady: Boolean(data.rekognitionReady),
+          sampleErrors: Array.isArray(data.sampleErrors)
+            ? data.sampleErrors.map(String)
+            : [],
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const onIndexFaces = async () => {
+    setFaceBusy(true);
+    setFaceNote("");
+    try {
+      const res = await fetch("/api/face/reindex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "missing", limit: 40 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFaceNote(data.error || "Could not index faces");
+        return;
+      }
+      const errors = Array.isArray(data.sampleErrors)
+        ? data.sampleErrors.map(String)
+        : [];
+      setFaceNote(
+        errors.length
+          ? `Indexed ${data.indexed || 0} · ${data.failed || 0} failed. ${errors[0]}`
+          : `Indexed ${data.indexed || 0} of ${data.processed || 0} photo(s)${
+              data.remaining
+                ? ` · ${data.remaining} still waiting — run again`
+                : ""
+            }.`,
+      );
+      const statusRes = await fetch("/api/face/reindex");
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        setFaceStats({
+          indexed: status.indexed || 0,
+          failed: status.failed || 0,
+          total: status.total || 0,
+          rekognitionReady: Boolean(status.rekognitionReady),
+          sampleErrors: Array.isArray(status.sampleErrors)
+            ? status.sampleErrors.map(String)
+            : errors,
+        });
+      }
+    } catch {
+      setFaceNote("Could not index faces");
+    } finally {
+      setFaceBusy(false);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -306,6 +385,57 @@ export function GalleryManager({
   };
 
   return (
+    <div>
+      <div className="mb-6 rounded-2xl border border-gold/25 bg-[#141018] p-4">
+        <div className="flex flex-wrap items-start gap-3">
+          <ScanFace className="mt-0.5 text-gold" size={18} />
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-lg text-cream">Face indexing</p>
+            <p className="mt-1 font-body text-xs leading-relaxed text-muted">
+              When <span className="text-gold-soft">Find my photos</span> is on
+              in Feature flags, uploaded photos are indexed automatically. Open
+              the <span className="text-cream">Faces</span> tab to name people
+              and see all their pictures.
+            </p>
+            {faceStats ? (
+              <p className="mt-2 font-body text-[10px] uppercase tracking-[0.18em] text-gold-soft">
+                {faceStats.indexed} indexed · {faceStats.failed} failed ·{" "}
+                {faceStats.rekognitionReady
+                  ? "AWS env set"
+                  : "AWS not configured"}
+              </p>
+            ) : null}
+            {faceStats?.sampleErrors?.length ? (
+              <div className="mt-2 space-y-1 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 font-body text-xs text-red-200">
+                <p className="font-semibold text-red-100">Why indexing failed</p>
+                {faceStats.sampleErrors.map((err) => (
+                  <p key={err} className="break-words">
+                    {err}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+            {faceNote ? (
+              <p className="mt-2 font-body text-xs text-cream/80">{faceNote}</p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={faceBusy || !faceStats?.rekognitionReady}
+                onClick={() => void onIndexFaces()}
+              >
+                {faceBusy ? "Indexing…" : "Retry failed / missing faces"}
+              </Button>
+              {onOpenFaces ? (
+                <Button type="button" variant="outline" onClick={onOpenFaces}>
+                  Open Faces
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+
     <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
       <form
         onSubmit={onUpload}
@@ -320,7 +450,8 @@ export function GalleryManager({
         <p className="mb-5 font-body text-sm text-muted">
           Official team upload — goes live immediately (no approval). Up to{" "}
           <span className="text-gold-soft">{MAX_FILES} photos or videos</span>.
-          Guest shares are reviewed under Review photos.
+          Guest shares are reviewed under Review photos. Images start face
+          indexing right after upload when Find my photos is enabled.
         </p>
 
         {hasBlob === false ? (
@@ -622,6 +753,7 @@ export function GalleryManager({
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }

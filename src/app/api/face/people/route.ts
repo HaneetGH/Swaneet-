@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requirePermission } from "@/lib/auth";
+import { requireAnyPermission } from "@/lib/auth";
 import {
   getFacePerson,
   listFaceDetections,
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 /** List clustered people for the dashboard Faces tab. */
 export async function GET() {
   try {
-    if (!(await requirePermission("gallery_review"))) {
+    if (!(await requireAnyPermission(["gallery_review", "gallery_upload"]))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -78,7 +78,7 @@ const renameSchema = z.object({
 /** Rename a clustered person. */
 export async function PATCH(request: Request) {
   try {
-    if (!(await requirePermission("gallery_review"))) {
+    if (!(await requireAnyPermission(["gallery_review", "gallery_upload"]))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

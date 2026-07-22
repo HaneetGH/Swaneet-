@@ -200,6 +200,16 @@ export async function requirePermission(permission: AdminPermission) {
   return session;
 }
 
+export async function requireAnyPermission(permissions: AdminPermission[]) {
+  const session = await getAdminSession();
+  if (!session) return null;
+  if (session.kind === "master") return session;
+  if (permissions.some((permission) => session.permissions.includes(permission))) {
+    return session;
+  }
+  return null;
+}
+
 export async function requireMaster() {
   const session = await getAdminSession();
   if (!session || session.kind !== "master") return null;

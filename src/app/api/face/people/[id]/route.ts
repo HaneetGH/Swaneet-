@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/auth";
+import { requireAnyPermission } from "@/lib/auth";
 import {
   getFacePerson,
   listFaceDetections,
@@ -13,7 +13,7 @@ type Params = { params: Promise<{ id: string }> };
 /** One person: all photos + face crops for dashboard album view. */
 export async function GET(_request: Request, { params }: Params) {
   try {
-    if (!(await requirePermission("gallery_review"))) {
+    if (!(await requireAnyPermission(["gallery_review", "gallery_upload"]))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

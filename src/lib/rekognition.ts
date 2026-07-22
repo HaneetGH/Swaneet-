@@ -1,40 +1,73 @@
 import {
   CreateCollectionCommand,
+  DescribeCollectionCommand,
   IndexFacesCommand,
   RekognitionClient,
-  ResourceAlreadyExistsException,
   SearchFacesByImageCommand,
   SearchFacesCommand,
 } from "@aws-sdk/client-rekognition";
 import type { FaceBoundingBox } from "@/lib/types";
 
+function awsEnv(name: string) {
+  return process.env[name]?.trim() || "";
+}
+
 export function isRekognitionConfigured() {
   return Boolean(
-    process.env.AWS_ACCESS_KEY_ID &&
-      process.env.AWS_SECRET_ACCESS_KEY &&
-      (process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION),
+    awsEnv("AWS_ACCESS_KEY_ID") &&
+      awsEnv("AWS_SECRET_ACCESS_KEY") &&
+      (awsEnv("AWS_REGION") || awsEnv("AWS_DEFAULT_REGION")),
   );
 }
 
 export function getRekognitionCollectionId() {
-  return (
-    process.env.AWS_REKOGNITION_COLLECTION?.trim() || "swaneet-wedding-faces"
-  );
+  return awsEnv("AWS_REKOGNITION_COLLECTION") || "swaneet-wedding-faces";
+}
+
+export function getAwsRegion() {
+  return awsEnv("AWS_REGION") || awsEnv("AWS_DEFAULT_REGION") || "ap-south-1";
+}
+
+export function awsErrorMessage(error: unknown): string {
+  if (!error || typeof error !== "object") {
+    return error instanceof Error ? error.message : String(error);
+  }
+  const e = error as {
+    name?: string;
+    message?: string;
+    Code?: string;
+    $metadata?: { httpStatusCode?: number };
+  };
+  const code = e.name || e.Code || "";
+  const message = e.message || "AWS request failed";
+  const status = e.$metadata?.httpStatusCode;
+  if (code && message.includes(code)) return message;
+  if (code) return `${code}: ${message}${status ? ` (${status})` : ""}`;
+  return message;
 }
 
 function client() {
-  const region =
-    process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "ap-south-1";
   return new RekognitionClient({
-    region,
+    region: getAwsRegion(),
     credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
+      accessKeyId: awsEnv("AWS_ACCESS_KEY_ID"),
+      secretAccessKey: awsEnv("AWS_SECRET_ACCESS_KEY"),
     },
   });
 }
 
 let collectionReady = false;
+
+function isAlreadyExistsError(error: unknown) {
+  const name =
+    error && typeof error === "object" && "name" in error
+      ? String((error as { name: string }).name)
+      : "";
+  return (
+    name === "ResourceAlreadyExistsException" ||
+    name === "ResourceInUseException"
+  );
+}
 
 export async function ensureFaceCollection() {
   if (!isRekognitionConfigured()) {
@@ -44,17 +77,27 @@ export async function ensureFaceCollection() {
   }
   if (collectionReady) return;
   const collectionId = getRekognitionCollectionId();
+  const rekognition = client();
+
   try {
-    await client().send(
+    await rekognition.send(
+      new DescribeCollectionCommand({ CollectionId: collectionId }),
+    );
+    collectionReady = true;
+    return;
+  } catch {
+    // Collection missing — create it below
+  }
+
+  try {
+    await rekognition.send(
       new CreateCollectionCommand({ CollectionId: collectionId }),
     );
   } catch (error) {
-    if (!(error instanceof ResourceAlreadyExistsException)) {
-      const name =
-        error && typeof error === "object" && "name" in error
-          ? String((error as { name: string }).name)
-          : "";
-      if (name !== "ResourceAlreadyExistsException") throw error;
+    if (!isAlreadyExistsError(error)) {
+      throw new Error(
+        `Could not create Rekognition collection "${collectionId}": ${awsErrorMessage(error)}. Check IAM allows rekognition:CreateCollection / DescribeCollection and AWS_REGION matches the key.`,
+      );
     }
   }
   collectionReady = true;
@@ -65,9 +108,20 @@ export async function fetchImageBytes(src: string): Promise<Uint8Array> {
   if (src.startsWith("http://") || src.startsWith("https://")) {
     const response = await fetch(src);
     if (!response.ok) {
-      throw new Error(`Could not download image (${response.status})`);
+      throw new Error(
+        `Could not download image (${response.status}) from storage. Check the Blob URL is public.`,
+      );
     }
-    return new Uint8Array(await response.arrayBuffer());
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > 15 * 1024 * 1024) {
+      throw new Error(
+        `Image is too large for Rekognition (${Math.round(bytes.byteLength / 1024 / 1024)}MB). Use photos under 15MB.`,
+      );
+    }
+    if (bytes.byteLength < 100) {
+      throw new Error("Downloaded image was empty or invalid");
+    }
+    return bytes;
   }
 
   if (src.startsWith("/uploads/")) {
@@ -77,7 +131,9 @@ export async function fetchImageBytes(src: string): Promise<Uint8Array> {
     return new Uint8Array(await fs.readFile(filePath));
   }
 
-  throw new Error("Unsupported image source for face indexing");
+  throw new Error(
+    `Unsupported image source for face indexing: ${src.slice(0, 80)}`,
+  );
 }
 
 export type IndexedFaceRecord = {
@@ -97,16 +153,21 @@ export async function indexGalleryImageFaces(input: {
   const bytes = await fetchImageBytes(input.src);
   const externalImageId = input.imageId.slice(0, 255);
 
-  const result = await client().send(
-    new IndexFacesCommand({
-      CollectionId: getRekognitionCollectionId(),
-      Image: { Bytes: bytes },
-      ExternalImageId: externalImageId,
-      DetectionAttributes: [],
-      MaxFaces: 12,
-      QualityFilter: "AUTO",
-    }),
-  );
+  let result;
+  try {
+    result = await client().send(
+      new IndexFacesCommand({
+        CollectionId: getRekognitionCollectionId(),
+        Image: { Bytes: bytes },
+        ExternalImageId: externalImageId,
+        DetectionAttributes: [],
+        MaxFaces: 12,
+        QualityFilter: "NONE",
+      }),
+    );
+  } catch (error) {
+    throw new Error(`IndexFaces failed: ${awsErrorMessage(error)}`);
+  }
 
   const faces: IndexedFaceRecord[] = [];
   for (const record of result.FaceRecords || []) {
@@ -134,21 +195,26 @@ export async function searchSimilarFaces(input: {
   maxFaces?: number;
 }): Promise<Array<{ faceId: string; similarity: number }>> {
   await ensureFaceCollection();
-  const result = await client().send(
-    new SearchFacesCommand({
-      CollectionId: getRekognitionCollectionId(),
-      FaceId: input.faceId,
-      FaceMatchThreshold: input.threshold ?? 92,
-      MaxFaces: input.maxFaces ?? 10,
-    }),
-  );
+  try {
+    const result = await client().send(
+      new SearchFacesCommand({
+        CollectionId: getRekognitionCollectionId(),
+        FaceId: input.faceId,
+        FaceMatchThreshold: input.threshold ?? 92,
+        MaxFaces: input.maxFaces ?? 10,
+      }),
+    );
 
-  return (result.FaceMatches || [])
-    .map((match) => ({
-      faceId: match.Face?.FaceId || "",
-      similarity: match.Similarity ?? 0,
-    }))
-    .filter((item) => item.faceId && item.faceId !== input.faceId);
+    return (result.FaceMatches || [])
+      .map((match) => ({
+        faceId: match.Face?.FaceId || "",
+        similarity: match.Similarity ?? 0,
+      }))
+      .filter((item) => item.faceId && item.faceId !== input.faceId);
+  } catch (error) {
+    console.error("searchSimilarFaces failed", awsErrorMessage(error));
+    return [];
+  }
 }
 
 /**

@@ -30,6 +30,7 @@ export function GuestPhotoReview({
     failed: number;
     total: number;
     rekognitionReady: boolean;
+    sampleErrors: string[];
   } | null>(null);
 
   useEffect(() => {
@@ -54,6 +55,9 @@ export function GuestPhotoReview({
           failed: data.failed || 0,
           total: data.total || 0,
           rekognitionReady: Boolean(data.rekognitionReady),
+          sampleErrors: Array.isArray(data.sampleErrors)
+            ? data.sampleErrors.map(String)
+            : [],
         });
       })
       .catch(() => undefined);
@@ -76,15 +80,29 @@ export function GuestPhotoReview({
         setFaceStatus(data.error || "Could not index faces");
         return;
       }
+      const errors = Array.isArray(data.sampleErrors)
+        ? data.sampleErrors.map(String)
+        : [];
       setFaceStatus(
-        `Indexed ${data.processed || 0} photo(s). ${data.remaining || 0} still waiting.`,
+        errors.length
+          ? `Indexed ${data.indexed || 0} · ${data.failed || 0} failed. ${errors[0]}`
+          : `Indexed ${data.indexed || 0} of ${data.processed || 0} photo(s)${
+              data.remaining ? ` · ${data.remaining} still waiting` : ""
+            }.`,
       );
-      setFaceStats((prev) => ({
-        indexed: (prev?.indexed || 0) + (data.processed || 0),
-        failed: prev?.failed || 0,
-        total: (prev?.total || 0) + (data.processed || 0),
-        rekognitionReady: true,
-      }));
+      const statusRes = await fetch("/api/face/reindex");
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        setFaceStats({
+          indexed: status.indexed || 0,
+          failed: status.failed || 0,
+          total: status.total || 0,
+          rekognitionReady: Boolean(status.rekognitionReady),
+          sampleErrors: Array.isArray(status.sampleErrors)
+            ? status.sampleErrors.map(String)
+            : errors,
+        });
+      }
     } catch {
       setFaceStatus("Could not index faces");
     } finally {
@@ -198,8 +216,20 @@ export function GuestPhotoReview({
             {faceStats ? (
               <p className="mt-2 font-body text-[10px] uppercase tracking-[0.18em] text-gold-soft">
                 {faceStats.indexed} indexed · {faceStats.failed} failed ·{" "}
-                {faceStats.rekognitionReady ? "AWS ready" : "AWS not configured"}
+                {faceStats.rekognitionReady
+                  ? "AWS env set"
+                  : "AWS not configured"}
               </p>
+            ) : null}
+            {faceStats?.sampleErrors?.length ? (
+              <div className="mt-2 space-y-1 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 font-body text-xs text-red-200">
+                <p className="font-semibold text-red-100">Why indexing failed</p>
+                {faceStats.sampleErrors.map((err) => (
+                  <p key={err} className="break-words">
+                    {err}
+                  </p>
+                ))}
+              </div>
             ) : null}
             {faceStatus ? (
               <p className="mt-2 font-body text-xs text-cream/80">{faceStatus}</p>
@@ -207,10 +237,10 @@ export function GuestPhotoReview({
             <Button
               type="button"
               className="mt-3"
-              disabled={faceBusy}
+              disabled={faceBusy || !faceStats?.rekognitionReady}
               onClick={() => void onFaceReindex()}
             >
-              {faceBusy ? "Indexing…" : "Index missing faces (batch)"}
+              {faceBusy ? "Indexing…" : "Retry failed / missing faces"}
             </Button>
           </div>
         </div>

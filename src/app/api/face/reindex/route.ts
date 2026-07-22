@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requirePermission } from "@/lib/auth";
+import { requireAnyPermission } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import {
   indexApprovedGalleryImage,
@@ -21,7 +21,7 @@ const schema = z.object({
 /** Admin: index approved gallery photos into Rekognition. */
 export async function POST(request: Request) {
   try {
-    if (!(await requirePermission("gallery_review"))) {
+    if (!(await requireAnyPermission(["gallery_review", "gallery_upload"]))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -58,14 +58,13 @@ export async function POST(request: Request) {
 
     const store = await readStore();
     const existing = await listFaceImageIndex();
-    const indexedIds = new Set(
-      existing.filter((item) => item.status === "indexed").map((item) => item.imageId),
-    );
 
     const candidates = store.gallery.filter((item) => {
       if (item.status !== "approved" || item.kind !== "image") return false;
       if (parsed.data.mode === "all") return true;
-      return !indexedIds.has(item.id);
+      // Retry failed + never indexed
+      const row = existing.find((entry) => entry.imageId === item.id);
+      return !row || row.status === "failed" || row.status === "skipped";
     });
 
     const batch = candidates.slice(0, parsed.data.limit);
@@ -74,10 +73,22 @@ export async function POST(request: Request) {
       results.push(await indexApprovedGalleryImage(image));
     }
 
+    const failedResults = results.filter((item) => item.status === "failed");
+    const sampleErrors = [
+      ...new Set(
+        failedResults
+          .map((item) => item.error)
+          .filter((item): item is string => Boolean(item)),
+      ),
+    ].slice(0, 5);
+
     return NextResponse.json({
       ok: true,
       processed: results.length,
+      indexed: results.filter((item) => item.status === "indexed").length,
+      failed: failedResults.length,
       remaining: Math.max(0, candidates.length - batch.length),
+      sampleErrors,
       results,
       rekognitionReady: true,
     });
@@ -95,16 +106,24 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    if (!(await requirePermission("gallery_review"))) {
+    if (!(await requireAnyPermission(["gallery_review", "gallery_upload"]))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const index = await listFaceImageIndex();
     const indexed = index.filter((item) => item.status === "indexed").length;
     const failed = index.filter((item) => item.status === "failed").length;
+    const sampleErrors = [
+      ...new Set(
+        index
+          .filter((item) => item.status === "failed" && item.error)
+          .map((item) => item.error as string),
+      ),
+    ].slice(0, 5);
     return NextResponse.json({
       total: index.length,
       indexed,
       failed,
+      sampleErrors,
       rekognitionReady: isRekognitionConfigured(),
       entries: index.slice(0, 50),
     });

@@ -17,6 +17,7 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import {
   indexGalleryImageFaces,
   isRekognitionConfigured,
+  awsErrorMessage,
   searchGalleryImagesBySelfie,
   searchSimilarFaces,
 } from "@/lib/rekognition";
@@ -274,7 +275,7 @@ export async function indexApprovedGalleryImage(
       imageId: image.id,
       status: "failed",
       faceCount: 0,
-      error: error instanceof Error ? error.message : "Index failed",
+      error: awsErrorMessage(error),
       indexedAt: new Date().toISOString(),
     };
     await saveFaceImageIndex(entry);

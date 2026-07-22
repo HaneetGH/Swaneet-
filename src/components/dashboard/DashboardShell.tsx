@@ -116,6 +116,8 @@ export function DashboardShell({
         Icon: ClipboardCheck,
         count: gallery.filter((g) => g.status === "pending").length,
       });
+    }
+    if (can(session, "gallery_upload") || can(session, "gallery_review")) {
       items.push({
         id: "faces",
         label: "Faces",
@@ -220,7 +222,11 @@ export function DashboardShell({
         ) : activeTab === "events" ? (
           <EventsManager initialEvents={events} />
         ) : activeTab === "upload" ? (
-          <GalleryManager initialGallery={gallery} events={events} />
+          <GalleryManager
+            initialGallery={gallery}
+            events={events}
+            onOpenFaces={() => setTab("faces")}
+          />
         ) : activeTab === "review" ? (
           <GuestPhotoReview initialGallery={gallery} events={events} />
         ) : activeTab === "faces" ? (
