@@ -91,6 +91,33 @@ export async function POST(request: Request) {
     await writeStore(store);
 
     const updated = store.gallery.filter((item) => idSet.has(item.id));
+
+    // Face-find: index newly approved images when the feature is on (best-effort)
+    if (action === "approve") {
+      try {
+        const { isFeatureEnabled } = await import("@/lib/feature-flags");
+        const { getFeatureFlags } = await import("@/lib/store");
+        const { indexApprovedGalleryImage } = await import("@/lib/face-store");
+        const { isRekognitionConfigured } = await import("@/lib/rekognition");
+        const flags = await getFeatureFlags();
+        const faceOn =
+          isFeatureEnabled(flags, "main", "face_find") ||
+          isFeatureEnabled(flags, "mehfil", "face_find") ||
+          isFeatureEnabled(flags, "laavan", "face_find");
+        if (faceOn && isRekognitionConfigured()) {
+          for (const image of updated) {
+            if (image.status === "approved" && image.kind === "image") {
+              await indexApprovedGalleryImage(image).catch((error) =>
+                console.error("face index on approve failed", image.id, error),
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.error("face index hook failed", error);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       action,

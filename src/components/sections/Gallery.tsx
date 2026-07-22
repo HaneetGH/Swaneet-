@@ -22,6 +22,7 @@ import {
 } from "@/lib/firebase/client";
 import type { GalleryImage, ManagedEvent } from "@/lib/types";
 import { SectionHeading } from "@/components/ui/SectionHeading";
+import { FaceFindPanel } from "@/components/sections/FaceFindPanel";
 import { cn } from "@/lib/utils";
 
 const fallbackEvents: ManagedEvent[] = sortEventsByDateTime(
@@ -511,6 +512,12 @@ export function GalleryFull() {
             ← Back to home
           </Link>
         </div>
+
+        {user && flagsReady && enabled("face_find") ? (
+          <div className="mb-12">
+            <FaceFindPanel />
+          </div>
+        ) : null}
 
         {flagsReady && !enabled("gallery") ? (
           <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">

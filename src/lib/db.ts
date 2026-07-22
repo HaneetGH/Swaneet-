@@ -86,6 +86,20 @@ async function runSchemaEnsure() {
       CREATE INDEX IF NOT EXISTS rsvps_created_at_idx
       ON rsvps (created_at DESC)
     `,
+    `
+      CREATE TABLE IF NOT EXISTS face_profiles (
+        uid TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS face_image_index (
+        image_id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
   ];
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -406,4 +420,73 @@ export async function deleteRsvpFromDb(id: string): Promise<boolean> {
     [id],
   );
   return asRows(result).length > 0;
+}
+
+export async function getFaceProfileFromDb(
+  uid: string,
+): Promise<import("@/lib/types").GuestFaceProfile | null> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `SELECT data FROM face_profiles WHERE uid = $1 LIMIT 1`,
+    [uid],
+  );
+  const row = asRows<{ data: unknown }>(result)[0];
+  return row ? parseJsonb(row.data) : null;
+}
+
+export async function upsertFaceProfileToDb(
+  profile: import("@/lib/types").GuestFaceProfile,
+): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(
+    `
+      INSERT INTO face_profiles (uid, data, updated_at)
+      VALUES ($1, $2::jsonb, NOW())
+      ON CONFLICT (uid)
+      DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+    `,
+    [profile.uid, JSON.stringify(profile)],
+  );
+}
+
+export async function getFaceImageIndexFromDb(
+  imageId: string,
+): Promise<import("@/lib/types").GalleryFaceIndexEntry | null> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `SELECT data FROM face_image_index WHERE image_id = $1 LIMIT 1`,
+    [imageId],
+  );
+  const row = asRows<{ data: unknown }>(result)[0];
+  return row ? parseJsonb(row.data) : null;
+}
+
+export async function listFaceImageIndexFromDb(): Promise<
+  import("@/lib/types").GalleryFaceIndexEntry[]
+> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `SELECT data FROM face_image_index ORDER BY updated_at DESC`,
+  );
+  return asRows<{ data: unknown }>(result).map((row) => parseJsonb(row.data));
+}
+
+export async function upsertFaceImageIndexToDb(
+  entry: import("@/lib/types").GalleryFaceIndexEntry,
+): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(
+    `
+      INSERT INTO face_image_index (image_id, data, updated_at)
+      VALUES ($1, $2::jsonb, NOW())
+      ON CONFLICT (image_id)
+      DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+    `,
+    [entry.imageId, JSON.stringify(entry)],
+  );
 }

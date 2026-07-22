@@ -12,6 +12,7 @@ const siteSchema = z.object({
   gallery: z.boolean(),
   guest_photos: z.boolean(),
   stay_banner: z.boolean(),
+  face_find: z.boolean(),
 });
 
 const flagsSchema = z.object({

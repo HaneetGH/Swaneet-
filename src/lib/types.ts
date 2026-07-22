@@ -138,7 +138,8 @@ export type FeatureKey =
   | "accommodation"
   | "gallery"
   | "guest_photos"
-  | "stay_banner";
+  | "stay_banner"
+  | "face_find";
 
 export type SiteFeatureFlags = Record<FeatureKey, boolean>;
 
@@ -213,6 +214,32 @@ export type GuestLogin = {
   inviteSide?: "bride" | "groom";
   inviteTier?: "mehfil" | "laavan";
   inviteSlug?: string;
+};
+
+/** Guest selfie + matched gallery photos (face find) */
+export type GuestFaceProfile = {
+  uid: string;
+  email?: string;
+  name?: string;
+  /** Blob / public URL of enrolled selfie */
+  selfieSrc: string;
+  status: "ready" | "matching" | "failed" | "needs_selfie";
+  error?: string;
+  /** Approved gallery image ids matched to this guest */
+  matchedImageIds: string[];
+  matchCount: number;
+  enrolledAt: string;
+  lastMatchedAt?: string;
+  updatedAt: string;
+};
+
+/** Per-gallery-image Rekognition index state */
+export type GalleryFaceIndexEntry = {
+  imageId: string;
+  status: "indexed" | "failed" | "skipped";
+  faceCount: number;
+  error?: string;
+  indexedAt: string;
 };
 
 /** Linked RSVP summary on a guest profile row */
@@ -298,6 +325,10 @@ export type ContentStore = {
   admins?: AdminMember[];
   /** Firebase guests who used stay or photo share */
   guestLogins?: GuestLogin[];
+  /** Face-find guest selfies + matches (local fallback; Neon uses face_profiles table) */
+  faceProfiles?: GuestFaceProfile[];
+  /** Face-find gallery index status (local fallback; Neon uses face_image_index) */
+  faceImageIndex?: GalleryFaceIndexEntry[];
   /** Outbound email attempts (newest first, capped) */
   emailLogs?: EmailLogEntry[];
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */

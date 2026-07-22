@@ -13,6 +13,7 @@
     "check": "npm test && npx tsc --noEmit && node scripts/smoke-production.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-rekognition": "^3.1093.0",
     "@hookform/resolvers": "^5.4.0",
     "@neondatabase/serverless": "^1.1.0",
     "@react-three/drei": "^10.7.7",

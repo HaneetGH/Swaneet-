@@ -75,10 +75,12 @@ describe("bride invites", () => {
 });
 
 describe("feature flags", () => {
-  it("defaults all features on", () => {
+  it("defaults core features on and face_find off", () => {
     const flags = defaultFeatureFlags();
     expect(isFeatureEnabled(flags, "main", "accommodation")).toBe(true);
     expect(isFeatureEnabled(flags, "laavan", "rsvp")).toBe(true);
+    expect(isFeatureEnabled(flags, "main", "face_find")).toBe(false);
+    expect(isFeatureEnabled(flags, "mehfil", "face_find")).toBe(false);
   });
 
   it("can disable accommodation for one site only", () => {

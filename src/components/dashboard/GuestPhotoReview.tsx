@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Check, ClipboardCheck, X } from "lucide-react";
+import { Check, ClipboardCheck, ScanFace, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { GalleryImage, ManagedEvent } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +23,14 @@ export function GuestPhotoReview({
   const [moderating, setModerating] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
+  const [faceBusy, setFaceBusy] = useState(false);
+  const [faceStatus, setFaceStatus] = useState("");
+  const [faceStats, setFaceStats] = useState<{
+    indexed: number;
+    failed: number;
+    total: number;
+    rekognitionReady: boolean;
+  } | null>(null);
 
   useEffect(() => {
     setGallery(initialGallery);
@@ -34,6 +42,55 @@ export function GuestPhotoReview({
       setBulkEventId(initialEvents[0].id);
     }
   }, [initialEvents, bulkEventId]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/face/reindex")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!alive || data.error) return;
+        setFaceStats({
+          indexed: data.indexed || 0,
+          failed: data.failed || 0,
+          total: data.total || 0,
+          rekognitionReady: Boolean(data.rekognitionReady),
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const onFaceReindex = async () => {
+    setFaceBusy(true);
+    setFaceStatus("");
+    try {
+      const res = await fetch("/api/face/reindex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "missing", limit: 40 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFaceStatus(data.error || "Could not index faces");
+        return;
+      }
+      setFaceStatus(
+        `Indexed ${data.processed || 0} photo(s). ${data.remaining || 0} still waiting.`,
+      );
+      setFaceStats((prev) => ({
+        indexed: (prev?.indexed || 0) + (data.processed || 0),
+        failed: prev?.failed || 0,
+        total: (prev?.total || 0) + (data.processed || 0),
+        rekognitionReady: true,
+      }));
+    } catch {
+      setFaceStatus("Could not index faces");
+    } finally {
+      setFaceBusy(false);
+    }
+  };
 
   const eventNameById = useMemo(() => {
     return new Map(events.map((event) => [event.id, event.name]));
@@ -127,6 +184,37 @@ export function GuestPhotoReview({
         Approve, reject, or assign an event. Rejected guests get a sorry email.
         Team uploads (no approval) are under Upload media.
       </p>
+
+      <div className="mb-6 rounded-2xl border border-gold/20 bg-[#141018] p-4">
+        <div className="flex flex-wrap items-start gap-3">
+          <ScanFace className="mt-0.5 text-gold" size={18} />
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-lg text-cream">Face find index</p>
+            <p className="mt-1 font-body text-xs leading-relaxed text-muted">
+              Enable “Find my photos (face)” in Feature flags first. Then index
+              approved gallery photos so guests can match a selfie. Approving a
+              guest photo also indexes it automatically when AWS is configured.
+            </p>
+            {faceStats ? (
+              <p className="mt-2 font-body text-[10px] uppercase tracking-[0.18em] text-gold-soft">
+                {faceStats.indexed} indexed · {faceStats.failed} failed ·{" "}
+                {faceStats.rekognitionReady ? "AWS ready" : "AWS not configured"}
+              </p>
+            ) : null}
+            {faceStatus ? (
+              <p className="mt-2 font-body text-xs text-cream/80">{faceStatus}</p>
+            ) : null}
+            <Button
+              type="button"
+              className="mt-3"
+              disabled={faceBusy}
+              onClick={() => void onFaceReindex()}
+            >
+              {faceBusy ? "Indexing…" : "Index missing faces (batch)"}
+            </Button>
+          </div>
+        </div>
+      </div>
 
       {error ? <p className="mb-3 text-xs text-red-300">{error}</p> : null}
       {progress ? (

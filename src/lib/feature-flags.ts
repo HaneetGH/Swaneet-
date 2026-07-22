@@ -38,14 +38,21 @@ export const FEATURE_KEYS: Array<{ id: FeatureKey; label: string; hint: string }
       label: "Need Accommodation? banner",
       hint: "Homepage / invite shortcut banner",
     },
+    {
+      id: "face_find",
+      label: "Find my photos (face)",
+      hint: "Guests upload a selfie to get a private album of photos of them",
+    },
   ];
 
+/** Most features on; face find stays off until you enable it. */
 const ALL_ON: SiteFeatureFlags = {
   rsvp: true,
   accommodation: true,
   gallery: true,
   guest_photos: true,
   stay_banner: true,
+  face_find: false,
 };
 
 export function defaultFeatureFlags(): FeatureFlags {
@@ -67,6 +74,7 @@ export function normalizeFeatureFlags(
     "gallery",
     "guest_photos",
     "stay_banner",
+    "face_find",
   ];
 
   const next = { ...defaults };
