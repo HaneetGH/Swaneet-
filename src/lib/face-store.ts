@@ -1,18 +1,29 @@
+import { randomUUID } from "crypto";
 import {
+  getFaceDetectionFromDb,
   getFaceImageIndexFromDb,
+  getFacePersonFromDb,
   getFaceProfileFromDb,
+  listFaceDetectionsFromDb,
   listFaceImageIndexFromDb,
+  listFacePeopleFromDb,
+  upsertFaceDetectionToDb,
   upsertFaceImageIndexToDb,
+  upsertFacePersonToDb,
   upsertFaceProfileToDb,
 } from "@/lib/db";
 import { hasDatabase } from "@/lib/env";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import {
   indexGalleryImageFaces,
   isRekognitionConfigured,
   searchGalleryImagesBySelfie,
+  searchSimilarFaces,
 } from "@/lib/rekognition";
-import { readStore, writeStore } from "@/lib/store";
+import { getFeatureFlags, readStore, writeStore } from "@/lib/store";
 import type {
+  FaceDetection,
+  FacePerson,
   GalleryFaceIndexEntry,
   GalleryImage,
   GuestFaceProfile,
@@ -53,7 +64,10 @@ export async function getFaceImageIndex(
     return getFaceImageIndexFromDb(imageId);
   }
   const store = await readStore();
-  return (store.faceImageIndex || []).find((item) => item.imageId === imageId) || null;
+  return (
+    (store.faceImageIndex || []).find((item) => item.imageId === imageId) ||
+    null
+  );
 }
 
 export async function listFaceImageIndex(): Promise<GalleryFaceIndexEntry[]> {
@@ -80,7 +94,130 @@ export async function saveFaceImageIndex(
   await writeStore(store);
 }
 
-/** Index one approved gallery image into Rekognition (idempotent). */
+export async function listFacePeople(): Promise<FacePerson[]> {
+  if (hasDatabase()) {
+    return listFacePeopleFromDb();
+  }
+  const store = await readStore();
+  return [...(store.facePeople || [])];
+}
+
+export async function getFacePerson(id: string): Promise<FacePerson | null> {
+  if (hasDatabase()) {
+    return getFacePersonFromDb(id);
+  }
+  const store = await readStore();
+  return (store.facePeople || []).find((item) => item.id === id) || null;
+}
+
+export async function saveFacePerson(person: FacePerson): Promise<FacePerson> {
+  if (hasDatabase()) {
+    await upsertFacePersonToDb(person);
+    return person;
+  }
+  const store = await readStore();
+  const list = [...(store.facePeople || [])];
+  const index = list.findIndex((item) => item.id === person.id);
+  if (index >= 0) list[index] = person;
+  else list.unshift(person);
+  store.facePeople = list;
+  await writeStore(store);
+  return person;
+}
+
+export async function listFaceDetections(): Promise<FaceDetection[]> {
+  if (hasDatabase()) {
+    return listFaceDetectionsFromDb();
+  }
+  const store = await readStore();
+  return [...(store.faceDetections || [])];
+}
+
+export async function getFaceDetection(
+  faceId: string,
+): Promise<FaceDetection | null> {
+  if (hasDatabase()) {
+    return getFaceDetectionFromDb(faceId);
+  }
+  const store = await readStore();
+  return (
+    (store.faceDetections || []).find((item) => item.faceId === faceId) || null
+  );
+}
+
+export async function saveFaceDetection(
+  detection: FaceDetection,
+): Promise<void> {
+  if (hasDatabase()) {
+    await upsertFaceDetectionToDb(detection);
+    return;
+  }
+  const store = await readStore();
+  const list = [...(store.faceDetections || [])];
+  const index = list.findIndex((item) => item.faceId === detection.faceId);
+  if (index >= 0) list[index] = detection;
+  else list.push(detection);
+  store.faceDetections = list;
+  await writeStore(store);
+}
+
+async function assignFaceToPerson(input: {
+  faceId: string;
+  imageId: string;
+  boundingBox: FaceDetection["boundingBox"];
+}): Promise<FacePerson> {
+  const similar = await searchSimilarFaces({
+    faceId: input.faceId,
+    threshold: 92,
+    maxFaces: 8,
+  });
+
+  let person: FacePerson | null = null;
+  for (const match of similar) {
+    const existingDetection = await getFaceDetection(match.faceId);
+    if (!existingDetection) continue;
+    person = await getFacePerson(existingDetection.personId);
+    if (person) break;
+  }
+
+  const now = new Date().toISOString();
+  if (!person) {
+    person = {
+      id: `person-${randomUUID().slice(0, 10)}`,
+      name: "",
+      representativeFaceId: input.faceId,
+      faceIds: [input.faceId],
+      imageIds: [input.imageId],
+      createdAt: now,
+      updatedAt: now,
+    };
+  } else {
+    const faceIds = person.faceIds.includes(input.faceId)
+      ? person.faceIds
+      : [...person.faceIds, input.faceId];
+    const imageIds = person.imageIds.includes(input.imageId)
+      ? person.imageIds
+      : [...person.imageIds, input.imageId];
+    person = {
+      ...person,
+      faceIds,
+      imageIds,
+      updatedAt: now,
+    };
+  }
+
+  await saveFacePerson(person);
+  await saveFaceDetection({
+    faceId: input.faceId,
+    imageId: input.imageId,
+    boundingBox: input.boundingBox,
+    personId: person.id,
+    createdAt: now,
+  });
+  return person;
+}
+
+/** Index one approved gallery image into Rekognition + cluster people. */
 export async function indexApprovedGalleryImage(
   image: GalleryImage,
 ): Promise<GalleryFaceIndexEntry> {
@@ -109,10 +246,21 @@ export async function indexApprovedGalleryImage(
   }
 
   try {
-    const { faceCount } = await indexGalleryImageFaces({
+    const { faceCount, faces } = await indexGalleryImageFaces({
       imageId: image.id,
       src: image.src,
     });
+
+    for (const face of faces) {
+      await assignFaceToPerson({
+        faceId: face.faceId,
+        imageId: image.id,
+        boundingBox: face.boundingBox,
+      }).catch((error) =>
+        console.error("assignFaceToPerson failed", face.faceId, error),
+      );
+    }
+
     const entry: GalleryFaceIndexEntry = {
       imageId: image.id,
       status: "indexed",
@@ -132,6 +280,43 @@ export async function indexApprovedGalleryImage(
     await saveFaceImageIndex(entry);
     return entry;
   }
+}
+
+/** Best-effort index when face_find is on + AWS ready (admin upload / approve). */
+export async function maybeIndexGalleryImage(
+  image: GalleryImage,
+): Promise<void> {
+  try {
+    const flags = await getFeatureFlags();
+    const faceOn =
+      isFeatureEnabled(flags, "main", "face_find") ||
+      isFeatureEnabled(flags, "mehfil", "face_find") ||
+      isFeatureEnabled(flags, "laavan", "face_find");
+    if (!faceOn || !isRekognitionConfigured()) return;
+    if (image.status !== "approved" || image.kind !== "image") return;
+
+    const existing = await getFaceImageIndex(image.id);
+    if (existing?.status === "indexed") return;
+
+    await indexApprovedGalleryImage(image);
+  } catch (error) {
+    console.error("maybeIndexGalleryImage failed", image.id, error);
+  }
+}
+
+export async function renameFacePerson(
+  id: string,
+  name: string,
+): Promise<FacePerson> {
+  const person = await getFacePerson(id);
+  if (!person) throw new Error("Person not found");
+  const updated: FacePerson = {
+    ...person,
+    name: name.trim(),
+    updatedAt: new Date().toISOString(),
+  };
+  await saveFacePerson(updated);
+  return updated;
 }
 
 /** Enroll selfie + search collection for matching gallery photos. */
@@ -171,7 +356,6 @@ export async function enrollGuestSelfieAndMatch(input: {
       maxFaces: 200,
     });
 
-    // Only keep ids that still exist as approved gallery images
     const store = await readStore();
     const approved = new Set(
       store.gallery

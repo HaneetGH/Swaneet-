@@ -157,6 +157,9 @@ async function registerFromJson(request: Request) {
   store.gallery = [...images, ...store.gallery];
   await writeStore(store);
 
+  const { scheduleFaceIndex } = await import("@/lib/face-index-schedule");
+  scheduleFaceIndex(images);
+
   return NextResponse.json({ images, image: images[0] }, { status: 201 });
 }
 
@@ -273,6 +276,9 @@ async function registerFromFormData(request: Request) {
 
   store.gallery = [...images, ...store.gallery];
   await writeStore(store);
+
+  const { scheduleFaceIndex } = await import("@/lib/face-index-schedule");
+  scheduleFaceIndex(images);
 
   return NextResponse.json({ images, image: images[0] }, { status: 201 });
 }

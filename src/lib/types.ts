@@ -242,6 +242,35 @@ export type GalleryFaceIndexEntry = {
   indexedAt: string;
 };
 
+/** Normalized 0–1 box from Rekognition */
+export type FaceBoundingBox = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+/** One detected face in a gallery photo */
+export type FaceDetection = {
+  faceId: string;
+  imageId: string;
+  boundingBox: FaceBoundingBox;
+  personId: string;
+  createdAt: string;
+};
+
+/** Clustered person (named or unnamed) across many photos */
+export type FacePerson = {
+  id: string;
+  /** Empty string = unnamed — set from dashboard */
+  name: string;
+  representativeFaceId: string;
+  faceIds: string[];
+  imageIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** Linked RSVP summary on a guest profile row */
 export type GuestProfileRsvp = {
   id: string;
@@ -329,6 +358,10 @@ export type ContentStore = {
   faceProfiles?: GuestFaceProfile[];
   /** Face-find gallery index status (local fallback; Neon uses face_image_index) */
   faceImageIndex?: GalleryFaceIndexEntry[];
+  /** Clustered people for dashboard Faces tab */
+  facePeople?: FacePerson[];
+  /** Individual face detections linked to people */
+  faceDetections?: FaceDetection[];
   /** Outbound email attempts (newest first, capped) */
   emailLogs?: EmailLogEntry[];
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */

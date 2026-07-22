@@ -4,7 +4,9 @@ import {
   RekognitionClient,
   ResourceAlreadyExistsException,
   SearchFacesByImageCommand,
+  SearchFacesCommand,
 } from "@aws-sdk/client-rekognition";
+import type { FaceBoundingBox } from "@/lib/types";
 
 export function isRekognitionConfigured() {
   return Boolean(
@@ -48,7 +50,6 @@ export async function ensureFaceCollection() {
     );
   } catch (error) {
     if (!(error instanceof ResourceAlreadyExistsException)) {
-      // Some SDKs throw plain errors with name
       const name =
         error && typeof error === "object" && "name" in error
           ? String((error as { name: string }).name)
@@ -79,6 +80,11 @@ export async function fetchImageBytes(src: string): Promise<Uint8Array> {
   throw new Error("Unsupported image source for face indexing");
 }
 
+export type IndexedFaceRecord = {
+  faceId: string;
+  boundingBox: FaceBoundingBox;
+};
+
 /**
  * Index all faces in a gallery photo.
  * ExternalImageId = gallery image id (used later to map matches back).
@@ -86,7 +92,7 @@ export async function fetchImageBytes(src: string): Promise<Uint8Array> {
 export async function indexGalleryImageFaces(input: {
   imageId: string;
   src: string;
-}): Promise<{ faceCount: number }> {
+}): Promise<{ faceCount: number; faces: IndexedFaceRecord[] }> {
   await ensureFaceCollection();
   const bytes = await fetchImageBytes(input.src);
   const externalImageId = input.imageId.slice(0, 255);
@@ -102,7 +108,47 @@ export async function indexGalleryImageFaces(input: {
     }),
   );
 
-  return { faceCount: result.FaceRecords?.length || 0 };
+  const faces: IndexedFaceRecord[] = [];
+  for (const record of result.FaceRecords || []) {
+    const faceId = record.Face?.FaceId;
+    const box = record.Face?.BoundingBox;
+    if (!faceId || !box) continue;
+    faces.push({
+      faceId,
+      boundingBox: {
+        left: box.Left ?? 0,
+        top: box.Top ?? 0,
+        width: box.Width ?? 0,
+        height: box.Height ?? 0,
+      },
+    });
+  }
+
+  return { faceCount: faces.length, faces };
+}
+
+/** Find similar faces already in the collection (for clustering into people). */
+export async function searchSimilarFaces(input: {
+  faceId: string;
+  threshold?: number;
+  maxFaces?: number;
+}): Promise<Array<{ faceId: string; similarity: number }>> {
+  await ensureFaceCollection();
+  const result = await client().send(
+    new SearchFacesCommand({
+      CollectionId: getRekognitionCollectionId(),
+      FaceId: input.faceId,
+      FaceMatchThreshold: input.threshold ?? 92,
+      MaxFaces: input.maxFaces ?? 10,
+    }),
+  );
+
+  return (result.FaceMatches || [])
+    .map((match) => ({
+      faceId: match.Face?.FaceId || "",
+      similarity: match.Similarity ?? 0,
+    }))
+    .filter((item) => item.faceId && item.faceId !== input.faceId);
 }
 
 /**

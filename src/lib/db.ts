@@ -100,6 +100,20 @@ async function runSchemaEnsure() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `,
+    `
+      CREATE TABLE IF NOT EXISTS face_people (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS face_detections (
+        face_id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
   ];
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -488,5 +502,83 @@ export async function upsertFaceImageIndexToDb(
       DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
     `,
     [entry.imageId, JSON.stringify(entry)],
+  );
+}
+
+export async function listFacePeopleFromDb(): Promise<
+  import("@/lib/types").FacePerson[]
+> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `SELECT data FROM face_people ORDER BY updated_at DESC`,
+  );
+  return asRows<{ data: unknown }>(result).map((row) => parseJsonb(row.data));
+}
+
+export async function getFacePersonFromDb(
+  id: string,
+): Promise<import("@/lib/types").FacePerson | null> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `SELECT data FROM face_people WHERE id = $1 LIMIT 1`,
+    [id],
+  );
+  const row = asRows<{ data: unknown }>(result)[0];
+  return row ? parseJsonb(row.data) : null;
+}
+
+export async function upsertFacePersonToDb(
+  person: import("@/lib/types").FacePerson,
+): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(
+    `
+      INSERT INTO face_people (id, data, updated_at)
+      VALUES ($1, $2::jsonb, NOW())
+      ON CONFLICT (id)
+      DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+    `,
+    [person.id, JSON.stringify(person)],
+  );
+}
+
+export async function listFaceDetectionsFromDb(): Promise<
+  import("@/lib/types").FaceDetection[]
+> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(`SELECT data FROM face_detections`);
+  return asRows<{ data: unknown }>(result).map((row) => parseJsonb(row.data));
+}
+
+export async function getFaceDetectionFromDb(
+  faceId: string,
+): Promise<import("@/lib/types").FaceDetection | null> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `SELECT data FROM face_detections WHERE face_id = $1 LIMIT 1`,
+    [faceId],
+  );
+  const row = asRows<{ data: unknown }>(result)[0];
+  return row ? parseJsonb(row.data) : null;
+}
+
+export async function upsertFaceDetectionToDb(
+  detection: import("@/lib/types").FaceDetection,
+): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(
+    `
+      INSERT INTO face_detections (face_id, data, updated_at)
+      VALUES ($1, $2::jsonb, NOW())
+      ON CONFLICT (face_id)
+      DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+    `,
+    [detection.faceId, JSON.stringify(detection)],
   );
 }

@@ -11,6 +11,7 @@ import {
   KeyRound,
   LogOut,
   Mail,
+  ScanFace,
   Shield,
   UserRound,
   Users,
@@ -26,6 +27,7 @@ import type {
 import { AccommodationManager } from "@/components/dashboard/AccommodationManager";
 import { ChangePinForm } from "@/components/dashboard/ChangePinForm";
 import { FeatureFlagsManager } from "@/components/dashboard/FeatureFlagsManager";
+import { FacesManager } from "@/components/dashboard/FacesManager";
 import { RsvpBannerManager } from "@/components/dashboard/RsvpBannerManager";
 import { EmailLogManager } from "@/components/dashboard/EmailLogManager";
 import { EventsManager } from "@/components/dashboard/EventsManager";
@@ -59,6 +61,7 @@ type Tab =
   | "events"
   | "upload"
   | "review"
+  | "faces"
   | "guests"
   | "team"
   | "emails"
@@ -112,6 +115,12 @@ export function DashboardShell({
         label: "Review photos",
         Icon: ClipboardCheck,
         count: gallery.filter((g) => g.status === "pending").length,
+      });
+      items.push({
+        id: "faces",
+        label: "Faces",
+        Icon: ScanFace,
+        count: 0,
       });
     }
     if (can(session, "events")) {
@@ -214,6 +223,8 @@ export function DashboardShell({
           <GalleryManager initialGallery={gallery} events={events} />
         ) : activeTab === "review" ? (
           <GuestPhotoReview initialGallery={gallery} events={events} />
+        ) : activeTab === "faces" ? (
+          <FacesManager />
         ) : activeTab === "guests" ? (
           <GuestLoginsManager />
         ) : activeTab === "team" ? (

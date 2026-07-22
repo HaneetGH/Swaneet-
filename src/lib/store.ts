@@ -90,6 +90,8 @@ export function defaultStore(): ContentStore {
     guestLogins: [],
     faceProfiles: [],
     faceImageIndex: [],
+    facePeople: [],
+    faceDetections: [],
     emailLogs: [],
   };
 }

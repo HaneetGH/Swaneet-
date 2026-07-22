@@ -69,7 +69,13 @@ export async function PATCH(request: Request, { params }: Params) {
   };
   await writeStore(store);
 
-  return NextResponse.json({ image: store.gallery[index] });
+  const next = store.gallery[index]!;
+  if (parsed.data.status === "approved") {
+    const { scheduleFaceIndex } = await import("@/lib/face-index-schedule");
+    scheduleFaceIndex(next);
+  }
+
+  return NextResponse.json({ image: next });
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
