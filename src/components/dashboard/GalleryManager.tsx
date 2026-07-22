@@ -23,6 +23,7 @@ type PreviewItem = {
 type GalleryManagerProps = {
   initialGallery: GalleryImage[];
   events: ManagedEvent[];
+  canManageFaces?: boolean;
   onOpenFaces?: () => void;
 };
 
@@ -37,6 +38,7 @@ function safeFilename(name: string) {
 export function GalleryManager({
   initialGallery,
   events: initialEvents,
+  canManageFaces = false,
   onOpenFaces,
 }: GalleryManagerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -82,6 +84,7 @@ export function GalleryManager({
   }, []);
 
   useEffect(() => {
+    if (!canManageFaces) return;
     let alive = true;
     fetch("/api/face/reindex")
       .then((res) => res.json())
@@ -101,7 +104,7 @@ export function GalleryManager({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [canManageFaces]);
 
   const onIndexFaces = async () => {
     setFaceBusy(true);
@@ -386,6 +389,7 @@ export function GalleryManager({
 
   return (
     <div>
+      {canManageFaces ? (
       <div className="mb-6 rounded-2xl border border-gold/25 bg-[#141018] p-4">
         <div className="flex flex-wrap items-start gap-3">
           <ScanFace className="mt-0.5 text-gold" size={18} />
@@ -435,6 +439,7 @@ export function GalleryManager({
           </div>
         </div>
       </div>
+      ) : null}
 
     <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
       <form

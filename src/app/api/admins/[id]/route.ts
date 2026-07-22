@@ -14,6 +14,7 @@ const permissionEnum = z.enum([
   "stay",
   "gallery_upload",
   "gallery_review",
+  "faces",
   "events",
   "guests",
   "team",

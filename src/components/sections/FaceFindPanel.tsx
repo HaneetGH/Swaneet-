@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { onAuthStateChanged, type User } from "firebase/auth";
-import { Camera, Images, RefreshCw, ScanFace } from "lucide-react";
+import { Camera, Download, Images, RefreshCw, ScanFace } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   GuestAuthPanel,
@@ -42,11 +42,29 @@ export function FaceFindPanel({ className }: { className?: string }) {
       setAuthReady(true);
       return;
     }
-    const auth = getFirebaseAuth();
-    return onAuthStateChanged(auth, (next) => {
-      setUser(next);
+
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    try {
+      const auth = getFirebaseAuth();
+      unsub = onAuthStateChanged(auth, (next) => {
+        if (cancelled) return;
+        setUser(next);
+        setAuthReady(true);
+      });
+    } catch {
       setAuthReady(true);
-    });
+    }
+
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) setAuthReady(true);
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      unsub?.();
+    };
   }, []);
 
   const load = useCallback(async () => {
@@ -157,6 +175,32 @@ export function FaceFindPanel({ className }: { className?: string }) {
     }
   };
 
+  const downloadPhoto = async (photo: GalleryImage) => {
+    const filename = `${(photo.alt || "swaneet-photo").replace(/[^\w.-]+/g, "-").slice(0, 40)}.jpg`;
+    try {
+      const response = await fetch(photo.src);
+      if (!response.ok) throw new Error("fetch failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.open(photo.src, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const downloadAll = async () => {
+    for (const photo of photos) {
+      await downloadPhoto(photo);
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  };
+
   return (
     <section
       className={cn(
@@ -171,8 +215,9 @@ export function FaceFindPanel({ className }: { className?: string }) {
             Find my photos
           </h2>
           <p className="mt-2 max-w-xl font-body text-sm leading-relaxed text-muted">
-            Upload a clear selfie. We’ll match it to wedding photos and give you
-            a private album of pictures that look like you.
+            Upload a clear selfie (or take one). We’ll match wedding photos so
+            you can download yours. If nothing’s ready yet, we’ll email you when
+            it is.
           </p>
         </div>
       </div>
@@ -252,27 +297,48 @@ export function FaceFindPanel({ className }: { className?: string }) {
           ) : null}
 
           {photos.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {photos.slice(0, 12).map((photo) => (
-                <div
-                  key={photo.id}
-                  className="relative aspect-square overflow-hidden rounded-2xl bg-black/40"
+            <>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void downloadAll()}
+                  className="inline-flex items-center gap-2 rounded-full bg-gold px-4 py-2.5 font-body text-sm font-medium text-[#1a1208]"
                 >
-                  <Image
-                    src={photo.src}
-                    alt={photo.alt || "Matched photo"}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 50vw, 25vw"
-                    unoptimized
-                  />
-                </div>
-              ))}
-            </div>
+                  <Download size={14} />
+                  Download all ({photos.length})
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                {photos.map((photo) => (
+                  <div
+                    key={photo.id}
+                    className="group relative aspect-square overflow-hidden rounded-2xl bg-black/40"
+                  >
+                    <Image
+                      src={photo.src}
+                      alt={photo.alt || "Matched photo"}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 50vw, 25vw"
+                      unoptimized
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void downloadPhoto(photo)}
+                      className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1.5 font-body text-[10px] uppercase tracking-[0.14em] text-cream"
+                    >
+                      <Download size={12} />
+                      Save
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
           ) : profile ? (
             <p className="font-body text-sm text-muted">
-              No matches yet. New photos are indexed when the family approves
-              them — tap Refresh matches later.
+              No matches yet. We’ve queued your request
+              {user.email ? ` for ${user.email}` : ""} — you’ll get an email when
+              photos are ready. You can also tap Refresh matches later.
             </p>
           ) : null}
         </div>

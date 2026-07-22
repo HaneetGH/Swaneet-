@@ -114,6 +114,20 @@ async function runSchemaEnsure() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `,
+    `
+      CREATE TABLE IF NOT EXISTS face_merge_logs (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS face_photo_requests (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
   ];
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -586,5 +600,79 @@ export async function upsertFaceDetectionToDb(
       DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
     `,
     [detection.faceId, JSON.stringify(detection)],
+  );
+}
+
+export async function insertFaceMergeLogToDb(
+  log: import("@/lib/types").FaceMergeLog,
+): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(
+    `
+      INSERT INTO face_merge_logs (id, data, created_at)
+      VALUES ($1, $2::jsonb, NOW())
+      ON CONFLICT (id)
+      DO UPDATE SET data = EXCLUDED.data
+    `,
+    [log.id, JSON.stringify(log)],
+  );
+}
+
+export async function listFaceMergeLogsFromDb(
+  limit = 20,
+): Promise<import("@/lib/types").FaceMergeLog[]> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `SELECT data FROM face_merge_logs ORDER BY created_at DESC LIMIT $1`,
+    [limit],
+  );
+  return asRows<{ data: unknown }>(result).map((row) => parseJsonb(row.data));
+}
+
+export async function deleteFaceMergeLogFromDb(id: string): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(`DELETE FROM face_merge_logs WHERE id = $1`, [id]);
+}
+
+export async function listFacePhotoRequestsFromDb(): Promise<
+  import("@/lib/types").FacePhotoRequest[]
+> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `SELECT data FROM face_photo_requests ORDER BY updated_at DESC`,
+  );
+  return asRows<{ data: unknown }>(result).map((row) => parseJsonb(row.data));
+}
+
+export async function getFacePhotoRequestFromDb(
+  id: string,
+): Promise<import("@/lib/types").FacePhotoRequest | null> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `SELECT data FROM face_photo_requests WHERE id = $1 LIMIT 1`,
+    [id],
+  );
+  const row = asRows<{ data: unknown }>(result)[0];
+  return row ? parseJsonb(row.data) : null;
+}
+
+export async function upsertFacePhotoRequestToDb(
+  request: import("@/lib/types").FacePhotoRequest,
+): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(
+    `
+      INSERT INTO face_photo_requests (id, data, updated_at)
+      VALUES ($1, $2::jsonb, NOW())
+      ON CONFLICT (id)
+      DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+    `,
+    [request.id, JSON.stringify(request)],
   );
 }

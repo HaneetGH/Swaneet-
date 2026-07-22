@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAnyPermission } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import {
   indexApprovedGalleryImage,
   listFaceImageIndex,
+  processPendingFacePhotoRequests,
 } from "@/lib/face-store";
+import { sendFacePhotosLinkEmail } from "@/lib/email";
 import { isRekognitionConfigured } from "@/lib/rekognition";
 import { getFeatureFlags, readStore } from "@/lib/store";
 
@@ -21,7 +23,7 @@ const schema = z.object({
 /** Admin: index approved gallery photos into Rekognition. */
 export async function POST(request: Request) {
   try {
-    if (!(await requireAnyPermission(["gallery_review", "gallery_upload"]))) {
+    if (!(await requirePermission("faces"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -82,6 +84,15 @@ export async function POST(request: Request) {
       ),
     ].slice(0, 5);
 
+    const queue = await processPendingFacePhotoRequests(async (input) =>
+      sendFacePhotosLinkEmail({
+        to: input.to,
+        name: input.name,
+        albumUrl: input.albumUrl,
+        photoCount: input.imageIds.length,
+      }),
+    );
+
     return NextResponse.json({
       ok: true,
       processed: results.length,
@@ -91,6 +102,8 @@ export async function POST(request: Request) {
       sampleErrors,
       results,
       rekognitionReady: true,
+      photoRequestsChecked: queue.checked,
+      photoRequestsEmailed: queue.emailed,
     });
   } catch (error) {
     console.error("POST /api/face/reindex failed", error);
@@ -106,7 +119,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    if (!(await requireAnyPermission(["gallery_review", "gallery_upload"]))) {
+    if (!(await requirePermission("faces"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const index = await listFaceImageIndex();

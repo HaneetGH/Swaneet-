@@ -401,6 +401,57 @@ export async function notifyOwner(input: {
   });
 }
 
+/** Email a guest a private link to their matched wedding photos. */
+export async function sendFacePhotosLinkEmail(input: {
+  to: string;
+  name?: string;
+  albumUrl: string;
+  photoCount?: number;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const greet = input.name?.trim() ? input.name.trim() : "there";
+  const count =
+    typeof input.photoCount === "number" && input.photoCount > 0
+      ? `${input.photoCount} photo${input.photoCount === 1 ? "" : "s"}`
+      : "your wedding photos";
+  const subject = "Your #Swaneet wedding photos";
+  const text = [
+    `Hi ${greet},`,
+    "",
+    `Your photos from #Swaneet are ready — ${count}.`,
+    "",
+    `Open your private album (link valid 14 days):`,
+    input.albumUrl,
+    "",
+    "You can also find more anytime at the site: sign in with Google and upload a selfie on /my-photos.",
+    "",
+    "#Swaneet",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
+      <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
+      <h1 style="font-weight: 400; font-size: 26px;">Your wedding photos</h1>
+      <p>Hi ${escapeHtml(greet)},</p>
+      <p>Your photos from #Swaneet are ready — ${escapeHtml(count)}.</p>
+      <p style="margin: 28px 0;">
+        <a href="${escapeHtml(input.albumUrl)}"
+           style="display:inline-block;background:#1a1208;color:#f7f1e6;padding:12px 22px;border-radius:999px;text-decoration:none;letter-spacing:0.08em;font-size:13px;text-transform:uppercase;">
+          Open my photos
+        </a>
+      </p>
+      <p style="font-size: 13px; color: #6b5c4a;">This private link works for 14 days. You can also sign in on the website and upload a selfie under Find my photos.</p>
+    </div>
+  `;
+
+  return sendResendEmail({
+    kind: "face_photos",
+    to: input.to,
+    subject,
+    text,
+    html,
+  });
+}
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")

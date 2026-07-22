@@ -10,11 +10,13 @@ import { cn } from "@/lib/utils";
 type GuestPhotoReviewProps = {
   initialGallery: GalleryImage[];
   events: ManagedEvent[];
+  canManageFaces?: boolean;
 };
 
 export function GuestPhotoReview({
   initialGallery,
   events: initialEvents,
+  canManageFaces = false,
 }: GuestPhotoReviewProps) {
   const [gallery, setGallery] = useState(initialGallery);
   const [events, setEvents] = useState(initialEvents);
@@ -45,6 +47,7 @@ export function GuestPhotoReview({
   }, [initialEvents, bulkEventId]);
 
   useEffect(() => {
+    if (!canManageFaces) return;
     let alive = true;
     fetch("/api/face/reindex")
       .then((res) => res.json())
@@ -64,7 +67,7 @@ export function GuestPhotoReview({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [canManageFaces]);
 
   const onFaceReindex = async () => {
     setFaceBusy(true);
@@ -203,6 +206,7 @@ export function GuestPhotoReview({
         Team uploads (no approval) are under Upload media.
       </p>
 
+      {canManageFaces ? (
       <div className="mb-6 rounded-2xl border border-gold/20 bg-[#141018] p-4">
         <div className="flex flex-wrap items-start gap-3">
           <ScanFace className="mt-0.5 text-gold" size={18} />
@@ -245,6 +249,7 @@ export function GuestPhotoReview({
           </div>
         </div>
       </div>
+      ) : null}
 
       {error ? <p className="mb-3 text-xs text-red-300">{error}</p> : null}
       {progress ? (

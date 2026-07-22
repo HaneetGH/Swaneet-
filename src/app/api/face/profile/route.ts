@@ -130,10 +130,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       profile,
+      queued: profile.matchCount === 0 && Boolean(guest.email),
       message:
         profile.matchCount > 0
-          ? `Found ${profile.matchCount} photo${profile.matchCount === 1 ? "" : "s"} of you`
-          : "Selfie saved. No matches yet — try again after more photos are indexed",
+          ? `Found ${profile.matchCount} photo${profile.matchCount === 1 ? "" : "s"} of you — download below`
+          : guest.email
+            ? "No matches yet. We’ve queued a request and will email you when your photos are ready."
+            : "Selfie saved. No matches yet — try Refresh after more photos are indexed",
     });
   } catch (error) {
     console.error("POST /api/face/profile failed", error);

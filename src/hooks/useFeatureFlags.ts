@@ -21,17 +21,27 @@ export function useFeatureFlags() {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/feature-flags", { cache: "no-store" })
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+
+    fetch("/api/feature-flags", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { flags?: FeatureFlags } | null) => {
         if (alive && data?.flags) setFlags(data.flags);
       })
       .catch(() => undefined)
       .finally(() => {
+        window.clearTimeout(timeout);
         if (alive) setReady(true);
       });
+
     return () => {
       alive = false;
+      window.clearTimeout(timeout);
+      controller.abort();
     };
   }, []);
 

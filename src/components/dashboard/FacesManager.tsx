@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ArrowLeft, ScanFace, UserRound } from "lucide-react";
+import { ArrowLeft, Link2, Merge, ScanFace, Undo2, UserRound } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { FaceBoundingBox } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
@@ -36,6 +36,14 @@ type PersonAlbum = {
     eventId?: string;
     faces: Array<{ faceId: string; boundingBox: FaceBoundingBox }>;
   }>;
+};
+
+type RsvpSuggestion = {
+  id: string;
+  name: string;
+  email: string;
+  hasEmail?: boolean;
+  attendance?: string;
 };
 
 function FaceCrop({
@@ -90,9 +98,17 @@ export function FacesManager() {
   const [nameDraft, setNameDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [mergeMode, setMergeMode] = useState(false);
+  const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
+  const [canUndoMerge, setCanUndoMerge] = useState(false);
+  const [sendEmail, setSendEmail] = useState("");
+  const [sendName, setSendName] = useState("");
+  const [selectedRsvpId, setSelectedRsvpId] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<RsvpSuggestion[]>([]);
+  const [sending, setSending] = useState(false);
+  const [rsvpQuery, setRsvpQuery] = useState("");
+  const [selfieBusy, setSelfieBusy] = useState(false);
 
   const loadPeople = useCallback(async () => {
     setLoading(true);
@@ -105,6 +121,7 @@ export function FacesManager() {
         return;
       }
       setPeople(data.people || []);
+      setCanUndoMerge(Boolean(data.canUndoMerge));
     } catch {
       setError("Could not load faces");
     } finally {
@@ -121,6 +138,8 @@ export function FacesManager() {
     setAlbumLoading(true);
     setMessage("");
     setError("");
+    setSelectedRsvpId(null);
+    setSuggestions([]);
     try {
       const res = await fetch(`/api/face/people/${encodeURIComponent(id)}`, {
         cache: "no-store",
@@ -132,7 +151,11 @@ export function FacesManager() {
         return;
       }
       setAlbum(data as PersonAlbum);
-      setNameDraft(data.person?.name || "");
+      const personName = (data.person?.name || "") as string;
+      setNameDraft(personName);
+      setSendName(personName);
+      setRsvpQuery(personName);
+      void searchRsvps(personName, true);
     } catch {
       setError("Could not load album");
       setAlbum(null);
@@ -158,12 +181,12 @@ export function FacesManager() {
         return;
       }
       const person = data.person as { id: string; name: string } | undefined;
-      const merged = Boolean(data.merged);
-      if (merged && person?.id) {
-        const note = `Merged with others named “${person.name || nameDraft}” — photos combined.`;
+      if (data.merged && person?.id) {
+        const note = `Merged with others named “${person.name || nameDraft}”`;
         await loadPeople();
         await openPerson(person.id);
         setMessage(note);
+        setCanUndoMerge(true);
         return;
       }
       setMessage("Name saved");
@@ -193,39 +216,193 @@ export function FacesManager() {
     if (sourceId === targetId || merging) return;
     const source = people.find((p) => p.id === sourceId);
     const target = people.find((p) => p.id === targetId);
-    const sourceLabel = source?.name || "Unnamed";
-    const targetLabel = target?.name || "Unnamed";
     if (
       !confirm(
-        `Merge “${sourceLabel}” into “${targetLabel}”? Photos will combine under one person.`,
+        `Merge “${source?.name || "Unnamed"}” into “${target?.name || "Unnamed"}”?`,
       )
     ) {
       return;
     }
-
     setMerging(true);
     setError("");
-    setMessage("");
     try {
       const res = await fetch("/api/face/people", {
-        method: "POST",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceId, targetId }),
+        body: JSON.stringify({
+          action: "merge",
+          sourceId,
+          targetId,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error || "Could not merge");
         return;
       }
-      setMessage(`Merged into “${data.person?.name || targetLabel}”`);
+      setMessage(`Merged into “${data.person?.name || target?.name || "person"}”`);
+      setMergeMode(false);
+      setMergeSourceId(null);
+      setCanUndoMerge(true);
       await loadPeople();
     } catch {
       setError("Could not merge");
     } finally {
       setMerging(false);
-      setDragId(null);
-      setDropTargetId(null);
     }
+  };
+
+  const undoMerge = async () => {
+    if (!confirm("Undo the last face merge?")) return;
+    setMerging(true);
+    setError("");
+    try {
+      const res = await fetch("/api/face/people", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "undo_merge" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not undo");
+        return;
+      }
+      setMessage("Last merge undone");
+      setSelectedId(null);
+      setAlbum(null);
+      await loadPeople();
+    } catch {
+      setError("Could not undo");
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  const searchRsvps = async (query: string, autoSelectExact = false) => {
+    setRsvpQuery(query);
+    try {
+      const res = await fetch("/api/face/people", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rsvp_suggestions", query }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      const list = (data.suggestions || []) as RsvpSuggestion[];
+      setSuggestions(list);
+      if (autoSelectExact && query.trim()) {
+        const exact = list.find(
+          (item) =>
+            item.email &&
+            item.name.trim().toLowerCase() === query.trim().toLowerCase(),
+        );
+        if (exact) {
+          setSelectedRsvpId(exact.id);
+          setSendEmail(exact.email);
+          setSendName(exact.name);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const sendLink = async (rsvpId?: string) => {
+    if (!selectedId) return;
+    const id = rsvpId || selectedRsvpId;
+    if (!id && !sendEmail.trim()) {
+      setError("Pick an RSVP guest (or enter their email)");
+      return;
+    }
+    setSending(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch("/api/face/people", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send_link",
+          personId: selectedId,
+          rsvpId: id || undefined,
+          email: id ? undefined : sendEmail.trim(),
+          name: sendName.trim() || nameDraft,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not send email");
+        return;
+      }
+      setMessage(
+        `Photo link emailed to ${data.emailedTo || sendEmail.trim()}${
+          data.guestName ? ` (${data.guestName})` : ""
+        }`,
+      );
+    } catch {
+      setError("Could not send email");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const uploadSelfieAndSend = async (file: File | null) => {
+    if (!file) return;
+    setSelfieBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const body = new FormData();
+      body.append("selfie", file);
+      body.append("name", sendName.trim() || nameDraft || "Guest");
+      if (selectedRsvpId) {
+        body.append("rsvpId", selectedRsvpId);
+        body.append("send", "1");
+      } else if (sendEmail.trim()) {
+        body.append("email", sendEmail.trim());
+        body.append("send", "1");
+      }
+      const res = await fetch("/api/face/people", {
+        method: "POST",
+        body,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not match selfie");
+        return;
+      }
+      setMessage(
+        data.emailed
+          ? `Matched ${data.photoCount} photos and emailed ${data.emailedTo || sendEmail.trim()}`
+          : `Matched ${data.photoCount} photos — pick an RSVP email to send`,
+      );
+      if (data.person?.id) {
+        await loadPeople();
+        await openPerson(data.person.id);
+      }
+    } catch {
+      setError("Could not match selfie");
+    } finally {
+      setSelfieBusy(false);
+    }
+  };
+
+  const onPersonClick = (id: string) => {
+    if (!mergeMode) {
+      void openPerson(id);
+      return;
+    }
+    if (!mergeSourceId) {
+      setMergeSourceId(id);
+      setMessage("Now tap the person to merge into");
+      return;
+    }
+    if (mergeSourceId === id) {
+      setMergeSourceId(null);
+      setMessage("Pick a different person as the source");
+      return;
+    }
+    void mergePeople(mergeSourceId, id);
   };
 
   if (selectedId) {
@@ -292,18 +469,144 @@ export function FacesManager() {
                   </Button>
                 </div>
                 <p className="mt-2 font-body text-[11px] text-muted">
-                  Same name as another face merges them into one person.
+                  Same name as another face merges them. Wrong merge? Use Undo
+                  on the Faces list.
                 </p>
-                {message ? (
-                  <p className="mt-2 font-body text-xs text-gold-soft">
-                    {message}
-                  </p>
-                ) : null}
-                {error ? (
-                  <p className="mt-2 font-body text-xs text-red-300">{error}</p>
-                ) : null}
               </div>
             </div>
+
+            <div className="mb-6 rounded-2xl border border-gold/20 bg-[#141018] p-4">
+              <p className="font-display text-lg text-cream">
+                Email photos to RSVP guest
+              </p>
+              <p className="mt-1 font-body text-xs text-muted">
+                Uses the email from their RSVP (or Google sign-in). They get a
+                private album link for 14 days.
+              </p>
+              <label className="mt-3 block">
+                <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                  Find RSVP guest
+                </span>
+                <input
+                  className="w-full rounded-xl border border-gold/20 bg-[#0d0b10] px-3 py-2.5 font-body text-sm text-cream outline-none focus:border-gold/50"
+                  value={rsvpQuery}
+                  onChange={(e) => void searchRsvps(e.target.value)}
+                  onFocus={() => void searchRsvps(rsvpQuery)}
+                  placeholder="Search by RSVP name or email"
+                />
+              </label>
+              {suggestions.length > 0 ? (
+                <ul className="mt-2 max-h-48 overflow-auto rounded-xl border border-gold/15">
+                  {suggestions.map((item) => {
+                    const selected = selectedRsvpId === item.id;
+                    const canSend = Boolean(item.email);
+                    return (
+                      <li
+                        key={item.id}
+                        className={cn(
+                          "flex items-center gap-2 border-b border-gold/10 px-2 py-1.5 last:border-0",
+                          selected && "bg-gold/10",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left font-body text-xs text-cream"
+                          onClick={() => {
+                            if (!canSend) return;
+                            setSelectedRsvpId(item.id);
+                            setSendEmail(item.email);
+                            setSendName(item.name);
+                            setRsvpQuery(item.name);
+                          }}
+                        >
+                          <span className="block truncate font-medium">
+                            {item.name}
+                          </span>
+                          <span className="block truncate text-muted">
+                            {canSend
+                              ? item.email
+                              : "No email on this RSVP"}
+                          </span>
+                        </button>
+                        <Button
+                          type="button"
+                          disabled={sending || !canSend}
+                          onClick={() => {
+                            setSelectedRsvpId(item.id);
+                            setSendEmail(item.email);
+                            setSendName(item.name);
+                            void sendLink(item.id);
+                          }}
+                        >
+                          {sending && selectedRsvpId === item.id
+                            ? "…"
+                            : "Send"}
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="mt-2 font-body text-[11px] text-muted">
+                  No RSVP matches yet — search a name, or type an email below.
+                </p>
+              )}
+              {selectedRsvpId && sendEmail ? (
+                <p className="mt-2 font-body text-xs text-gold-soft">
+                  Selected: {sendName} · {sendEmail}
+                </p>
+              ) : null}
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <input
+                  className="rounded-xl border border-gold/20 bg-[#0d0b10] px-3 py-2.5 font-body text-sm text-cream outline-none focus:border-gold/50"
+                  value={sendName}
+                  onChange={(e) => setSendName(e.target.value)}
+                  placeholder="Guest name"
+                />
+                <input
+                  type="email"
+                  className="rounded-xl border border-gold/20 bg-[#0d0b10] px-3 py-2.5 font-body text-sm text-cream outline-none focus:border-gold/50"
+                  value={sendEmail}
+                  onChange={(e) => {
+                    setSendEmail(e.target.value);
+                    setSelectedRsvpId(null);
+                  }}
+                  placeholder="Or paste email manually"
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={
+                    sending || (!selectedRsvpId && !sendEmail.trim())
+                  }
+                  onClick={() => void sendLink()}
+                >
+                  {sending ? "Sending…" : "Send album to RSVP email"}
+                </Button>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-gold/30 px-4 py-2 font-body text-[10px] uppercase tracking-[0.16em] text-gold-soft">
+                  {selfieBusy ? "Matching…" : "Upload face + send"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={selfieBusy}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      e.target.value = "";
+                      void uploadSelfieAndSend(file);
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {message ? (
+              <p className="mb-3 font-body text-xs text-gold-soft">{message}</p>
+            ) : null}
+            {error ? (
+              <p className="mb-3 font-body text-xs text-red-300">{error}</p>
+            ) : null}
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
               {album.photos.map((photo) => (
@@ -324,7 +627,8 @@ export function FacesManager() {
             </div>
             {album.photos.length === 0 ? (
               <p className="font-body text-sm text-muted">
-                No photos linked yet. Index more gallery media.
+                No photos linked yet. Index more gallery media, or upload a face
+                photo above.
               </p>
             ) : null}
           </>
@@ -339,10 +643,61 @@ export function FacesManager() {
         <ScanFace size={18} className="text-gold" />
         <h2 className="font-display text-2xl text-cream">Faces</h2>
       </div>
-      <p className="mb-6 font-body text-sm text-muted">
-        Every detected person from indexed photos. Drag one face onto another to
-        merge duplicates, or open someone and give both the same name.
+      <p className="mb-4 font-body text-sm text-muted">
+        Tap someone to name them or email their album. Use Merge to combine
+        duplicates (same name also merges). Guests can self-serve at /my-photos.
       </p>
+
+      <div className="mb-5 flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant={mergeMode ? "outline" : undefined}
+          disabled={merging}
+          onClick={() => {
+            setMergeMode((v) => !v);
+            setMergeSourceId(null);
+            setMessage(
+              mergeMode
+                ? ""
+                : "Merge mode: tap the first face, then the one to merge into",
+            );
+          }}
+        >
+          <Merge size={14} className="mr-1.5" />
+          {mergeMode ? "Cancel merge" : "Merge faces"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={merging || !canUndoMerge}
+          onClick={() => void undoMerge()}
+        >
+          <Undo2 size={14} className="mr-1.5" />
+          Undo last merge
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            const url = `${window.location.origin}/my-photos`;
+            void navigator.clipboard.writeText(url).then(
+              () => setMessage("Copied /my-photos link"),
+              () => setMessage(url),
+            );
+          }}
+        >
+          <Link2 size={14} className="mr-1.5" />
+          Copy guest link
+        </Button>
+      </div>
+
+      {mergeMode ? (
+        <p className="mb-3 rounded-xl border border-gold/30 bg-gold/10 px-3 py-2 font-body text-xs text-gold-soft">
+          {mergeSourceId
+            ? "Now tap the person to keep (merge into)."
+            : "Tap the face to move first."}
+        </p>
+      ) : null}
 
       {error ? <p className="mb-3 text-xs text-red-300">{error}</p> : null}
       {message ? (
@@ -358,55 +713,18 @@ export function FacesManager() {
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {people.map((person) => {
-            const isDropTarget =
-              dropTargetId === person.id && dragId && dragId !== person.id;
+            const isSource = mergeSourceId === person.id;
             return (
               <button
                 key={person.id}
                 type="button"
-                draggable={!merging}
-                onDragStart={(e) => {
-                  setDragId(person.id);
-                  e.dataTransfer.setData("text/plain", person.id);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onDragEnd={() => {
-                  setDragId(null);
-                  setDropTargetId(null);
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "move";
-                  if (dragId && dragId !== person.id) {
-                    setDropTargetId(person.id);
-                  }
-                }}
-                onDragLeave={() => {
-                  setDropTargetId((prev) =>
-                    prev === person.id ? null : prev,
-                  );
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const sourceId =
-                    e.dataTransfer.getData("text/plain") || dragId;
-                  setDropTargetId(null);
-                  setDragId(null);
-                  if (sourceId && sourceId !== person.id) {
-                    void mergePeople(sourceId, person.id);
-                  }
-                }}
-                onClick={() => {
-                  if (dragId) return;
-                  void openPerson(person.id);
-                }}
+                onClick={() => onPersonClick(person.id)}
                 className={cn(
                   "rounded-2xl border bg-[#141018] p-3 text-left transition",
-                  isDropTarget
-                    ? "border-gold scale-[1.02] border-gold/70 ring-2 ring-gold/40"
-                    : dragId === person.id
-                      ? "border-gold/30 opacity-50"
+                  isSource
+                    ? "border-gold ring-2 ring-gold/50"
+                    : mergeMode
+                      ? "border-gold/40 hover:border-gold"
                       : "border-gold/15 hover:border-gold/40",
                 )}
               >
@@ -428,7 +746,7 @@ export function FacesManager() {
                 <p className="font-body text-[10px] uppercase tracking-[0.16em] text-muted">
                   {person.photoCount} photo
                   {person.photoCount === 1 ? "" : "s"}
-                  {isDropTarget ? " · drop to merge" : ""}
+                  {isSource ? " · selected" : ""}
                 </p>
               </button>
             );

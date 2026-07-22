@@ -14,6 +14,7 @@ const ASSIGNABLE: AdminPermission[] = [
   "stay",
   "gallery_upload",
   "gallery_review",
+  "faces",
   "events",
   "guests",
 ];

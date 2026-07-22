@@ -117,7 +117,7 @@ export function DashboardShell({
         count: gallery.filter((g) => g.status === "pending").length,
       });
     }
-    if (can(session, "gallery_upload") || can(session, "gallery_review")) {
+    if (can(session, "faces")) {
       items.push({
         id: "faces",
         label: "Faces",
@@ -225,10 +225,17 @@ export function DashboardShell({
           <GalleryManager
             initialGallery={gallery}
             events={events}
-            onOpenFaces={() => setTab("faces")}
+            canManageFaces={can(session, "faces")}
+            onOpenFaces={
+              can(session, "faces") ? () => setTab("faces") : undefined
+            }
           />
         ) : activeTab === "review" ? (
-          <GuestPhotoReview initialGallery={gallery} events={events} />
+          <GuestPhotoReview
+            initialGallery={gallery}
+            events={events}
+            canManageFaces={can(session, "faces")}
+          />
         ) : activeTab === "faces" ? (
           <FacesManager />
         ) : activeTab === "guests" ? (

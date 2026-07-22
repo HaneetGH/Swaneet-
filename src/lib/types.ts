@@ -151,6 +151,7 @@ export type AdminPermission =
   | "stay"
   | "gallery_upload"
   | "gallery_review"
+  | "faces"
   | "events"
   | "guests"
   | "team";
@@ -271,6 +272,31 @@ export type FacePerson = {
   updatedAt: string;
 };
 
+/** Snapshot so an accidental merge can be undone */
+export type FaceMergeLog = {
+  id: string;
+  targetId: string;
+  sourceSnapshot: FacePerson;
+  movedFaceIds: string[];
+  movedImageIds: string[];
+  createdAt: string;
+};
+
+/** Guest asked for photos before matches existed — email when ready */
+export type FacePhotoRequest = {
+  id: string;
+  uid: string;
+  email: string;
+  name?: string;
+  selfieSrc: string;
+  status: "pending" | "ready" | "emailed" | "failed";
+  matchedImageIds?: string[];
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+  emailedAt?: string;
+};
+
 /** Linked RSVP summary on a guest profile row */
 export type GuestProfileRsvp = {
   id: string;
@@ -321,7 +347,8 @@ export type EmailKind =
   | "team_invite"
   | "team_update"
   | "photo_reject"
-  | "owner_alert";
+  | "owner_alert"
+  | "face_photos";
 
 export type EmailLogEntry = {
   id: string;
@@ -362,6 +389,10 @@ export type ContentStore = {
   facePeople?: FacePerson[];
   /** Individual face detections linked to people */
   faceDetections?: FaceDetection[];
+  /** Recent face merges for undo */
+  faceMergeLogs?: FaceMergeLog[];
+  /** Guest “email me when ready” photo requests */
+  facePhotoRequests?: FacePhotoRequest[];
   /** Outbound email attempts (newest first, capped) */
   emailLogs?: EmailLogEntry[];
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */

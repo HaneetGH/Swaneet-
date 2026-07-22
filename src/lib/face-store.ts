@@ -4,14 +4,20 @@ import {
   getFaceImageIndexFromDb,
   getFacePersonFromDb,
   getFaceProfileFromDb,
+  getFacePhotoRequestFromDb,
   listFaceDetectionsFromDb,
   listFaceImageIndexFromDb,
   listFacePeopleFromDb,
+  listFaceMergeLogsFromDb,
+  listFacePhotoRequestsFromDb,
   deleteFacePersonFromDb,
+  deleteFaceMergeLogFromDb,
+  insertFaceMergeLogToDb,
   upsertFaceDetectionToDb,
   upsertFaceImageIndexToDb,
   upsertFacePersonToDb,
   upsertFaceProfileToDb,
+  upsertFacePhotoRequestToDb,
 } from "@/lib/db";
 import { hasDatabase } from "@/lib/env";
 import { isFeatureEnabled } from "@/lib/feature-flags";
@@ -25,7 +31,9 @@ import {
 import { getFeatureFlags, readStore, writeStore } from "@/lib/store";
 import type {
   FaceDetection,
+  FaceMergeLog,
   FacePerson,
+  FacePhotoRequest,
   GalleryFaceIndexEntry,
   GalleryImage,
   GuestFaceProfile,
@@ -154,6 +162,8 @@ export async function mergeFacePeople(
   if (!source || !target) throw new Error("Person not found");
 
   const now = new Date().toISOString();
+  const movedFaceIds = [...source.faceIds];
+  const movedImageIds = [...source.imageIds];
   const faceIds = [...new Set([...target.faceIds, ...source.faceIds])];
   const imageIds = [...new Set([...target.imageIds, ...source.imageIds])];
   const merged: FacePerson = {
@@ -174,8 +184,93 @@ export async function mergeFacePeople(
     }
   }
 
+  await saveFaceMergeLog({
+    id: `merge-${randomUUID().slice(0, 10)}`,
+    targetId,
+    sourceSnapshot: source,
+    movedFaceIds,
+    movedImageIds,
+    createdAt: now,
+  });
+
   await deleteFacePerson(sourceId);
   return merged;
+}
+
+export async function listFaceMergeLogs(limit = 20): Promise<FaceMergeLog[]> {
+  if (hasDatabase()) {
+    return listFaceMergeLogsFromDb(limit);
+  }
+  const store = await readStore();
+  return [...(store.faceMergeLogs || [])]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit);
+}
+
+export async function saveFaceMergeLog(log: FaceMergeLog): Promise<void> {
+  if (hasDatabase()) {
+    await insertFaceMergeLogToDb(log);
+    return;
+  }
+  const store = await readStore();
+  store.faceMergeLogs = [log, ...(store.faceMergeLogs || [])].slice(0, 50);
+  await writeStore(store);
+}
+
+export async function deleteFaceMergeLog(id: string): Promise<void> {
+  if (hasDatabase()) {
+    await deleteFaceMergeLogFromDb(id);
+    return;
+  }
+  const store = await readStore();
+  store.faceMergeLogs = (store.faceMergeLogs || []).filter(
+    (item) => item.id !== id,
+  );
+  await writeStore(store);
+}
+
+/** Undo the most recent merge (within 24h). */
+export async function undoLastFaceMerge(): Promise<{
+  restored: FacePerson;
+  target: FacePerson;
+}> {
+  const logs = await listFaceMergeLogs(1);
+  const log = logs[0];
+  if (!log) throw new Error("Nothing to undo");
+  const ageMs = Date.now() - new Date(log.createdAt).getTime();
+  if (ageMs > 24 * 60 * 60 * 1000) {
+    throw new Error("Merge is older than 24 hours and can no longer be undone");
+  }
+
+  const target = await getFacePerson(log.targetId);
+  if (!target) throw new Error("Merged person no longer exists");
+
+  const movedFaceSet = new Set(log.movedFaceIds);
+  const movedImageSet = new Set(log.movedImageIds);
+  const now = new Date().toISOString();
+
+  const restored: FacePerson = {
+    ...log.sourceSnapshot,
+    updatedAt: now,
+  };
+  await saveFacePerson(restored);
+
+  for (const faceId of log.movedFaceIds) {
+    const detection = await getFaceDetection(faceId);
+    if (detection) {
+      await saveFaceDetection({ ...detection, personId: restored.id });
+    }
+  }
+
+  const nextTarget: FacePerson = {
+    ...target,
+    faceIds: target.faceIds.filter((id) => !movedFaceSet.has(id)),
+    imageIds: target.imageIds.filter((id) => !movedImageSet.has(id)),
+    updatedAt: now,
+  };
+  await saveFacePerson(nextTarget);
+  await deleteFaceMergeLog(log.id);
+  return { restored, target: nextTarget };
 }
 
 export async function renameFacePerson(
@@ -479,6 +574,15 @@ export async function enrollGuestSelfieAndMatch(input: {
     };
     await saveFaceProfile(profile);
 
+    if (matchedImageIds.length === 0 && input.email?.trim()) {
+      await queueFacePhotoRequest({
+        uid: input.uid,
+        email: input.email.trim(),
+        name: input.name,
+        selfieSrc,
+      });
+    }
+
     if (existing?.selfieSrc && existing.selfieSrc !== selfieSrc) {
       await deleteUploadedImage(existing.selfieSrc).catch(() => undefined);
     }
@@ -492,6 +596,16 @@ export async function enrollGuestSelfieAndMatch(input: {
       updatedAt: new Date().toISOString(),
     };
     await saveFaceProfile(profile);
+
+    if (input.email?.trim()) {
+      await queueFacePhotoRequest({
+        uid: input.uid,
+        email: input.email.trim(),
+        name: input.name,
+        selfieSrc,
+      }).catch(() => undefined);
+    }
+
     throw error;
   }
 }
@@ -533,4 +647,208 @@ export async function rematchGuestFace(
   };
   await saveFaceProfile(profile);
   return profile;
+}
+
+export async function listFacePhotoRequests(): Promise<FacePhotoRequest[]> {
+  if (hasDatabase()) {
+    return listFacePhotoRequestsFromDb();
+  }
+  const store = await readStore();
+  return [...(store.facePhotoRequests || [])];
+}
+
+export async function getFacePhotoRequest(
+  id: string,
+): Promise<FacePhotoRequest | null> {
+  if (hasDatabase()) {
+    return getFacePhotoRequestFromDb(id);
+  }
+  const store = await readStore();
+  return (store.facePhotoRequests || []).find((item) => item.id === id) || null;
+}
+
+export async function saveFacePhotoRequest(
+  request: FacePhotoRequest,
+): Promise<FacePhotoRequest> {
+  if (hasDatabase()) {
+    await upsertFacePhotoRequestToDb(request);
+    return request;
+  }
+  const store = await readStore();
+  const list = [...(store.facePhotoRequests || [])];
+  const index = list.findIndex((item) => item.id === request.id);
+  if (index >= 0) list[index] = request;
+  else list.unshift(request);
+  store.facePhotoRequests = list.slice(0, 200);
+  await writeStore(store);
+  return request;
+}
+
+/** Queue “email when ready” — one pending row per uid. */
+export async function queueFacePhotoRequest(input: {
+  uid: string;
+  email: string;
+  name?: string;
+  selfieSrc: string;
+}): Promise<FacePhotoRequest> {
+  const existing = (await listFacePhotoRequests()).find(
+    (item) => item.uid === input.uid && item.status === "pending",
+  );
+  const now = new Date().toISOString();
+  const request: FacePhotoRequest = {
+    id: existing?.id || `freq-${randomUUID().slice(0, 10)}`,
+    uid: input.uid,
+    email: input.email,
+    name: input.name,
+    selfieSrc: input.selfieSrc,
+    status: "pending",
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+  };
+  return saveFacePhotoRequest(request);
+}
+
+/** Match approved gallery images from a selfie URL. */
+export async function matchApprovedImagesFromSelfie(
+  selfieSrc: string,
+): Promise<string[]> {
+  const { imageIds } = await searchGalleryImagesBySelfie({
+    selfieSrc,
+    threshold: 85,
+    maxFaces: 200,
+  });
+  const store = await readStore();
+  const approved = new Set(
+    store.gallery
+      .filter((item) => item.status === "approved" && item.kind === "image")
+      .map((item) => item.id),
+  );
+  return imageIds.filter((id) => approved.has(id));
+}
+
+/**
+ * After indexing, rematch pending guest requests and email when photos appear.
+ */
+export async function processPendingFacePhotoRequests(sendEmail: (input: {
+  to: string;
+  name?: string;
+  imageIds: string[];
+  albumUrl: string;
+}) => Promise<{ ok: true } | { ok: false; error: string }>): Promise<{
+  checked: number;
+  emailed: number;
+}> {
+  if (!isRekognitionConfigured()) return { checked: 0, emailed: 0 };
+
+  const pending = (await listFacePhotoRequests()).filter(
+    (item) => item.status === "pending",
+  );
+  let emailed = 0;
+
+  for (const request of pending.slice(0, 20)) {
+    try {
+      const matchedImageIds = await matchApprovedImagesFromSelfie(
+        request.selfieSrc,
+      );
+      if (matchedImageIds.length === 0) continue;
+
+      const { createFaceShareToken, faceSharePageUrl } = await import(
+        "@/lib/face-share"
+      );
+      const token = createFaceShareToken({
+        imageIds: matchedImageIds,
+        email: request.email,
+        name: request.name,
+      });
+      const albumUrl = faceSharePageUrl(token);
+      const sent = await sendEmail({
+        to: request.email,
+        name: request.name,
+        imageIds: matchedImageIds,
+        albumUrl,
+      });
+
+      const now = new Date().toISOString();
+      if (sent.ok) {
+        await saveFacePhotoRequest({
+          ...request,
+          status: "emailed",
+          matchedImageIds,
+          updatedAt: now,
+          emailedAt: now,
+        });
+        emailed += 1;
+
+        const guestProfile = await getFaceProfile(request.uid);
+        if (guestProfile) {
+          await saveFaceProfile({
+            ...guestProfile,
+            matchedImageIds,
+            matchCount: matchedImageIds.length,
+            status: "ready",
+            lastMatchedAt: now,
+            updatedAt: now,
+          });
+        }
+      } else {
+        await saveFacePhotoRequest({
+          ...request,
+          status: "failed",
+          matchedImageIds,
+          error: sent.error,
+          updatedAt: now,
+        });
+      }
+    } catch (error) {
+      await saveFacePhotoRequest({
+        ...request,
+        status: "failed",
+        error: error instanceof Error ? error.message : "Processing failed",
+        updatedAt: new Date().toISOString(),
+      }).catch(() => undefined);
+    }
+  }
+
+  return { checked: pending.length, emailed };
+}
+
+/** Create or update a named FacePerson from selfie matches (admin RSVP send). */
+export async function createPersonFromSelfieMatch(input: {
+  name: string;
+  file: File;
+}): Promise<{ person: FacePerson; imageIds: string[] }> {
+  const selfieSrc = await saveUploadedImage(input.file);
+  const imageIds = await matchApprovedImagesFromSelfie(selfieSrc);
+  if (imageIds.length === 0) {
+    throw new Error("No matching photos found for that selfie yet");
+  }
+
+  const people = await listFacePeople();
+  const key = normalizePersonName(input.name);
+  let person =
+    people.find(
+      (item) => item.name.trim() && normalizePersonName(item.name) === key,
+    ) || null;
+
+  const now = new Date().toISOString();
+  if (person) {
+    person = {
+      ...person,
+      imageIds: [...new Set([...person.imageIds, ...imageIds])],
+      name: input.name.trim() || person.name,
+      updatedAt: now,
+    };
+  } else {
+    person = {
+      id: `person-${randomUUID().slice(0, 10)}`,
+      name: input.name.trim(),
+      representativeFaceId: "",
+      faceIds: [],
+      imageIds,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+  await saveFacePerson(person);
+  return { person, imageIds: person.imageIds };
 }

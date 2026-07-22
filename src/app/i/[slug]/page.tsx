@@ -10,6 +10,7 @@ import { Hero } from "@/components/sections/Hero";
 import { RSVP } from "@/components/sections/RSVP";
 import { RsvpStayBanner } from "@/components/sections/RsvpStayBanner";
 import { SharePhotosBanner } from "@/components/sections/SharePhotosBanner";
+import { DownloadPhotosBanner } from "@/components/sections/DownloadPhotosBanner";
 import { Venue } from "@/components/sections/Venue";
 import { getBrideInvite } from "@/data/bride-invites";
 import { InviteProvider } from "@/lib/invite-context";
@@ -48,6 +49,7 @@ export default async function BrideInvitePage({ params }: Params) {
       <main className="ambient-bg relative min-h-screen">
         <Navigation />
         <Hero />
+        <DownloadPhotosBanner />
         <SharePhotosBanner />
         <RsvpStayBanner />
         <Countdown />
