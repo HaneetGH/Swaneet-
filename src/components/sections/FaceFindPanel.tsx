@@ -1,5 +1,6 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import Image from "next/image";
 import Link from "next/link";
 import { onAuthStateChanged, type User } from "firebase/auth";
@@ -23,6 +24,10 @@ type ProfileResponse = {
   error?: string;
   message?: string;
 };
+
+function safeFilename(name: string) {
+  return name.replace(/[^\w.\-()+ ]+/g, "_").slice(0, 80) || "selfie.jpg";
+}
 
 export function FaceFindPanel({ className }: { className?: string }) {
   const { enabled, ready: flagsReady, site } = useFeatureFlags();
@@ -114,16 +119,48 @@ export function FaceFindPanel({ className }: { className?: string }) {
         setError("Please sign in again");
         return;
       }
-      const body = new FormData();
-      body.set("selfie", file);
-      const res = await fetch(
-        `/api/face/profile?site=${encodeURIComponent(site)}`,
-        {
-          method: "POST",
+
+      // Direct-to-Blob avoids Vercel’s ~4.5MB serverless body limit (phone selfies are often larger)
+      let selfieSrc: string | null = null;
+      try {
+        const pathname = `selfies/${Date.now()}-${safeFilename(file.name)}`;
+        const blob = await upload(pathname, file, {
+          access: "public",
+          handleUploadUrl: "/api/face/selfie/upload",
           headers: { Authorization: `Bearer ${token}` },
-          body,
-        },
-      );
+          contentType: file.type || "image/jpeg",
+          clientPayload: JSON.stringify({ site }),
+        });
+        selfieSrc = blob.url;
+      } catch {
+        // Local / no Blob: fall back to multipart for small files only
+        if (file.size > 4 * 1024 * 1024) {
+          setError(
+            "Selfie is too large and Blob upload failed. Use a photo under 4MB, or connect Vercel Blob.",
+          );
+          return;
+        }
+      }
+
+      const res = selfieSrc
+        ? await fetch(`/api/face/profile?site=${encodeURIComponent(site)}`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ selfieSrc }),
+          })
+        : await fetch(`/api/face/profile?site=${encodeURIComponent(site)}`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: (() => {
+              const body = new FormData();
+              body.set("selfie", file);
+              return body;
+            })(),
+          });
+
       const data = (await res.json().catch(() => ({}))) as ProfileResponse;
       if (!res.ok) {
         setError(data.error || "Could not process selfie");

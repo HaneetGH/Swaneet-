@@ -62,6 +62,10 @@ const rematchSchema = z.object({
   action: z.literal("rematch").optional(),
 });
 
+const enrollSchema = z.object({
+  selfieSrc: z.string().min(8).max(2048),
+});
+
 export async function POST(request: Request) {
   try {
     const site = siteFromRequest(request);
@@ -83,9 +87,36 @@ export async function POST(request: Request) {
 
     const contentType = request.headers.get("content-type") || "";
 
-    // JSON rematch (reuse existing selfie)
+    // JSON: rematch OR enroll from direct-to-Blob selfie URL
     if (contentType.includes("application/json")) {
-      const parsed = rematchSchema.safeParse(await request.json().catch(() => ({})));
+      const raw = await request.json().catch(() => ({}));
+      if (raw && typeof raw === "object" && "selfieSrc" in raw) {
+        const parsed = enrollSchema.safeParse(raw);
+        if (!parsed.success) {
+          return NextResponse.json(
+            { error: "Invalid selfie upload" },
+            { status: 400 },
+          );
+        }
+        const profile = await enrollGuestSelfieAndMatch({
+          uid: guest.uid,
+          email: guest.email,
+          name: guest.name,
+          selfieSrc: parsed.data.selfieSrc,
+        });
+        return NextResponse.json({
+          profile,
+          queued: profile.matchCount === 0 && Boolean(guest.email),
+          message:
+            profile.matchCount > 0
+              ? `Found ${profile.matchCount} photo${profile.matchCount === 1 ? "" : "s"} of you — download below`
+              : guest.email
+                ? "No matches yet. We’ve queued a request and will email you when your photos are ready."
+                : "Selfie saved. No matches yet — try Refresh after more photos are indexed",
+        });
+      }
+
+      const parsed = rematchSchema.safeParse(raw);
       if (!parsed.success) {
         return NextResponse.json({ error: "Invalid request" }, { status: 400 });
       }
@@ -99,8 +130,19 @@ export async function POST(request: Request) {
       });
     }
 
-    // Multipart selfie upload
-    const form = await request.formData();
+    // Multipart selfie upload (local / small files only — Vercel body limit ~4.5MB)
+    let form: FormData;
+    try {
+      form = await request.formData();
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "Selfie is too large to upload this way. Use a smaller photo, or make sure Blob storage is connected.",
+        },
+        { status: 413 },
+      );
+    }
     const file = form.get("selfie");
     if (!(file instanceof File) || file.size < 1) {
       return NextResponse.json(
@@ -114,9 +156,12 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (file.size > 8 * 1024 * 1024) {
+    if (file.size > 4 * 1024 * 1024) {
       return NextResponse.json(
-        { error: "Selfie must be under 8MB" },
+        {
+          error:
+            "Selfie must be under 4MB for this upload path. Refresh and try again (direct upload supports larger photos).",
+        },
         { status: 400 },
       );
     }

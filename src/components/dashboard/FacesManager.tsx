@@ -1,11 +1,16 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import Image from "next/image";
 import { ArrowLeft, Link2, Merge, ScanFace, Undo2, UserRound } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { FaceBoundingBox } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+
+function safeFilename(name: string) {
+  return name.replace(/[^\w.\-()+ ]+/g, "_").slice(0, 80) || "face.jpg";
+}
 
 type PersonRow = {
   id: string;
@@ -355,20 +360,54 @@ export function FacesManager() {
     setError("");
     setMessage("");
     try {
-      const body = new FormData();
-      body.append("selfie", file);
-      body.append("name", sendName.trim() || nameDraft || "Guest");
-      if (selectedRsvpId) {
-        body.append("rsvpId", selectedRsvpId);
-        body.append("send", "1");
-      } else if (sendEmail.trim()) {
-        body.append("email", sendEmail.trim());
-        body.append("send", "1");
+      let selfieSrc: string | null = null;
+      try {
+        const pathname = `selfies/admin/${Date.now()}-${safeFilename(file.name)}`;
+        const blob = await upload(pathname, file, {
+          access: "public",
+          handleUploadUrl: "/api/face/selfie/upload",
+          contentType: file.type || "image/jpeg",
+        });
+        selfieSrc = blob.url;
+      } catch {
+        if (file.size > 4 * 1024 * 1024) {
+          setError(
+            "Photo is too large and Blob upload failed. Use a smaller image or connect Vercel Blob.",
+          );
+          return;
+        }
       }
-      const res = await fetch("/api/face/people", {
-        method: "POST",
-        body,
-      });
+
+      const res = selfieSrc
+        ? await fetch("/api/face/people", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              selfieSrc,
+              name: sendName.trim() || nameDraft || "Guest",
+              ...(selectedRsvpId
+                ? { rsvpId: selectedRsvpId, send: true }
+                : sendEmail.trim()
+                  ? { email: sendEmail.trim(), send: true }
+                  : {}),
+            }),
+          })
+        : await fetch("/api/face/people", {
+            method: "POST",
+            body: (() => {
+              const body = new FormData();
+              body.append("selfie", file);
+              body.append("name", sendName.trim() || nameDraft || "Guest");
+              if (selectedRsvpId) {
+                body.append("rsvpId", selectedRsvpId);
+                body.append("send", "1");
+              } else if (sendEmail.trim()) {
+                body.append("email", sendEmail.trim());
+                body.append("send", "1");
+              }
+              return body;
+            })(),
+          });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error || "Could not match selfie");

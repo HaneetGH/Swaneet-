@@ -637,12 +637,32 @@ export async function maybeIndexGalleryImage(
   }
 }
 
+/** Accept a Blob /uploads URL from client direct upload (avoids Vercel 4.5MB body limit). */
+export function isAllowedSelfieSrc(src: string) {
+  const value = src.trim();
+  if (!value) return false;
+  if (value.startsWith("/uploads/")) return true;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname.endsWith(".public.blob.vercel-storage.com") ||
+        url.hostname.endsWith(".blob.vercel-storage.com"))
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Enroll selfie + search collection for matching gallery photos. */
 export async function enrollGuestSelfieAndMatch(input: {
   uid: string;
   email?: string;
   name?: string;
-  file: File;
+  /** Multipart file (local / small) */
+  file?: File;
+  /** Direct-to-Blob URL from `/api/face/selfie/upload` */
+  selfieSrc?: string;
 }): Promise<GuestFaceProfile> {
   if (!isRekognitionConfigured()) {
     throw new Error(
@@ -651,7 +671,16 @@ export async function enrollGuestSelfieAndMatch(input: {
   }
 
   const existing = await getFaceProfile(input.uid);
-  const selfieSrc = await saveUploadedImage(input.file);
+  let selfieSrc = input.selfieSrc?.trim() || "";
+  if (selfieSrc) {
+    if (!isAllowedSelfieSrc(selfieSrc)) {
+      throw new Error("Invalid selfie URL");
+    }
+  } else if (input.file) {
+    selfieSrc = await saveUploadedImage(input.file);
+  } else {
+    throw new Error("Choose a clear selfie photo");
+  }
 
   const now = new Date().toISOString();
   let profile: GuestFaceProfile = {
@@ -934,9 +963,19 @@ export async function processPendingFacePhotoRequests(sendEmail: (input: {
 /** Create or update a named FacePerson from selfie matches (admin RSVP send). */
 export async function createPersonFromSelfieMatch(input: {
   name: string;
-  file: File;
+  file?: File;
+  selfieSrc?: string;
 }): Promise<{ person: FacePerson; imageIds: string[] }> {
-  const selfieSrc = await saveUploadedImage(input.file);
+  let selfieSrc = input.selfieSrc?.trim() || "";
+  if (selfieSrc) {
+    if (!isAllowedSelfieSrc(selfieSrc)) {
+      throw new Error("Invalid selfie URL");
+    }
+  } else if (input.file) {
+    selfieSrc = await saveUploadedImage(input.file);
+  } else {
+    throw new Error("Upload a clear face photo");
+  }
   const imageIds = await matchApprovedImagesFromSelfie(selfieSrc);
   if (imageIds.length === 0) {
     throw new Error("No matching photos found for that selfie yet");

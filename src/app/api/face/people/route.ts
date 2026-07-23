@@ -303,7 +303,7 @@ export async function POST(request: Request) {
 
     const contentType = request.headers.get("content-type") || "";
 
-    // Multipart: selfie + RSVP email → match → optional send
+    // Multipart: selfie + RSVP email → match → optional send (small files / local)
     if (contentType.includes("multipart/form-data")) {
       if (!isRekognitionConfigured()) {
         return NextResponse.json(
@@ -311,7 +311,18 @@ export async function POST(request: Request) {
           { status: 503 },
         );
       }
-      const form = await request.formData();
+      let form: FormData;
+      try {
+        form = await request.formData();
+      } catch {
+        return NextResponse.json(
+          {
+            error:
+              "Photo is too large for form upload. Refresh the page and try again (uses direct Blob upload).",
+          },
+          { status: 413 },
+        );
+      }
       const file = form.get("selfie");
       let email = String(form.get("email") || "").trim();
       let name = String(form.get("name") || "").trim();
@@ -396,6 +407,91 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
+
+    // Direct-to-Blob selfie match (preferred — avoids Vercel 4.5MB body limit)
+    if (body?.selfieSrc && typeof body.selfieSrc === "string") {
+      if (!isRekognitionConfigured()) {
+        return NextResponse.json(
+          { error: "AWS Rekognition is not configured" },
+          { status: 503 },
+        );
+      }
+      let email = String(body.email || "").trim();
+      let name = String(body.name || "").trim();
+      const rsvpId = String(body.rsvpId || "").trim();
+      const send = Boolean(body.send);
+
+      if (rsvpId) {
+        const rsvps = await listRsvps();
+        const rsvp = rsvps.find((item) => item.id === rsvpId);
+        if (!rsvp) {
+          return NextResponse.json(
+            { error: "RSVP guest not found" },
+            { status: 404 },
+          );
+        }
+        const contact = resolveRsvpContact(rsvp);
+        email = contact.email || email;
+        name = contact.name || name;
+      }
+
+      if (!name) {
+        return NextResponse.json({ error: "Name is required" }, { status: 400 });
+      }
+
+      const { person, imageIds } = await createPersonFromSelfieMatch({
+        name,
+        selfieSrc: body.selfieSrc,
+      });
+
+      if (send) {
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return NextResponse.json(
+            {
+              error:
+                "Pick an RSVP with an email (or enter one) to send the album link",
+            },
+            { status: 400 },
+          );
+        }
+        const token = createFaceShareToken({
+          personId: person.id,
+          imageIds,
+          email,
+          name,
+        });
+        const albumUrl = faceSharePageUrl(token);
+        const sent = await sendFacePhotosLinkEmail({
+          to: email,
+          name,
+          albumUrl,
+          photoCount: imageIds.length,
+        });
+        if (!sent.ok) {
+          return NextResponse.json(
+            { person, imageIds, error: sent.error },
+            { status: 502 },
+          );
+        }
+        return NextResponse.json({
+          ok: true,
+          person,
+          imageIds,
+          photoCount: imageIds.length,
+          emailed: true,
+          emailedTo: email,
+        });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        person,
+        imageIds,
+        photoCount: imageIds.length,
+        emailed: false,
+      });
+    }
+
     if (body?.action === "merge" || body?.personIds || (body?.sourceId && body?.targetId)) {
       if (Array.isArray(body.personIds) && body.personIds.length >= 2) {
         const person = await mergeFacePeopleMany(
