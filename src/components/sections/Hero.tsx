@@ -40,7 +40,7 @@ export function Hero() {
       <Petals />
       <Fireflies />
       <Sparkles />
-      <FloatingWishes />
+      <FloatingWishes variant="hero" />
 
       <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.55)_70%,rgba(7,6,10,0.92)_100%)]" />
 

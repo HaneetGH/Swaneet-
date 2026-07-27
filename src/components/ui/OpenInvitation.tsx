@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { FloatingWishes } from "@/components/effects/FloatingWishes";
 import { wedding } from "@/data/wedding";
 
 type OpenInvitationProps = {
@@ -107,8 +108,10 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.5)_65%,rgba(7,6,10,0.95)_100%)]" />
           </div>
 
+          <FloatingWishes variant="gate" />
+
           {/* Floating petals / sparkles */}
-          <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div aria-hidden className="pointer-events-none absolute inset-0 z-[2]">
             {Array.from({ length: 16 }).map((_, i) => (
               <motion.span
                 key={i}
