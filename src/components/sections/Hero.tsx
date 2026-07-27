@@ -17,6 +17,31 @@ const Scene3D = dynamic(
   { ssr: false },
 );
 
+/** Soft center blur so flowing wishes read clearly only outside the focus zone */
+function HeroBlurPlane() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-[2]"
+    >
+      {/* Stronger radial blur behind the couple names — wishes readable at edges */}
+      <div
+        className="absolute inset-0 backdrop-blur-md sm:backdrop-blur-lg"
+        style={{
+          WebkitMaskImage:
+            "radial-gradient(ellipse 58% 52% at 50% 46%, black 0%, black 38%, transparent 72%)",
+          maskImage:
+            "radial-gradient(ellipse 58% 52% at 50% 46%, black 0%, black 38%, transparent 72%)",
+        }}
+      />
+
+      {/* Darken center slightly so names stay primary */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.55)_0%,rgba(7,6,10,0.22)_42%,transparent_68%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.45)_72%,rgba(7,6,10,0.9)_100%)]" />
+    </div>
+  );
+}
+
 export function Hero() {
   const invite = useInvite();
   const brideFirst = Boolean(invite);
@@ -35,14 +60,20 @@ export function Hero() {
       id="hero"
       className="relative flex min-h-[100svh] items-center justify-center overflow-hidden ambient-bg"
     >
-      <Scene3D />
-      <FloatingLanterns />
-      <Petals />
-      <Fireflies />
-      <Sparkles />
-      <FloatingWishes variant="hero" />
+      {/* Picture / atmosphere — lightly blurred so flowing wishes can pop at the edges */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0 scale-105 blur-[3px] sm:blur-[4px]"
+      >
+        <Scene3D />
+        <FloatingLanterns />
+        <Petals />
+        <Fireflies />
+        <Sparkles />
+      </div>
 
-      <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.55)_70%,rgba(7,6,10,0.92)_100%)]" />
+      <FloatingWishes variant="hero" />
+      <HeroBlurPlane />
 
       <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center px-6 pb-16 pt-28 text-center">
         <motion.p

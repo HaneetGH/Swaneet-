@@ -95,7 +95,11 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.9, ease: easeLuxury }}
         >
-          <div className="pointer-events-none absolute inset-0">
+          {/* Atmosphere behind wishes — softly blurred like the hero picture */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 scale-105 blur-[3px]"
+          >
             <motion.div
               className="absolute left-1/2 top-[30%] h-[26rem] w-[26rem] -translate-x-1/2 rounded-full bg-gold/15 blur-[120px]"
               animate={{
@@ -105,13 +109,6 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
               transition={{ duration: 1.5, ease: easeLuxury }}
             />
             <div className="absolute bottom-[15%] left-[10%] h-64 w-64 rounded-full bg-maroon/25 blur-[100px]" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.5)_65%,rgba(7,6,10,0.95)_100%)]" />
-          </div>
-
-          <FloatingWishes variant="gate" />
-
-          {/* Floating petals / sparkles */}
-          <div aria-hidden className="pointer-events-none absolute inset-0 z-[2]">
             {Array.from({ length: 16 }).map((_, i) => (
               <motion.span
                 key={i}
@@ -136,6 +133,23 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
                 }}
               />
             ))}
+          </div>
+
+          <FloatingWishes variant="gate" />
+
+          {/* Center blur — wishes readable when they flow out toward the edges */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 z-[2]">
+            <div
+              className="absolute inset-0 backdrop-blur-md sm:backdrop-blur-lg"
+              style={{
+                WebkitMaskImage:
+                  "radial-gradient(ellipse 55% 50% at 50% 48%, black 0%, black 36%, transparent 70%)",
+                maskImage:
+                  "radial-gradient(ellipse 55% 50% at 50% 48%, black 0%, black 36%, transparent 70%)",
+              }}
+            />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.5)_0%,rgba(7,6,10,0.18)_40%,transparent_66%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.5)_65%,rgba(7,6,10,0.95)_100%)]" />
           </div>
 
           <motion.div
