@@ -7,7 +7,7 @@ import { Events } from "@/components/sections/Events";
 import { Venue } from "@/components/sections/Venue";
 import { Gallery } from "@/components/sections/Gallery";
 import { GuestPhotoShare } from "@/components/sections/GuestPhotoShare";
-import { SharePhotosBanner } from "@/components/sections/SharePhotosBanner";
+import { GuestEngageBanner } from "@/components/sections/GuestEngageBanner";
 import { DownloadPhotosBanner } from "@/components/sections/DownloadPhotosBanner";
 import { RsvpStayBanner } from "@/components/sections/RsvpStayBanner";
 import { Family } from "@/components/sections/Family";
@@ -20,8 +20,8 @@ export default function Home() {
     <main className="ambient-bg relative min-h-screen">
       <Navigation />
       <Hero />
+      <GuestEngageBanner />
       <DownloadPhotosBanner />
-      <SharePhotosBanner />
       <RsvpStayBanner />
       <Countdown />
       <OurStory />
