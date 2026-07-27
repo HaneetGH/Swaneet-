@@ -17,27 +17,26 @@ const Scene3D = dynamic(
   { ssr: false },
 );
 
-/** Soft center blur so flowing wishes read clearly only outside the focus zone */
+/** Soft center blur so couple names stay primary; edge wishes stay readable */
 function HeroBlurPlane() {
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute inset-0 z-[2]"
     >
-      {/* Stronger radial blur behind the couple names — wishes readable at edges */}
+      {/* Lighter radial blur — keep side wishes sharp enough to read */}
       <div
-        className="absolute inset-0 backdrop-blur-md sm:backdrop-blur-lg"
+        className="absolute inset-0 backdrop-blur-sm sm:backdrop-blur-md"
         style={{
           WebkitMaskImage:
-            "radial-gradient(ellipse 58% 52% at 50% 46%, black 0%, black 38%, transparent 72%)",
+            "radial-gradient(ellipse 48% 44% at 50% 46%, black 0%, black 28%, transparent 62%)",
           maskImage:
-            "radial-gradient(ellipse 58% 52% at 50% 46%, black 0%, black 38%, transparent 72%)",
+            "radial-gradient(ellipse 48% 44% at 50% 46%, black 0%, black 28%, transparent 62%)",
         }}
       />
 
-      {/* Darken center slightly so names stay primary */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.55)_0%,rgba(7,6,10,0.22)_42%,transparent_68%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.45)_72%,rgba(7,6,10,0.9)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.42)_0%,rgba(7,6,10,0.12)_38%,transparent_64%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.35)_78%,rgba(7,6,10,0.88)_100%)]" />
     </div>
   );
 }
