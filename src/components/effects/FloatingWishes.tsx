@@ -10,6 +10,8 @@ type WishItem = { id: string; body: string; name: string; source?: string };
 type WishLane = {
   id: string;
   top: string;
+  direction: "ltr" | "rtl";
+  duration: number;
   wishes: WishItem[];
 };
 
@@ -17,9 +19,6 @@ type WishPoolProps = {
   variant?: "hero" | "gate";
   className?: string;
 };
-
-/** One shared marquee speed for every lane — slow, calm drift */
-const FLOW_DURATION = 96;
 
 /** Instant public fallback — visible without login / API wait */
 const PUBLIC_FALLBACK: WishItem[] = buildDisplayWishPool(
@@ -69,46 +68,33 @@ function useWishPool() {
   return pool;
 }
 
-/** Matches the faceted / hexagonal crystal behind the hero names */
-const HEX_CLIP =
-  "polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)";
-
-function HexBlur({ sizeClass }: { sizeClass: string }) {
+function MoonBlur({ sizeClass }: { sizeClass: string }) {
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute left-1/2 top-[44%] z-[2] -translate-x-1/2 -translate-y-1/2"
     >
-      {/* Soft gold haze behind the hex */}
+      {/* Soft moon glow */}
       <div
         className={cn(
-          "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold/12 blur-3xl",
+          "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold/10 blur-3xl",
           sizeClass,
         )}
       />
-      {/* Hexagonal blur plate — wishes soften only inside this shape */}
+      {/* Circular blur disc — wishes under the moon soften; outside stays readable */}
       <div
         className={cn(
-          "relative border border-gold/30 bg-[linear-gradient(145deg,rgba(255,246,216,0.14),rgba(212,175,55,0.08)_40%,rgba(7,6,10,0.4)_100%)] shadow-[0_0_70px_rgba(232,213,163,0.16)] backdrop-blur-md sm:backdrop-blur-lg",
+          "relative rounded-full border border-gold/20 bg-[radial-gradient(circle_at_35%_30%,rgba(255,246,216,0.16),rgba(212,175,55,0.08)_38%,rgba(7,6,10,0.35)_68%,rgba(7,6,10,0.55)_100%)] shadow-[0_0_80px_rgba(232,213,163,0.18),inset_0_0_50px_rgba(255,246,216,0.06)] backdrop-blur-md sm:backdrop-blur-lg",
           sizeClass,
         )}
-        style={{ clipPath: HEX_CLIP }}
-      />
-      {/* Thin gold hex outline */}
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-0 border border-gold/35",
-          sizeClass,
-        )}
-        style={{ clipPath: HEX_CLIP }}
       />
     </div>
   );
 }
 
 /**
- * Background wishes drift left→right at one speed behind a hexagonal blur.
- * Readable outside the hex; softly blurred as they pass through it.
+ * Background wishes drift left↔right behind a moon blur circle.
+ * Readable outside the moon; softly blurred as they pass through it.
  */
 export function FloatingWishBackdrop({
   variant = "hero",
@@ -129,6 +115,7 @@ export function FloatingWishBackdrop({
         ...pool.slice(index * 2),
         ...pool.slice(0, index * 2),
       ];
+      // Enough copies for a seamless marquee without cloning one wish alone
       const row =
         rotated.length < 4
           ? [...rotated, ...rotated, ...rotated, ...rotated]
@@ -137,6 +124,8 @@ export function FloatingWishBackdrop({
       return {
         id: `lane-${index}`,
         top,
+        direction: index % 2 === 0 ? ("ltr" as const) : ("rtl" as const),
+        duration: 48 + index * 8,
         wishes: row,
       };
     });
@@ -144,7 +133,7 @@ export function FloatingWishBackdrop({
 
   if (lanes.length === 0) return null;
 
-  const hexSize =
+  const moonSize =
     variant === "gate"
       ? "h-[min(68vw,22rem)] w-[min(68vw,22rem)] sm:h-[24rem] sm:w-[24rem]"
       : "h-[min(78vw,26rem)] w-[min(78vw,26rem)] sm:h-[30rem] sm:w-[30rem] md:h-[34rem] md:w-[34rem]";
@@ -165,9 +154,13 @@ export function FloatingWishBackdrop({
         >
           <motion.div
             className="flex w-max items-center gap-10 sm:gap-14"
-            animate={{ x: ["-50%", "0%"] }}
+            animate={
+              lane.direction === "ltr"
+                ? { x: ["-50%", "0%"] }
+                : { x: ["0%", "-50%"] }
+            }
             transition={{
-              duration: FLOW_DURATION,
+              duration: lane.duration,
               ease: "linear",
               repeat: Infinity,
             }}
@@ -190,7 +183,7 @@ export function FloatingWishBackdrop({
         </div>
       ))}
 
-      <HexBlur sizeClass={hexSize} />
+      <MoonBlur sizeClass={moonSize} />
     </div>
   );
 }
