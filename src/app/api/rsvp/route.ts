@@ -58,13 +58,8 @@ const rsvpSchema = z
     stay: staySchema.optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.needsAccommodation && !data.stay) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Stay details are required when you need accommodation",
-        path: ["stay"],
-      });
-    }
+    // Stay can be omitted on RSVP-only updates (e.g. My Account edit) when
+    // accommodation was already submitted separately.
     if (!data.attendance && (!data.dayResponses || data.dayResponses.length === 0)) {
       ctx.addIssue({
         code: "custom",
