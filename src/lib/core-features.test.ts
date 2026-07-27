@@ -873,3 +873,26 @@ describe("stay dates / shorter offers", () => {
     ).toBe(false);
   });
 });
+
+describe("public wishes social proof", () => {
+  it("fills the wall with sample wishes when few real ones exist", async () => {
+    const { mergePublicWishes, MIN_PUBLIC_WISH_COUNT } = await import(
+      "@/data/sample-wishes"
+    );
+    const merged = mergePublicWishes([], { now: Date.parse("2026-07-27T12:00:00Z") });
+    expect(merged.length).toBeGreaterThanOrEqual(4);
+    expect(merged.every((item) => item.id.startsWith("sample-wish-"))).toBe(
+      true,
+    );
+
+    const real = Array.from({ length: MIN_PUBLIC_WISH_COUNT }, (_, i) => ({
+      id: `real-${i}`,
+      body: `Real wish number ${i + 1} for the couple here.`,
+      displayName: `Guest ${i + 1}`,
+      createdAt: new Date(Date.now() - i * 1000).toISOString(),
+    }));
+    const onlyReal = mergePublicWishes(real);
+    expect(onlyReal.every((item) => item.id.startsWith("real-"))).toBe(true);
+    expect(onlyReal).toHaveLength(MIN_PUBLIC_WISH_COUNT);
+  });
+});

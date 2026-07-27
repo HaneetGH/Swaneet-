@@ -240,8 +240,9 @@ export function GuestWishes() {
             </p>
           </div>
           <p className="mt-2 font-body text-sm text-muted">
-            Sign in with Google, write a short quote or blessing, and the family
-            will review it before it appears on this wall.
+            Guests are already sharing blessings — add yours for Haneet and
+            Swarandeep. Sign in with Google; the family reviews each wish before
+            it appears on this wall.
           </p>
 
           {!authReady ? (
