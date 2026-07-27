@@ -4,7 +4,11 @@ import type {
   StayHotel,
 } from "@/lib/types";
 
-/** Occupancy board: who is in which assigned room (solo or shared). */
+/**
+ * Occupancy board: who is in which assigned room (solo or shared).
+ * Only lists units that actually hold inventory rooms — same rule as
+ * computeRoomInventory — so “rooms held” matches Hotels & rooms “assigned”.
+ */
 export function buildRoomOccupancy(
   accommodations: AccommodationRequest[],
   hotels: StayHotel[],
@@ -25,15 +29,21 @@ export function buildRoomOccupancy(
       );
       const primary =
         members.find((item) => item.roomGroupRole === "primary") || members[0]!;
+      // Inventory only counts the primary's roomsAssigned — skip empty groups
+      if (
+        !(
+          typeof primary.roomsAssigned === "number" &&
+          primary.roomsAssigned > 0
+        )
+      ) {
+        continue;
+      }
       units.push({
         key: stay.roomGroupId,
         hotelId: primary.hotelId || "",
         hotelName: primary.hotelName || hotelName(primary.hotelId),
         roomDetails: primary.roomDetails,
-        roomsHeld:
-          typeof primary.roomsAssigned === "number" && primary.roomsAssigned > 0
-            ? primary.roomsAssigned
-            : 1,
+        roomsHeld: primary.roomsAssigned,
         people: members.reduce((sum, item) => sum + (item.people || 0), 0),
         roomGroupId: stay.roomGroupId,
         stays: members.map((item) => ({
@@ -71,4 +81,9 @@ export function buildRoomOccupancy(
   }
 
   return units.sort((a, b) => a.hotelName.localeCompare(b.hotelName));
+}
+
+/** Sum of rooms held across occupancy units (matches inventory.assigned when hotelIds align). */
+export function occupancyRoomsHeld(units: RoomOccupancyUnit[]): number {
+  return units.reduce((sum, unit) => sum + (unit.roomsHeld || 0), 0);
 }

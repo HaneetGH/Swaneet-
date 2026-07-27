@@ -40,7 +40,7 @@ import {
 import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinerary";
 import { buildStayConfirmationParts } from "@/lib/email-stay-template";
 import { computeRoomInventory } from "@/lib/store";
-import { buildRoomOccupancy } from "@/lib/room-occupancy";
+import { buildRoomOccupancy, occupancyRoomsHeld } from "@/lib/room-occupancy";
 import { isShorterStayOffer, stayNights } from "@/lib/stay-dates";
 import {
   buildSharedRoomRoommateContacts,
@@ -431,6 +431,104 @@ describe("shared room inventory", () => {
     const solo = units.find((unit) => unit.key === "3");
     expect(solo?.roomsHeld).toBe(2);
     expect(solo?.stays).toHaveLength(1);
+    expect(occupancyRoomsHeld(units)).toBe(3);
+  });
+
+  it("does not list shared groups that hold no inventory rooms", () => {
+    const hotel: StayHotel = {
+      id: "h1",
+      name: "Test Hotel",
+      totalRooms: 5,
+      createdAt: new Date().toISOString(),
+    };
+    const stays: AccommodationRequest[] = [
+      {
+        id: "1",
+        name: "Ghost primary",
+        phone: "1",
+        email: "a@b.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        hotelId: "h1",
+        roomsAssigned: 0,
+        roomGroupId: "ghost",
+        roomGroupRole: "primary",
+      },
+      {
+        id: "2",
+        name: "Real solo",
+        phone: "2",
+        email: "b@b.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        hotelId: "h1",
+        roomsAssigned: 2,
+      },
+    ];
+    const units = buildRoomOccupancy(stays, [hotel]);
+    expect(units).toHaveLength(1);
+    expect(occupancyRoomsHeld(units)).toBe(2);
+    expect(computeRoomInventory(stays, [hotel]).assigned).toBe(2);
+  });
+
+  it("counts rooms against the matching hotel when hotelId is missing", () => {
+    const hotels: StayHotel[] = [
+      {
+        id: "oscar",
+        name: "The Oscar Regency",
+        totalRooms: 15,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "deepak",
+        name: "Deepak Bakery Rooms",
+        totalRooms: 14,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    const stays: AccommodationRequest[] = [
+      {
+        id: "1",
+        name: "A",
+        phone: "1",
+        email: "a@b.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        hotelName: "Deepak Bakery Rooms",
+        roomsAssigned: 1,
+      },
+      {
+        id: "2",
+        name: "B",
+        phone: "2",
+        email: "b@b.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        hotelId: "deepak",
+        hotelName: "Deepak Bakery Rooms",
+        roomsAssigned: 1,
+      },
+    ];
+    const inv = computeRoomInventory(stays, hotels);
+    expect(inv.assigned).toBe(2);
+    expect(inv.hotels.find((h) => h.id === "deepak")?.assigned).toBe(2);
+    expect(inv.hotels.find((h) => h.id === "oscar")?.assigned).toBe(0);
   });
 
   it("sends one email per stay request (n requests → n emails)", () => {

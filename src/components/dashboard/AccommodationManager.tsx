@@ -9,7 +9,7 @@ import type {
   RoomOccupancyUnit,
   StayHotel,
 } from "@/lib/types";
-import { buildRoomOccupancy } from "@/lib/room-occupancy";
+import { buildRoomOccupancy, occupancyRoomsHeld } from "@/lib/room-occupancy";
 import { isShorterStayOffer, stayNights } from "@/lib/stay-dates";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -451,6 +451,11 @@ export function AccommodationManager({
     return buildRoomOccupancy(items, hotelRows);
   }, [items, inventory.hotels]);
 
+  const occupancyHeld = useMemo(
+    () => occupancyRoomsHeld(occupancy),
+    [occupancy],
+  );
+
   const sharedRooms = useMemo(
     () => occupancy.filter((unit) => Boolean(unit.roomGroupId)),
     [occupancy],
@@ -839,7 +844,10 @@ export function AccommodationManager({
             </p>
           </div>
           <p className="font-body text-xs text-gold-soft">
-            {occupancy.length} room unit{occupancy.length === 1 ? "" : "s"}
+            {occupancyHeld} room{occupancyHeld === 1 ? "" : "s"} assigned
+            {occupancy.length !== occupancyHeld
+              ? ` · ${occupancy.length} group${occupancy.length === 1 ? "" : "s"}`
+              : ""}
           </p>
         </div>
 
