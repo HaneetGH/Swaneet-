@@ -875,10 +875,9 @@ describe("stay dates / shorter offers", () => {
 });
 
 describe("public wishes social proof", () => {
-  it("puts real guest wishes ahead of sample fillers", async () => {
-    const { mergePublicWishes, MIN_PUBLIC_WISH_COUNT } = await import(
-      "@/data/sample-wishes"
-    );
+  it("renders person-written wishes over sample fillers", async () => {
+    const { mergePublicWishes, MIN_PUBLIC_WISH_COUNT, preferRealWishes } =
+      await import("@/data/sample-wishes");
     const merged = mergePublicWishes([], {
       now: Date.parse("2026-07-27T12:00:00Z"),
     });
@@ -896,8 +895,18 @@ describe("public wishes social proof", () => {
         createdAt: "2026-07-20T12:00:00Z",
       },
     ]);
+    expect(mixed).toHaveLength(1);
     expect(mixed[0]?.id).toBe("real-1");
-    expect(mixed.some((item) => item.id.startsWith("sample-wish-"))).toBe(true);
+    expect(mixed.every((item) => !item.id.startsWith("sample-wish-"))).toBe(
+      true,
+    );
+
+    const preferred = preferRealWishes([
+      { id: "sample-wish-01" },
+      { id: "real-2" },
+      { id: "sample-wish-02" },
+    ]);
+    expect(preferred.map((item) => item.id)).toEqual(["real-2"]);
 
     const real = Array.from({ length: MIN_PUBLIC_WISH_COUNT }, (_, i) => ({
       id: `real-${i}`,

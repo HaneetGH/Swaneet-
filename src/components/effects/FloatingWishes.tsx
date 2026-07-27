@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { SAMPLE_WISHES } from "@/data/sample-wishes";
+import { SAMPLE_WISHES, preferRealWishes } from "@/data/sample-wishes";
 import { cn } from "@/lib/utils";
 
 type WishItem = { id: string; body: string; name: string };
@@ -55,6 +55,7 @@ export function FloatingWishes({
             body: wish.body,
             name: wish.displayName,
           }));
+          // Person-written wishes only, once any exist
           setPool(preferRealWishes(mapped));
         },
       )

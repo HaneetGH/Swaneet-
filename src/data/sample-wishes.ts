@@ -125,13 +125,40 @@ export type PublicWish = {
   createdAt: string;
 };
 
-/** Merge real approved wishes with sample fillers — real guest wishes always come first. */
+export function isSampleWishId(id: string) {
+  return id.startsWith("sample-wish-");
+}
+
+/** Keep person-written wishes ahead of generated samples for any public render. */
+export function preferRealWishes<T extends { id: string }>(wishes: T[]): T[] {
+  const real = wishes.filter((wish) => !isSampleWishId(wish.id));
+  return real.length > 0 ? real : wishes;
+}
+
+/**
+ * Merge real approved wishes with sample fillers.
+ * Person-written wishes always win: once any real wish exists, samples are omitted.
+ * Samples only fill the empty wall before guests start posting.
+ */
 export function mergePublicWishes(
   real: PublicWish[],
   options?: { minCount?: number; now?: number },
 ): PublicWish[] {
   const minCount = options?.minCount ?? MIN_PUBLIC_WISH_COUNT;
   const now = options?.now ?? Date.now();
+
+  const realSorted = [...real]
+    .filter((wish) => !isSampleWishId(wish.id))
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+  // Real guest wishes always take the page — never mix samples beside them
+  if (realSorted.length > 0) {
+    return realSorted;
+  }
+
   const samples: PublicWish[] = SAMPLE_WISHES.map((item) => ({
     id: item.id,
     body: item.body,
@@ -142,22 +169,5 @@ export function mergePublicWishes(
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
-  const realSorted = [...real].sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
-
-  if (realSorted.length >= minCount) {
-    return realSorted;
-  }
-
-  const needed = Math.max(minCount - realSorted.length, 0);
-  const fillers = samples.slice(0, Math.max(needed, realSorted.length === 0 ? 6 : 0));
-
-  if (realSorted.length === 0) {
-    return fillers.length > 0 ? fillers : samples.slice(0, 6);
-  }
-
-  // Real guest wishes first; samples only fill remaining slots for social proof
-  return [...realSorted, ...fillers];
+  return samples.slice(0, Math.max(minCount, 6));
 }

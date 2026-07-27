@@ -9,6 +9,7 @@ import {
 } from "@/components/rsvp/GuestAuthPanel";
 import { Button } from "@/components/ui/Button";
 import { SectionHeading } from "@/components/ui/SectionHeading";
+import { preferRealWishes } from "@/data/sample-wishes";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { useInvite } from "@/lib/invite-context";
@@ -98,39 +99,28 @@ export function GuestWishes() {
     }
   }, [displayName, user?.displayName]);
 
-  // Real guest wishes first (API order); samples only backfill social proof
-  const realWishes = useMemo(
-    () => wishes.filter((wish) => !wish.id.startsWith("sample-wish-")),
-    [wishes],
-  );
-  const spotlight = realWishes.length > 0 ? realWishes : wishes;
+  // Person-written wishes win; samples only when the wall is still empty
+  const displayWishes = useMemo(() => preferRealWishes(wishes), [wishes]);
 
   useEffect(() => {
-    if (spotlight.length <= 1) return;
+    if (displayWishes.length <= 1) return;
     const timer = window.setInterval(() => {
-      setFeaturedIndex((current) => (current + 1) % spotlight.length);
+      setFeaturedIndex((current) => (current + 1) % displayWishes.length);
     }, 5200);
     return () => window.clearInterval(timer);
-  }, [spotlight.length]);
+  }, [displayWishes.length]);
 
   const featured =
-    spotlight[featuredIndex % Math.max(spotlight.length, 1)] ||
-    wishes[0] ||
-    null;
-  const topWishes = (realWishes.length > 0 ? realWishes : wishes).slice(0, 3);
+    displayWishes[featuredIndex % Math.max(displayWishes.length, 1)] || null;
+  const topWishes = displayWishes.slice(0, 3);
   const marqueeItems = useMemo(() => {
-    if (wishes.length === 0) return [];
-    // Prefer real wishes in the marquee; samples only when needed for volume
-    const preferred =
-      realWishes.length > 0
-        ? [...realWishes, ...wishes.filter((w) => w.id.startsWith("sample-wish-"))]
-        : wishes;
+    if (displayWishes.length === 0) return [];
     const base =
-      preferred.length < 4
-        ? [...preferred, ...preferred, ...preferred]
-        : preferred;
+      displayWishes.length < 4
+        ? [...displayWishes, ...displayWishes, ...displayWishes]
+        : displayWishes;
     return [...base, ...base];
-  }, [realWishes, wishes]);
+  }, [displayWishes]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
