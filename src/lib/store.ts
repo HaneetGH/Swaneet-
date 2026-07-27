@@ -191,14 +191,25 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
 
   let hotels: StayHotel[] = (raw.hotels ?? [])
     .filter((hotel) => hotel && typeof hotel.id === "string" && hotel.name)
-    .map((hotel) => ({
-      id: hotel.id,
-      name: String(hotel.name).trim(),
-      address: hotel.address?.trim() || undefined,
-      totalRooms: Math.max(0, Math.floor(Number(hotel.totalRooms) || 0)),
-      notes: hotel.notes?.trim() || undefined,
-      createdAt: hotel.createdAt || new Date().toISOString(),
-    }));
+    .map((hotel) => {
+      const totalRooms = Math.max(0, Math.floor(Number(hotel.totalRooms) || 0));
+      const blockedRooms = Math.max(
+        0,
+        Math.min(
+          totalRooms,
+          Math.floor(Number(hotel.blockedRooms) || 0),
+        ),
+      );
+      return {
+        id: hotel.id,
+        name: String(hotel.name).trim(),
+        address: hotel.address?.trim() || undefined,
+        totalRooms,
+        blockedRooms: blockedRooms > 0 ? blockedRooms : undefined,
+        notes: hotel.notes?.trim() || undefined,
+        createdAt: hotel.createdAt || new Date().toISOString(),
+      };
+    });
 
   const legacyTotal =
     typeof raw.totalRooms === "number" && raw.totalRooms >= 0
@@ -768,6 +779,13 @@ export function computeRoomInventory(
       if (rooms > 0) matched.add(charge.key);
       return sum + rooms;
     }, 0);
+    const blocked = Math.max(
+      0,
+      Math.min(
+        hotel.totalRooms,
+        Math.floor(Number(hotel.blockedRooms) || 0),
+      ),
+    );
 
     return {
       id: hotel.id,
@@ -775,7 +793,8 @@ export function computeRoomInventory(
       address: hotel.address,
       totalRooms: hotel.totalRooms,
       assigned,
-      available: Math.max(0, hotel.totalRooms - assigned),
+      blocked,
+      available: Math.max(0, hotel.totalRooms - assigned - blocked),
       notes: hotel.notes,
     };
   });
@@ -788,11 +807,13 @@ export function computeRoomInventory(
   const total = hotelRows.reduce((sum, row) => sum + row.totalRooms, 0);
   const assigned =
     hotelRows.reduce((sum, row) => sum + row.assigned, 0) + orphanAssigned;
+  const blocked = hotelRows.reduce((sum, row) => sum + row.blocked, 0);
 
   return {
     total,
     assigned,
-    available: Math.max(0, total - assigned),
+    blocked,
+    available: Math.max(0, total - assigned - blocked),
     hotels: hotelRows,
   };
 }
@@ -815,6 +836,7 @@ export async function upsertHotel(input: {
   name: string;
   address?: string;
   totalRooms: number;
+  blockedRooms?: number;
   notes?: string;
 }): Promise<StayHotel> {
   const store = await readStore();
@@ -822,17 +844,35 @@ export async function upsertHotel(input: {
   const name = input.name.trim();
   if (!name) throw new Error("Hotel name is required");
   const totalRooms = Math.max(0, Math.floor(input.totalRooms));
+  const blockedRooms = Math.max(
+    0,
+    Math.min(
+      totalRooms,
+      Math.floor(
+        Number(
+          input.blockedRooms !== undefined
+            ? input.blockedRooms
+            : input.id
+              ? hotels.find((hotel) => hotel.id === input.id)?.blockedRooms || 0
+              : 0,
+        ) || 0,
+      ),
+    ),
+  );
 
   if (input.id) {
     const index = hotels.findIndex((hotel) => hotel.id === input.id);
     if (index === -1) throw new Error("Hotel not found");
-    hotels[index] = {
+    const next: StayHotel = {
       ...hotels[index],
       name,
       address: input.address?.trim() || undefined,
       totalRooms,
       notes: input.notes?.trim() || undefined,
     };
+    if (blockedRooms > 0) next.blockedRooms = blockedRooms;
+    else delete (next as { blockedRooms?: number }).blockedRooms;
+    hotels[index] = next;
     store.hotels = hotels;
     store.totalRooms = hotels.reduce((sum, hotel) => sum + hotel.totalRooms, 0);
     await writeStore(store);
@@ -847,6 +887,7 @@ export async function upsertHotel(input: {
     notes: input.notes?.trim() || undefined,
     createdAt: new Date().toISOString(),
   };
+  if (blockedRooms > 0) hotel.blockedRooms = blockedRooms;
   store.hotels = [hotel, ...hotels];
   store.totalRooms = store.hotels.reduce(
     (sum, item) => sum + item.totalRooms,
@@ -854,6 +895,34 @@ export async function upsertHotel(input: {
   );
   await writeStore(store);
   return hotel;
+}
+
+/** Reduce (or increase) blocked rooms after drawing from / returning to the reserve. */
+export async function adjustHotelBlockedRooms(
+  hotelId: string,
+  delta: number,
+): Promise<StayHotel | null> {
+  if (!delta) {
+    const store = await readStore();
+    return (store.hotels || []).find((hotel) => hotel.id === hotelId) || null;
+  }
+  const store = await readStore();
+  const hotels = [...(store.hotels || [])];
+  const index = hotels.findIndex((hotel) => hotel.id === hotelId);
+  if (index === -1) return null;
+  const hotel = hotels[index]!;
+  const current = Math.max(0, Math.floor(Number(hotel.blockedRooms) || 0));
+  const nextBlocked = Math.max(
+    0,
+    Math.min(hotel.totalRooms, current + delta),
+  );
+  const updated: StayHotel = { ...hotel };
+  if (nextBlocked > 0) updated.blockedRooms = nextBlocked;
+  else delete (updated as { blockedRooms?: number }).blockedRooms;
+  hotels[index] = updated;
+  store.hotels = hotels;
+  await writeStore(store);
+  return updated;
 }
 
 export async function deleteHotel(id: string): Promise<boolean> {
@@ -943,6 +1012,7 @@ export async function addAccommodation(
 export async function updateAccommodation(
   id: string,
   patch: Partial<AccommodationRequest>,
+  options?: { useBlockedRooms?: boolean },
 ): Promise<AccommodationRequest | null> {
   const existing = (await listAccommodations()).find((item) => item.id === id);
   if (!existing) return null;
@@ -950,6 +1020,28 @@ export async function updateAccommodation(
   const nextStatus = patch.status ?? existing.status;
   const existingIsMember =
     Boolean(existing.roomGroupId) && existing.roomGroupRole === "member";
+  const useBlockedRooms = Boolean(options?.useBlockedRooms);
+
+  const ensureRoomCapacity = async (
+    hotelRow: { id: string; name: string; available: number; blocked: number },
+    needed: number,
+    currentlyHolding: number,
+  ) => {
+    const free = hotelRow.available + currentlyHolding;
+    if (needed <= free) return;
+    const shortfall = needed - free;
+    if (!useBlockedRooms) {
+      throw new Error(
+        `Not enough free rooms at ${hotelRow.name}. Free: ${free}, blocked: ${hotelRow.blocked}, needed: ${needed}. Turn on “Use blocked rooms” to draw from the reserve.`,
+      );
+    }
+    if (shortfall > hotelRow.blocked) {
+      throw new Error(
+        `Not enough rooms at ${hotelRow.name} even with blocked reserve. Free: ${free}, blocked: ${hotelRow.blocked}, needed: ${needed}.`,
+      );
+    }
+    await adjustHotelBlockedRooms(hotelRow.id, -shortfall);
+  };
 
   let roomsAssigned =
     typeof existing.roomsAssigned === "number"
@@ -984,13 +1076,12 @@ export async function updateAccommodation(
         !existingIsMember
           ? existing.roomsAssigned
           : 0;
-      const availableForThis = hotelRow.available + currentlyHolding;
 
-      if (patch.roomsAssigned > availableForThis) {
-        throw new Error(
-          `Not enough rooms at ${hotelRow.name}. Available: ${availableForThis}, needed: ${patch.roomsAssigned}.`,
-        );
-      }
+      await ensureRoomCapacity(
+        hotelRow,
+        patch.roomsAssigned,
+        currentlyHolding,
+      );
 
       roomsAssigned = patch.roomsAssigned;
       hotelId = nextHotelId;
@@ -1049,12 +1140,7 @@ export async function updateAccommodation(
         typeof existing.roomsAssigned === "number"
           ? existing.roomsAssigned
           : 0;
-      const availableForThis = hotelRow.available + currentlyHolding;
-      if (asked > availableForThis) {
-        throw new Error(
-          `Not enough rooms at ${hotelRow.name}. Available: ${availableForThis}, needed: ${asked}. Set “Rooms to assign” to a smaller number.`,
-        );
-      }
+      await ensureRoomCapacity(hotelRow, asked, currentlyHolding);
       roomsAssigned = asked;
       const store = await readStore();
       const hotel = (store.hotels || []).find((item) => item.id === hotelId);
@@ -1178,6 +1264,8 @@ export async function mergeStaysIntoSharedRoom(input: {
   hotelId: string;
   roomDetails?: string;
   adminNotes?: string;
+  /** Draw from blocked reserve when free rooms are 0 */
+  useBlockedRooms?: boolean;
 }): Promise<{
   stays: AccommodationRequest[];
   inventory: RoomInventory;
@@ -1241,9 +1329,17 @@ export async function mergeStaysIntoSharedRoom(input: {
     throw new Error("Selected hotel was not found. Add the hotel first.");
   }
   if (hotelRow.available < 1) {
-    throw new Error(
-      `No rooms left at ${hotelRow.name}. Available: ${hotelRow.available}.`,
-    );
+    if (hotelRow.blocked < 1) {
+      throw new Error(
+        `No rooms left at ${hotelRow.name}. Available: ${hotelRow.available}.`,
+      );
+    }
+    if (!input.useBlockedRooms) {
+      throw new Error(
+        `No free rooms at ${hotelRow.name} (${hotelRow.blocked} blocked). Turn on “Use blocked rooms” to draw one from the reserve.`,
+      );
+    }
+    await adjustHotelBlockedRooms(hotelId, -1);
   }
 
   const store = await readStore();

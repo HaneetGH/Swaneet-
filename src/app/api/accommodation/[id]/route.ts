@@ -31,6 +31,8 @@ const updateSchema = z.object({
   roomsAssigned: z.coerce.number().int().min(0).max(30).optional(),
   checkIn: z.string().trim().optional(),
   checkOut: z.string().trim().optional(),
+  /** Draw from hotel blocked reserve when free rooms aren’t enough */
+  useBlockedRooms: z.boolean().optional().default(false),
 });
 
 export async function PUT(request: Request, { params }: Params) {
@@ -104,7 +106,9 @@ export async function PUT(request: Request, { params }: Params) {
       patch.hotelId = parsed.data.hotelId;
     }
 
-    const updated = await updateAccommodation(id, patch);
+    const updated = await updateAccommodation(id, patch, {
+      useBlockedRooms: parsed.data.useBlockedRooms,
+    });
     if (!updated) {
       return NextResponse.json({ error: "Request not found" }, { status: 404 });
     }
