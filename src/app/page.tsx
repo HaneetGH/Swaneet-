@@ -11,6 +11,7 @@ import { SharePhotosBanner } from "@/components/sections/SharePhotosBanner";
 import { DownloadPhotosBanner } from "@/components/sections/DownloadPhotosBanner";
 import { RsvpStayBanner } from "@/components/sections/RsvpStayBanner";
 import { Family } from "@/components/sections/Family";
+import { GuestWishes } from "@/components/sections/GuestWishes";
 import { RSVP } from "@/components/sections/RSVP";
 import { GuestWelcomeGuide } from "@/components/ui/GuestWelcomeGuide";
 
@@ -28,6 +29,7 @@ export default function Home() {
       <Venue />
       <Gallery />
       <Family />
+      <GuestWishes />
       <RSVP />
       <GuestPhotoShare />
       <Footer />
