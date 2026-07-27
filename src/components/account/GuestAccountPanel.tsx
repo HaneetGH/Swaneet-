@@ -8,10 +8,12 @@ import {
   CheckCircle2,
   CircleHelp,
   Clock3,
+  Heart,
   Images,
   Menu,
   MessageSquare,
   ScanFace,
+  Send,
   X,
   XCircle,
 } from "lucide-react";
@@ -28,11 +30,18 @@ import type {
   AccommodationRequest,
   GalleryStatus,
   GuestFaceProfile,
+  GuestMessageStatus,
   RsvpEntry,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type AccountTab = "booking" | "rsvp" | "uploads" | "find-photos" | "query";
+type AccountTab =
+  | "booking"
+  | "rsvp"
+  | "uploads"
+  | "wishes"
+  | "find-photos"
+  | "query";
 
 type AccountResponse = {
   guest?: { uid: string; email?: string; name?: string };
@@ -41,6 +50,7 @@ type AccountResponse = {
     accommodation: boolean;
     guestPhotos: boolean;
     faceFind: boolean;
+    guestMessages?: boolean;
   };
   rsvp?: RsvpEntry | null;
   accommodation?: AccommodationRequest | null;
@@ -60,6 +70,23 @@ type AccountResponse = {
       eventId: string;
       eventName?: string;
       src: string;
+    }>;
+  };
+  wishes?: {
+    counts: {
+      total: number;
+      pending: number;
+      approved: number;
+      rejected: number;
+    };
+    maxPerGuest: number;
+    remaining: number;
+    items: Array<{
+      id: string;
+      body: string;
+      displayName: string;
+      status: GuestMessageStatus;
+      createdAt: string;
     }>;
   };
   face?: {
@@ -126,6 +153,28 @@ function uploadStatusMeta(status: GalleryStatus) {
     return { label: "Not approved", icon: XCircle, className: "text-rose-300" };
   }
   return { label: "In review", icon: Clock3, className: "text-amber-200" };
+}
+
+function wishStatusMeta(status: GuestMessageStatus) {
+  if (status === "approved") {
+    return {
+      label: "On the wall",
+      icon: CheckCircle2,
+      tone: "green" as const,
+    };
+  }
+  if (status === "rejected") {
+    return {
+      label: "Not approved",
+      icon: XCircle,
+      tone: "rose" as const,
+    };
+  }
+  return {
+    label: "In review",
+    icon: Clock3,
+    tone: "amber" as const,
+  };
 }
 
 function StatusPill({
@@ -205,6 +254,11 @@ export function GuestAccountPanel() {
   const [queryBusy, setQueryBusy] = useState(false);
   const [queryDone, setQueryDone] = useState(false);
   const [queryError, setQueryError] = useState("");
+  const [wishName, setWishName] = useState("");
+  const [wishBody, setWishBody] = useState("");
+  const [wishBusy, setWishBusy] = useState(false);
+  const [wishDone, setWishDone] = useState("");
+  const [wishError, setWishError] = useState("");
 
   const navItems = useMemo<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -227,6 +281,14 @@ export function GuestAccountPanel() {
         Icon: Camera,
       },
     ];
+    if (!flagsReady || enabled("guest_messages")) {
+      items.push({
+        id: "wishes",
+        label: "Your wishes",
+        hint: "Write multiple blessings",
+        Icon: Heart,
+      });
+    }
     if (flagsReady && enabled("face_find")) {
       items.push({
         id: "find-photos",
@@ -306,6 +368,56 @@ export function GuestAccountPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (wishName.trim()) return;
+    const fromUser = user?.displayName?.trim();
+    const fromData = data?.guest?.name?.trim();
+    if (fromUser) setWishName(fromUser);
+    else if (fromData) setWishName(fromData);
+  }, [data?.guest?.name, user?.displayName, wishName]);
+
+  const sendWish = async (event: FormEvent) => {
+    event.preventDefault();
+    setWishBusy(true);
+    setWishError("");
+    setWishDone("");
+    try {
+      const token = await getGuestIdToken();
+      if (!token) {
+        setWishError("Please sign in again.");
+        return;
+      }
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          body: wishBody,
+          displayName: wishName || undefined,
+          inviteTier: invite?.tier,
+          inviteSlug: invite?.slug,
+          inviteSide: invite ? "bride" : undefined,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setWishError(json.error || "Could not share your wish.");
+        return;
+      }
+      setWishBody("");
+      setWishDone(
+        "Wish sent — you can write another. Family reviews each one before it goes on the wall.",
+      );
+      await load();
+    } catch {
+      setWishError("Could not share your wish.");
+    } finally {
+      setWishBusy(false);
+    }
+  };
 
   const sendQuery = async (event: FormEvent) => {
     event.preventDefault();
@@ -389,7 +501,9 @@ export function GuestAccountPanel() {
   const stayMeta = stayStatusLabel(stay);
   const rsvp = data?.rsvp || null;
   const uploads = data?.uploads;
+  const wishes = data?.wishes;
   const face = data?.face?.profile || null;
+  const wishHref = invite ? `${invite.basePath}#wishes` : "/#wishes";
   const greeting =
     user.displayName?.trim().split(/\s+/)[0] ||
     data?.guest?.name?.trim().split(/\s+/)[0] ||
@@ -778,6 +892,154 @@ export function GuestAccountPanel() {
                           })}
                         </ul>
                       </>
+                    )}
+                  </div>
+                </Panel>
+              ) : null}
+
+              {activeTab === "wishes" ? (
+                <Panel
+                  title="Your wishes"
+                  subtitle="Write as many blessings as you like (up to the account limit). Each one is reviewed before it appears on the wall."
+                  action={
+                    <Link
+                      href={wishHref}
+                      className="font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft transition hover:text-gold"
+                    >
+                      View wall
+                    </Link>
+                  }
+                >
+                  <div className="space-y-5">
+                    <div className="rounded-2xl border border-gold/20 bg-white/[0.03] px-5 py-6">
+                      <div className="flex flex-wrap gap-3">
+                        <StatusPill
+                          label={`${wishes?.counts.total || 0} written`}
+                          tone="muted"
+                        />
+                        {(wishes?.counts.pending || 0) > 0 ? (
+                          <StatusPill
+                            label={`${wishes?.counts.pending} in review`}
+                            tone="amber"
+                          />
+                        ) : null}
+                        {(wishes?.counts.approved || 0) > 0 ? (
+                          <StatusPill
+                            label={`${wishes?.counts.approved} on the wall`}
+                            tone="green"
+                          />
+                        ) : null}
+                        {(wishes?.remaining || 0) > 0 ? (
+                          <StatusPill
+                            label={`${wishes?.remaining} left`}
+                            tone="muted"
+                          />
+                        ) : (
+                          <StatusPill label="Limit reached" tone="amber" />
+                        )}
+                      </div>
+
+                      {!wishes || wishes.items.length === 0 ? (
+                        <p className="mt-5 font-body text-sm text-muted">
+                          You have not written a wish yet — add your first below.
+                        </p>
+                      ) : (
+                        <ul className="mt-5 space-y-3">
+                          {wishes.items.map((wish) => {
+                            const meta = wishStatusMeta(wish.status);
+                            return (
+                              <li
+                                key={wish.id}
+                                className="rounded-xl border border-gold/15 bg-[#120f16] px-4 py-4"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <StatusPill
+                                    label={meta.label}
+                                    tone={meta.tone}
+                                  />
+                                  <span className="font-body text-xs text-muted">
+                                    {formatDate(wish.createdAt)}
+                                  </span>
+                                  <span className="font-body text-xs text-gold/70">
+                                    — {wish.displayName}
+                                  </span>
+                                </div>
+                                <p className="mt-3 font-display text-lg leading-relaxed text-cream">
+                                  “{wish.body}”
+                                </p>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+
+                    {(wishes?.remaining ?? 1) > 0 ? (
+                      <form
+                        onSubmit={sendWish}
+                        className="rounded-2xl border border-gold/20 bg-white/[0.03] px-5 py-6"
+                      >
+                        <div className="flex items-center gap-2 text-gold-soft">
+                          <Heart size={16} />
+                          <p className="font-body text-[11px] uppercase tracking-[0.22em]">
+                            Write another wish
+                          </p>
+                        </div>
+                        <p className="mt-2 font-body text-sm text-muted">
+                          You can send multiple wishes from this account —{" "}
+                          {wishes?.remaining ?? "several"} remaining.
+                        </p>
+                        <label className="mt-4 block">
+                          <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                            Your name
+                          </span>
+                          <input
+                            className={cn(fieldClass, "mt-2")}
+                            value={wishName}
+                            onChange={(event) => setWishName(event.target.value)}
+                            maxLength={60}
+                            required
+                            placeholder="How should we sign your wish?"
+                          />
+                        </label>
+                        <label className="mt-4 block">
+                          <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                            Message / quote
+                          </span>
+                          <textarea
+                            className={cn(fieldClass, "mt-2 min-h-28 resize-y")}
+                            value={wishBody}
+                            onChange={(event) => setWishBody(event.target.value)}
+                            maxLength={400}
+                            required
+                            placeholder="A blessing, a memory, or a quote for the bride and groom…"
+                          />
+                          <span className="mt-1 block text-right font-body text-[11px] text-muted">
+                            {wishBody.length}/400
+                          </span>
+                        </label>
+                        <div className="mt-5 flex flex-wrap items-center gap-4">
+                          <Button type="submit" disabled={wishBusy}>
+                            <Send size={15} />
+                            {wishBusy ? "Sending…" : "Share wish"}
+                          </Button>
+                          {wishDone ? (
+                            <p className="font-body text-sm text-emerald-200">
+                              {wishDone}
+                            </p>
+                          ) : null}
+                          {wishError ? (
+                            <p className="font-body text-sm text-rose-200">
+                              {wishError}
+                            </p>
+                          ) : null}
+                        </div>
+                      </form>
+                    ) : (
+                      <p className="rounded-2xl border border-amber-400/25 bg-amber-400/10 px-5 py-4 font-body text-sm text-amber-100/90">
+                        You have reached the limit of {wishes?.maxPerGuest || 10}{" "}
+                        wishes for this account.
+                      </p>
                     )}
                   </div>
                 </Panel>

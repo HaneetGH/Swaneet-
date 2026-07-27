@@ -277,9 +277,9 @@ export function GuestWishes() {
             </p>
           </div>
           <p className="mt-2 font-body text-sm text-muted">
-            Anyone can read the wishes above. To add yours for Haneet and
-            Swarandeep, sign in with Google — the family reviews each post before
-            it appears on the wall.
+            Anyone can read the wishes above. Sign in with Google to add one —
+            you can write multiple wishes. The family reviews each post before it
+            appears on the wall.
           </p>
 
           {!authReady ? (
@@ -329,6 +329,9 @@ export function GuestWishes() {
                   <Send size={15} />
                   {busy ? "Sending…" : "Share wish"}
                 </Button>
+                <p className="font-body text-xs text-muted">
+                  You can send more than one wish from this account.
+                </p>
                 {success ? (
                   <p className="font-body text-sm text-emerald-200">{success}</p>
                 ) : null}

@@ -12,7 +12,9 @@ import {
   findAccommodationByGuest,
   findRsvpByGuest,
   getFeatureFlags,
+  listGuestMessagesByAuthUid,
   listGuestUploads,
+  MAX_MESSAGES_PER_GUEST,
 } from "@/lib/store";
 import type { FeatureSite } from "@/lib/types";
 
@@ -32,7 +34,7 @@ function siteFromRequest(request: Request): FeatureSite {
 }
 
 /**
- * Guest account hub: RSVP, stay booking, uploads, and face-find summary.
+ * Guest account hub: RSVP, stay booking, uploads, wishes, and face-find summary.
  * Reading own data is allowed even when public RSVP/upload CTAs are off.
  */
 export async function GET(request: Request) {
@@ -44,14 +46,16 @@ export async function GET(request: Request) {
     const flags = await getFeatureFlags();
     const accessToken = createGalleryAccessToken(guest.uid, inviteSite);
 
-    const [rsvp, accommodation, uploads] = await Promise.all([
+    const [rsvp, accommodation, uploads, wishes] = await Promise.all([
       findRsvpByGuest(guest.uid, guest.email, inviteSite),
       findAccommodationByGuest(guest.uid, guest.email, inviteSite),
       listGuestUploads(guest.uid, guest.email),
+      listGuestMessagesByAuthUid(guest.uid),
     ]);
 
     const faceOn = isFeatureEnabled(flags, inviteSite, "face_find");
     const faceProfile = faceOn ? await getFaceProfile(guest.uid) : null;
+    const wishesOn = isFeatureEnabled(flags, inviteSite, "guest_messages");
 
     const uploadCounts = uploads.reduce(
       (acc, image) => {
@@ -59,6 +63,17 @@ export async function GET(request: Request) {
         if (image.status === "pending") acc.pending += 1;
         else if (image.status === "approved") acc.approved += 1;
         else if (image.status === "rejected") acc.rejected += 1;
+        return acc;
+      },
+      { total: 0, pending: 0, approved: 0, rejected: 0 },
+    );
+
+    const wishCounts = wishes.reduce(
+      (acc, wish) => {
+        acc.total += 1;
+        if (wish.status === "pending") acc.pending += 1;
+        else if (wish.status === "approved") acc.approved += 1;
+        else if (wish.status === "rejected") acc.rejected += 1;
         return acc;
       },
       { total: 0, pending: 0, approved: 0, rejected: 0 },
@@ -76,6 +91,7 @@ export async function GET(request: Request) {
         accommodation: isFeatureEnabled(flags, inviteSite, "accommodation"),
         guestPhotos: isFeatureEnabled(flags, inviteSite, "guest_photos"),
         faceFind: faceOn,
+        guestMessages: wishesOn,
       },
       rsvp,
       accommodation,
@@ -94,6 +110,21 @@ export async function GET(request: Request) {
             src: proxied.src,
           };
         }),
+      },
+      wishes: {
+        counts: wishCounts,
+        maxPerGuest: MAX_MESSAGES_PER_GUEST,
+        remaining: Math.max(
+          0,
+          MAX_MESSAGES_PER_GUEST - (wishCounts.pending + wishCounts.approved),
+        ),
+        items: wishes.map((wish) => ({
+          id: wish.id,
+          body: wish.body,
+          displayName: wish.displayName,
+          status: wish.status,
+          createdAt: wish.createdAt,
+        })),
       },
       face: faceOn
         ? {
