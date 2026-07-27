@@ -143,12 +143,23 @@ export function isSampleWish(wish: {
   );
 }
 
-/** Keep person-written wishes ahead of seeded samples for public render. */
+/** Person-written first, then seeded samples — all rows still come from the DB. */
+export function sortWishesForPublic<T extends { id: string; source?: string }>(
+  wishes: T[],
+): T[] {
+  return [...wishes].sort((a, b) => {
+    const aSample = isSampleWish(a) ? 1 : 0;
+    const bSample = isSampleWish(b) ? 1 : 0;
+    if (aSample !== bSample) return aSample - bSample;
+    return 0;
+  });
+}
+
+/** @deprecated use sortWishesForPublic — kept so older imports keep compiling */
 export function preferRealWishes<T extends { id: string; source?: string }>(
   wishes: T[],
 ): T[] {
-  const real = wishes.filter((wish) => !isSampleWish(wish));
-  return real.length > 0 ? real : wishes;
+  return sortWishesForPublic(wishes);
 }
 
 /** Convert the seed catalog into approved DB-ready guest message rows. */

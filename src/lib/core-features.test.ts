@@ -875,10 +875,10 @@ describe("stay dates / shorter offers", () => {
 });
 
 describe("public wishes social proof", () => {
-  it("builds DB-ready sample rows and prefers person-written wishes", async () => {
+  it("seeds sample wishes for DB and sorts person-written first", async () => {
     const {
       buildSampleGuestMessages,
-      preferRealWishes,
+      sortWishesForPublic,
       toPublicWishes,
       SAMPLE_WISH_AUTH_UID,
     } = await import("@/data/sample-wishes");
@@ -896,10 +896,10 @@ describe("public wishes social proof", () => {
       ),
     ).toBe(true);
 
-    const onlySamples = preferRealWishes(toPublicWishes(seeded));
+    const onlySamples = sortWishesForPublic(toPublicWishes(seeded));
     expect(onlySamples.every((item) => item.source === "sample")).toBe(true);
 
-    const mixed = preferRealWishes(
+    const mixed = sortWishesForPublic(
       toPublicWishes([
         ...seeded.slice(0, 2),
         {
@@ -913,8 +913,8 @@ describe("public wishes social proof", () => {
         },
       ]),
     );
-    expect(mixed).toHaveLength(1);
     expect(mixed[0]?.id).toBe("real-1");
-    expect(mixed[0]?.source).toBe("guest");
+    expect(mixed.some((item) => item.source === "sample")).toBe(true);
+    expect(mixed).toHaveLength(3);
   });
 });

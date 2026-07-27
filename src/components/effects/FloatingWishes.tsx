@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { preferRealWishes } from "@/data/sample-wishes";
+import { sortWishesForPublic } from "@/data/sample-wishes";
 import { cn } from "@/lib/utils";
 
 type WishItem = { id: string; body: string; name: string; source?: string };
@@ -53,7 +53,7 @@ export function FloatingWishes({
             name: wish.displayName,
             source: wish.source,
           }));
-          setPool(preferRealWishes(mapped));
+          setPool(sortWishesForPublic(mapped));
         },
       )
       .catch(() => undefined);
