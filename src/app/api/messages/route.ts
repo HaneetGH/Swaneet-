@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { preferRealWishes, toPublicWishes } from "@/data/sample-wishes";
+import { buildDisplayWishPool, toPublicWishes } from "@/data/sample-wishes";
 import { notifyOwner } from "@/lib/email";
 import {
   featureSiteFromInviteTier,
@@ -28,9 +28,9 @@ const postSchema = z.object({
 export async function GET() {
   try {
     const messages = await listGuestMessages();
-    // Person-written rows win; seeded samples only when no real wishes yet
+    // Unique DB wishes: real first, samples still included (never hide samples for 1 real)
     return NextResponse.json({
-      messages: preferRealWishes(toPublicWishes(messages)),
+      messages: buildDisplayWishPool(toPublicWishes(messages)),
     });
   } catch (error) {
     console.error("GET /api/messages failed", error);

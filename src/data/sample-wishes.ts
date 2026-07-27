@@ -143,12 +143,69 @@ export function isSampleWish(wish: {
   );
 }
 
-/** Keep person-written wishes ahead of seeded samples for public render. */
-export function preferRealWishes<T extends { id: string; source?: string }>(
+/** Person-written first, then seeded samples — never drop samples just because reals exist. */
+export function sortWishesForPublic<T extends { id: string; source?: string }>(
   wishes: T[],
 ): T[] {
-  const real = wishes.filter((wish) => !isSampleWish(wish));
-  return real.length > 0 ? real : wishes;
+  return [...wishes].sort((a, b) => {
+    const aSample = isSampleWish(a) ? 1 : 0;
+    const bSample = isSampleWish(b) ? 1 : 0;
+    if (aSample !== bSample) return aSample - bSample;
+    return 0;
+  });
+}
+
+/**
+ * Build the public display pool from DB wishes.
+ * - Unique by id + body (stops one review repeating everywhere)
+ * - Real guest wishes first (higher priority), samples still included
+ * - Few reals + many samples → show both
+ * - Many reals (10+) → fill primarily with reals
+ */
+export function buildDisplayWishPool<
+  T extends { id: string; body: string; source?: string },
+>(
+  wishes: T[],
+  options?: { minFill?: number; realFillThreshold?: number },
+): T[] {
+  const minFill = options?.minFill ?? 8;
+  const realFillThreshold = options?.realFillThreshold ?? 10;
+
+  const seenIds = new Set<string>();
+  const seenBodies = new Set<string>();
+  const unique = wishes.filter((wish) => {
+    const bodyKey = wish.body.trim().toLowerCase().replace(/\s+/g, " ");
+    if (seenIds.has(wish.id) || seenBodies.has(bodyKey)) return false;
+    seenIds.add(wish.id);
+    seenBodies.add(bodyKey);
+    return true;
+  });
+
+  const sorted = sortWishesForPublic(unique);
+  const real = sorted.filter((wish) => !isSampleWish(wish));
+  const samples = sorted.filter((wish) => isSampleWish(wish));
+
+  if (real.length >= realFillThreshold) {
+    const pool = [...real];
+    if (pool.length < minFill) {
+      pool.push(...samples.slice(0, minFill - pool.length));
+    }
+    return pool;
+  }
+
+  return [...real, ...samples];
+}
+
+/** @deprecated use buildDisplayWishPool — old helper hid samples once any real existed */
+export function preferRealWishes<T extends { id: string; body?: string; source?: string }>(
+  wishes: T[],
+): T[] {
+  return buildDisplayWishPool(
+    wishes.map((wish) => ({
+      ...wish,
+      body: wish.body || wish.id,
+    })),
+  ) as T[];
 }
 
 /** Convert the seed catalog into approved DB-ready guest message rows. */

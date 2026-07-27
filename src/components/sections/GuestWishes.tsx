@@ -9,7 +9,7 @@ import {
 } from "@/components/rsvp/GuestAuthPanel";
 import { Button } from "@/components/ui/Button";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-import { preferRealWishes } from "@/data/sample-wishes";
+import { buildDisplayWishPool } from "@/data/sample-wishes";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { useInvite } from "@/lib/invite-context";
@@ -99,8 +99,8 @@ export function GuestWishes() {
     }
   }, [displayName, user?.displayName]);
 
-  // Person-written wishes win; samples only when the wall is still empty
-  const displayWishes = useMemo(() => preferRealWishes(wishes), [wishes]);
+  // Unique DB wishes: real first, samples kept so one review never fills the page
+  const displayWishes = useMemo(() => buildDisplayWishPool(wishes), [wishes]);
 
   useEffect(() => {
     if (displayWishes.length <= 1) return;
