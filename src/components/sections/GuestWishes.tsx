@@ -9,7 +9,7 @@ import {
 } from "@/components/rsvp/GuestAuthPanel";
 import { Button } from "@/components/ui/Button";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-import { sortWishesForPublic } from "@/data/sample-wishes";
+import { buildDisplayWishPool } from "@/data/sample-wishes";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { useInvite } from "@/lib/invite-context";
@@ -99,8 +99,8 @@ export function GuestWishes() {
     }
   }, [displayName, user?.displayName]);
 
-  // All wishes come from DB via API; real guest wishes sorted ahead of samples
-  const displayWishes = useMemo(() => sortWishesForPublic(wishes), [wishes]);
+  // DB wishes: real first, samples kept; unique bodies only
+  const displayWishes = useMemo(() => buildDisplayWishPool(wishes), [wishes]);
 
   useEffect(() => {
     if (displayWishes.length <= 1) return;

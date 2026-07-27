@@ -875,10 +875,10 @@ describe("stay dates / shorter offers", () => {
 });
 
 describe("public wishes social proof", () => {
-  it("seeds sample wishes for DB and sorts person-written first", async () => {
+  it("keeps unique real + sample wishes with real priority", async () => {
     const {
       buildSampleGuestMessages,
-      sortWishesForPublic,
+      buildDisplayWishPool,
       toPublicWishes,
       SAMPLE_WISH_AUTH_UID,
     } = await import("@/data/sample-wishes");
@@ -896,25 +896,67 @@ describe("public wishes social proof", () => {
       ),
     ).toBe(true);
 
-    const onlySamples = sortWishesForPublic(toPublicWishes(seeded));
-    expect(onlySamples.every((item) => item.source === "sample")).toBe(true);
+    const twoReal = [
+      {
+        id: "real-1",
+        body: "A real guest wish for the couple to celebrate.",
+        displayName: "Real Guest",
+        authUid: "guest-1",
+        status: "approved" as const,
+        source: "guest" as const,
+        createdAt: "2026-07-20T12:00:00Z",
+      },
+      {
+        id: "real-2",
+        body: "Another real blessing from family and friends.",
+        displayName: "Second Guest",
+        authUid: "guest-2",
+        status: "approved" as const,
+        source: "guest" as const,
+        createdAt: "2026-07-19T12:00:00Z",
+      },
+    ];
 
-    const mixed = sortWishesForPublic(
-      toPublicWishes([
-        ...seeded.slice(0, 2),
-        {
-          id: "real-1",
-          body: "A real guest wish for the couple to celebrate.",
-          displayName: "Real Guest",
-          authUid: "guest-1",
-          status: "approved",
-          source: "guest",
-          createdAt: "2026-07-20T12:00:00Z",
-        },
-      ]),
+    // 2 real + many samples → show both (reals first)
+    const mixed = buildDisplayWishPool(
+      toPublicWishes([...seeded, ...twoReal]),
     );
     expect(mixed[0]?.id).toBe("real-1");
-    expect(mixed.some((item) => item.source === "sample")).toBe(true);
-    expect(mixed).toHaveLength(3);
+    expect(mixed[1]?.id).toBe("real-2");
+    expect(mixed.filter((item) => item.source === "sample").length).toBeGreaterThan(
+      5,
+    );
+
+    // Duplicate body text is removed
+    const withDup = buildDisplayWishPool(
+      toPublicWishes([
+        twoReal[0]!,
+        {
+          ...twoReal[0]!,
+          id: "real-dup",
+          body: "A real guest wish for the couple to celebrate.",
+        },
+        ...seeded.slice(0, 3),
+      ]),
+    );
+    expect(withDup.filter((item) => item.body.includes("real guest wish"))).toHaveLength(
+      1,
+    );
+
+    // 10+ reals → fill primarily with reals
+    const manyReal = Array.from({ length: 10 }, (_, i) => ({
+      id: `real-${i}`,
+      body: `Unique real wish number ${i + 1} for the couple here.`,
+      displayName: `Guest ${i + 1}`,
+      authUid: `guest-${i}`,
+      status: "approved" as const,
+      source: "guest" as const,
+      createdAt: new Date(Date.now() - i * 1000).toISOString(),
+    }));
+    const filled = buildDisplayWishPool(
+      toPublicWishes([...manyReal, ...seeded.slice(0, 2)]),
+    );
+    expect(filled.every((item) => item.source === "guest")).toBe(true);
+    expect(filled).toHaveLength(10);
   });
 });

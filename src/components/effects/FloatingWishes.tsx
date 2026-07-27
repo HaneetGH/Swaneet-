@@ -2,19 +2,19 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { sortWishesForPublic } from "@/data/sample-wishes";
+import { buildDisplayWishPool } from "@/data/sample-wishes";
 import { cn } from "@/lib/utils";
 
 type WishItem = { id: string; body: string; name: string; source?: string };
 
-type Lane = {
+type FloatingSlot = {
   id: string;
-  direction: "ltr" | "rtl";
+  side: "left" | "right";
   top: string;
-  duration: number;
-  /** Mix of flowing lines + light quote tiles */
   style: "line" | "card";
-  wishes: WishItem[];
+  duration: number;
+  delay: number;
+  wish: WishItem;
 };
 
 type FloatingWishesProps = {
@@ -23,9 +23,12 @@ type FloatingWishesProps = {
   className?: string;
 };
 
+const LEFT_TOPS = ["10%", "28%", "46%", "64%", "80%"];
+const RIGHT_TOPS = ["14%", "32%", "50%", "68%", "84%"];
+
 /**
- * Continuous L↔R flow behind the invitation.
- * Wishes always come from the database via `/api/messages` (including seeded samples).
+ * Unique wishes floating on both left and right edges.
+ * Real guest wishes first, samples still included from the DB.
  */
 export function FloatingWishes({
   variant = "hero",
@@ -53,7 +56,7 @@ export function FloatingWishes({
             name: wish.displayName,
             source: wish.source,
           }));
-          setPool(sortWishesForPublic(mapped));
+          setPool(buildDisplayWishPool(mapped));
         },
       )
       .catch(() => undefined);
@@ -62,32 +65,38 @@ export function FloatingWishes({
     };
   }, []);
 
-  const lanes = useMemo<Lane[]>(() => {
+  const slots = useMemo<FloatingSlot[]>(() => {
     if (pool.length === 0) return [];
 
-    const tops =
-      variant === "gate"
-        ? ["7%", "24%", "42%", "60%", "78%"]
-        : ["8%", "26%", "44%", "62%", "80%"];
+    const leftTops = variant === "gate" ? LEFT_TOPS.slice(0, 4) : LEFT_TOPS;
+    const rightTops = variant === "gate" ? RIGHT_TOPS.slice(0, 4) : RIGHT_TOPS;
+    const maxSlots = leftTops.length + rightTops.length;
 
-    return tops.map((top, index) => {
-      const rotated = [
-        ...pool.slice(index * 3),
-        ...pool.slice(0, index * 3),
-      ];
-      const row = [...rotated, ...rotated];
-      return {
-        id: `lane-${index}`,
-        direction: index % 2 === 0 ? ("ltr" as const) : ("rtl" as const),
+    // One unique wish per slot — never repeat the same wish on screen
+    const unique = pool.slice(0, maxSlots);
+    const result: FloatingSlot[] = [];
+
+    unique.forEach((wish, index) => {
+      const onLeft = index % 2 === 0;
+      const sideIndex = Math.floor(index / 2);
+      const tops = onLeft ? leftTops : rightTops;
+      const top = tops[sideIndex % tops.length] || "20%";
+
+      result.push({
+        id: `slot-${wish.id}`,
+        side: onLeft ? "left" : "right",
         top,
-        duration: 52 + index * 7,
-        style: index % 2 === 0 ? ("line" as const) : ("card" as const),
-        wishes: row,
-      };
+        style: index % 3 === 1 ? "card" : "line",
+        duration: 7 + (index % 4) * 1.4,
+        delay: index * 0.35,
+        wish,
+      });
     });
+
+    return result;
   }, [pool, variant]);
 
-  if (lanes.length === 0) return null;
+  if (slots.length === 0) return null;
 
   return (
     <div
@@ -97,58 +106,48 @@ export function FloatingWishes({
         className,
       )}
     >
-      {lanes.map((lane) => (
-        <div
-          key={lane.id}
-          className="absolute inset-x-0 overflow-hidden"
-          style={{ top: lane.top }}
+      {slots.map((slot) => (
+        <motion.div
+          key={slot.id}
+          className={cn(
+            "absolute max-w-[13.5rem] sm:max-w-[16.5rem]",
+            slot.side === "left"
+              ? "left-3 text-left sm:left-6 md:left-10"
+              : "right-3 text-right sm:right-6 md:right-10",
+          )}
+          style={{ top: slot.top }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{
+            opacity: [0.35, 0.85, 0.45],
+            y: [0, -14, 0],
+          }}
+          transition={{
+            duration: slot.duration,
+            delay: slot.delay,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
         >
-          <motion.div
-            className={cn(
-              "flex w-max items-center",
-              lane.style === "line" ? "gap-10 sm:gap-14" : "gap-5 sm:gap-7",
-            )}
-            animate={
-              lane.direction === "ltr"
-                ? { x: ["-50%", "0%"] }
-                : { x: ["0%", "-50%"] }
-            }
-            transition={{
-              duration: lane.duration,
-              ease: "linear",
-              repeat: Infinity,
-            }}
-          >
-            {lane.wishes.map((wish, index) =>
-              lane.style === "line" ? (
-                <p
-                  key={`${lane.id}-${wish.id}-${index}`}
-                  className="shrink-0 whitespace-nowrap font-display text-[13px] text-cream/55 sm:text-[15px]"
-                >
-                  <span className="text-cream/70">“{wish.body}”</span>
-                  <span className="ml-3 font-body text-[9px] uppercase tracking-[0.22em] text-gold/55 sm:text-[10px]">
-                    — {wish.name}
-                  </span>
-                  <span className="ml-10 inline-block text-gold/25" aria-hidden>
-                    ·
-                  </span>
-                </p>
-              ) : (
-                <article
-                  key={`${lane.id}-${wish.id}-${index}`}
-                  className="w-[15rem] shrink-0 border border-gold/20 bg-[#120e16]/35 px-3.5 py-3 backdrop-blur-[1px] sm:w-[17.5rem] sm:px-4 sm:py-3.5"
-                >
-                  <p className="font-display text-[13px] leading-snug text-cream/70 sm:text-[14px]">
-                    “{wish.body}”
-                  </p>
-                  <p className="mt-2 font-body text-[9px] uppercase tracking-[0.2em] text-gold/50 sm:text-[10px]">
-                    — {wish.name}
-                  </p>
-                </article>
-              ),
-            )}
-          </motion.div>
-        </div>
+          {slot.style === "card" ? (
+            <article className="border border-gold/20 bg-[#120e16]/40 px-3.5 py-3 backdrop-blur-[1px]">
+              <p className="font-display text-[13px] leading-snug text-cream/75 sm:text-[14px]">
+                “{slot.wish.body}”
+              </p>
+              <p className="mt-2 font-body text-[9px] uppercase tracking-[0.2em] text-gold/55 sm:text-[10px]">
+                — {slot.wish.name}
+              </p>
+            </article>
+          ) : (
+            <blockquote>
+              <p className="font-display text-[13px] leading-snug text-cream/70 sm:text-[14px]">
+                “{slot.wish.body}”
+              </p>
+              <footer className="mt-2 font-body text-[9px] uppercase tracking-[0.22em] text-gold/50 sm:text-[10px]">
+                — {slot.wish.name}
+              </footer>
+            </blockquote>
+          )}
+        </motion.div>
       ))}
     </div>
   );

@@ -155,7 +155,49 @@ export function sortWishesForPublic<T extends { id: string; source?: string }>(
   });
 }
 
-/** @deprecated use sortWishesForPublic — kept so older imports keep compiling */
+/**
+ * Build the public display pool from DB wishes.
+ * - Always keep unique wishes (by id + body text)
+ * - Real guest wishes come first (higher priority), but samples stay too
+ * - Few reals (e.g. 2) + many samples (e.g. 10) → show both
+ * - Many reals (e.g. 10+) → fill primarily with reals; samples only if still short
+ */
+export function buildDisplayWishPool<
+  T extends { id: string; body: string; source?: string },
+>(
+  wishes: T[],
+  options?: { minFill?: number; realFillThreshold?: number },
+): T[] {
+  const minFill = options?.minFill ?? 8;
+  const realFillThreshold = options?.realFillThreshold ?? 10;
+
+  const seenIds = new Set<string>();
+  const seenBodies = new Set<string>();
+  const unique = wishes.filter((wish) => {
+    const bodyKey = wish.body.trim().toLowerCase().replace(/\s+/g, " ");
+    if (seenIds.has(wish.id) || seenBodies.has(bodyKey)) return false;
+    seenIds.add(wish.id);
+    seenBodies.add(bodyKey);
+    return true;
+  });
+
+  const sorted = sortWishesForPublic(unique);
+  const real = sorted.filter((wish) => !isSampleWish(wish));
+  const samples = sorted.filter((wish) => isSampleWish(wish));
+
+  if (real.length >= realFillThreshold) {
+    const pool = [...real];
+    if (pool.length < minFill) {
+      pool.push(...samples.slice(0, minFill - pool.length));
+    }
+    return pool;
+  }
+
+  // Few person-written wishes: show them first, then all unique samples
+  return [...real, ...samples];
+}
+
+/** @deprecated use sortWishesForPublic / buildDisplayWishPool */
 export function preferRealWishes<T extends { id: string; source?: string }>(
   wishes: T[],
 ): T[] {
