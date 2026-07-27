@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion } from "framer-motion";
 import { Heart } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { wedding } from "@/data/wedding";
@@ -169,12 +169,15 @@ export function RSVP() {
   const [dayAnswers, setDayAnswers] = useState<
     Record<string, "yes" | "no" | "maybe">
   >({});
+  /** True only after the guest clicks Edit — survives effect re-runs on refresh. */
+  const editingRef = useRef(false);
 
   const siteDays = useMemo<RsvpDayOption[]>(
     () => rsvpDaysForSite(site, invite?.events),
     [site, invite?.events],
   );
   const multiDay = siteDays.length > 1;
+  const siteDaysKey = siteDays.map((day) => day.dateKey).join("|");
 
   const {
     register,
@@ -212,11 +215,14 @@ export function RSVP() {
   // Prefill from Google + load prior RSVP/stay for THIS invite site only
   useEffect(() => {
     if (!user) {
+      editingRef.current = false;
       setHasExisting(false);
       setIsEditing(false);
       setSavedSummary(null);
       setSuccess(false);
       setMessage(null);
+      setStaySubmitted(false);
+      setLoadingExisting(false);
       return;
     }
 
@@ -262,21 +268,18 @@ export function RSVP() {
           const overall = data.rsvp.attendance || "yes";
           const guestCount = data.rsvp.guests || 1;
           const displayName = data.rsvp.name || user.displayName || "";
+          setHasExisting(true);
           setSavedSummary({
             attendance: overall,
             guests: guestCount,
             name: displayName,
           });
-          let firstDiscovery = false;
-          setHasExisting((prev) => {
-            firstDiscovery = !prev;
-            return true;
-          });
-          // Returning guests land on thanks — not the full form — until they choose Edit
-          if (firstDiscovery) {
+          setMessage(stableThankYou(overall));
+          setStaySubmitted(Boolean(data.accommodation));
+          // On refresh / re-fetch, stay on thanks unless guest chose Edit
+          if (!editingRef.current) {
             setIsEditing(false);
-            setMessage(stableThankYou(overall));
-            setStaySubmitted(Boolean(data.accommodation));
+            setSuccess(false);
           }
           const answers: Record<string, "yes" | "no" | "maybe"> = {};
           for (const day of siteDays) {
@@ -307,8 +310,10 @@ export function RSVP() {
         } else {
           setHasExisting(false);
           setSavedSummary(null);
-          setIsEditing(true);
           setMessage(null);
+          setStaySubmitted(false);
+          editingRef.current = true;
+          setIsEditing(true);
           if (user.displayName) setValue("name", user.displayName);
           if (data.accommodation) {
             setValue("needsAccommodation", "yes");
@@ -335,7 +340,8 @@ export function RSVP() {
     return () => {
       cancelled = true;
     };
-  }, [user, reset, setValue, site, siteDays]);
+    // siteDaysKey keeps day prefill in sync without depending on array identity
+  }, [user, reset, setValue, site, siteDaysKey, siteDays]);
 
   const needsAccommodation = watch("needsAccommodation");
   const guests = watch("guests");
@@ -378,11 +384,18 @@ export function RSVP() {
     isEditing,
   ]);
 
+  const thanksMessage =
+    message ||
+    (savedSummary ? stableThankYou(savedSummary.attendance) : null);
+
   const showThanks =
-    Boolean(message) &&
-    ((success && !isEditing) || (hasExisting && !isEditing && !loadingExisting));
+    !loadingExisting &&
+    !isEditing &&
+    Boolean(thanksMessage) &&
+    (success || hasExisting);
 
   const openEditor = () => {
+    editingRef.current = true;
     setSuccess(false);
     setIsEditing(true);
     setSubmitError("");
@@ -469,6 +482,7 @@ export function RSVP() {
       setMessage(pickMessage(overall));
       setStaySubmitted(Boolean(payload.accommodation) && data.needsAccommodation === "yes");
       setHasExisting(true);
+      editingRef.current = false;
       setIsEditing(false);
       setSavedSummary({
         attendance: overall,
@@ -507,7 +521,7 @@ export function RSVP() {
         ) : (
         <GlassCard glow>
           <AnimatePresence mode="wait">
-            {showThanks && message ? (
+            {showThanks && thanksMessage ? (
               <motion.div
                 key="success"
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -527,10 +541,10 @@ export function RSVP() {
                   {wedding.hashtag}
                 </p>
                 <h3 className="mt-3 font-script text-4xl text-gold-soft sm:text-5xl">
-                  {message.title}
+                  {thanksMessage.title}
                 </h3>
                 <p className="mt-4 max-w-sm font-body text-sm leading-relaxed text-muted">
-                  {message.body}
+                  {thanksMessage.body}
                 </p>
                 {savedSummary ? (
                   <p className="mt-4 max-w-sm font-body text-sm text-cream">
