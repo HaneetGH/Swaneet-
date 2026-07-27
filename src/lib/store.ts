@@ -509,6 +509,43 @@ export async function getGalleryImageById(
   return store.gallery.find((image) => image.id === id) || null;
 }
 
+/** Guest's own uploads (pending / approved / rejected), newest first. */
+export async function listGuestUploads(
+  uid: string,
+  email?: string,
+): Promise<
+  Array<
+    GalleryImage & {
+      eventName?: string;
+      /** Proxied path — never the raw Blob URL */
+      previewSrc?: string;
+    }
+  >
+> {
+  const store = await readStore();
+  const emailKey = email?.trim().toLowerCase() || "";
+  const eventsById = new Map(store.events.map((event) => [event.id, event.name]));
+
+  return store.gallery
+    .filter(
+      (image) =>
+        image.source === "guest" &&
+        (image.uploadedByUid === uid ||
+          (emailKey &&
+            (image.uploadedByEmail || "").trim().toLowerCase() === emailKey)),
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    .map((image) => ({
+      ...image,
+      src: `/api/gallery/file/${encodeURIComponent(image.id)}`,
+      previewSrc: `/api/gallery/file/${encodeURIComponent(image.id)}`,
+      eventName: eventsById.get(image.eventId),
+    }));
+}
+
 export async function listRsvps(): Promise<RsvpEntry[]> {
   if (hasDatabase()) {
     return listRsvpsFromDb();
