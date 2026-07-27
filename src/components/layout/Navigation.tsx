@@ -41,6 +41,9 @@ export function Navigation() {
           { href: "#family", label: "Family" },
         ];
 
+    if (!ready || enabled("guest_messages")) {
+      base.push({ href: "#wishes", label: "Wishes" });
+    }
     if (!ready || enabled("rsvp")) {
       base.push({ href: "#rsvp", label: "RSVP" });
     }

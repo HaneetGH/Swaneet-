@@ -1,16 +1,20 @@
+import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 import { readStoreFromBlob, writeStoreToBlob } from "@/lib/blob-store";
 import {
   deleteAccommodationFromDb,
+  deleteGuestMessageFromDb,
   deleteRsvpFromDb,
   insertEmailLogToDb,
   listAccommodationsFromDb,
   listEmailLogsFromDb,
+  listGuestMessagesFromDb,
   listRsvpsFromDb,
   readStoreFromDb,
   seedStoreIfEmpty,
   upsertAccommodationToDb,
+  upsertGuestMessageToDb,
   upsertRsvpToDb,
   writeStoreToDb,
 } from "@/lib/db";
@@ -33,6 +37,7 @@ import type {
   GalleryImage,
   GuestActivityAction,
   GuestLogin,
+  GuestMessage,
   GuestProfile,
   ManagedEvent,
   RoomInventory,
@@ -89,6 +94,7 @@ export function defaultStore(): ContentStore {
     emailOtps: {},
     admins: [],
     guestLogins: [],
+    guestMessages: [],
     faceProfiles: [],
     faceImageIndex: [],
     facePeople: [],
@@ -552,6 +558,127 @@ export async function listRsvps(): Promise<RsvpEntry[]> {
   }
   const store = await readStore();
   return store.rsvps;
+}
+
+const MAX_MESSAGES_PER_GUEST = 5;
+
+export async function listGuestMessages(options?: {
+  includePending?: boolean;
+}): Promise<GuestMessage[]> {
+  const messages = hasDatabase()
+    ? await listGuestMessagesFromDb()
+    : (await readStore()).guestMessages || [];
+  const sorted = [...messages].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  if (options?.includePending) return sorted;
+  return sorted.filter((item) => item.status === "approved");
+}
+
+export async function createGuestMessage(input: {
+  body: string;
+  displayName: string;
+  guest: VerifiedGuest;
+  inviteSite?: FeatureSite;
+  inviteSide?: "bride" | "groom";
+  inviteTier?: "mehfil" | "laavan";
+  inviteSlug?: string;
+}): Promise<GuestMessage> {
+  const all = hasDatabase()
+    ? await listGuestMessagesFromDb()
+    : (await readStore()).guestMessages || [];
+  const existingCount = all.filter(
+    (item) =>
+      item.authUid === input.guest.uid && item.status !== "rejected",
+  ).length;
+  if (existingCount >= MAX_MESSAGES_PER_GUEST) {
+    throw new Error(
+      `You can share up to ${MAX_MESSAGES_PER_GUEST} wishes with this account`,
+    );
+  }
+
+  const entry: GuestMessage = {
+    id: randomUUID(),
+    body: input.body.trim(),
+    displayName: input.displayName.trim(),
+    authUid: input.guest.uid,
+    authEmail: input.guest.email,
+    status: "pending",
+    inviteSite: input.inviteSite || "main",
+    inviteSide: input.inviteSide,
+    inviteTier: input.inviteTier,
+    inviteSlug: input.inviteSlug,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (hasDatabase()) {
+    await upsertGuestMessageToDb(entry);
+    return entry;
+  }
+
+  const store = await readStore();
+  store.guestMessages = [entry, ...(store.guestMessages || [])];
+  await writeStore(store);
+  return entry;
+}
+
+export async function moderateGuestMessages(input: {
+  ids: string[];
+  action: "approve" | "reject";
+  moderatedBy?: string;
+}): Promise<GuestMessage[]> {
+  const now = new Date().toISOString();
+  const updated: GuestMessage[] = [];
+
+  if (hasDatabase()) {
+    const all = await listGuestMessagesFromDb();
+    for (const id of input.ids) {
+      const current = all.find((item) => item.id === id);
+      if (!current) continue;
+      const next: GuestMessage = {
+        ...current,
+        status: input.action === "approve" ? "approved" : "rejected",
+        moderatedAt: now,
+        moderatedBy: input.moderatedBy,
+      };
+      await upsertGuestMessageToDb(next);
+      updated.push(next);
+    }
+    return updated;
+  }
+
+  const store = await readStore();
+  const list = [...(store.guestMessages || [])];
+  for (const id of input.ids) {
+    const index = list.findIndex((item) => item.id === id);
+    if (index < 0) continue;
+    const next: GuestMessage = {
+      ...list[index]!,
+      status: input.action === "approve" ? "approved" : "rejected",
+      moderatedAt: now,
+      moderatedBy: input.moderatedBy,
+    };
+    list[index] = next;
+    updated.push(next);
+  }
+  store.guestMessages = list;
+  await writeStore(store);
+  return updated;
+}
+
+export async function deleteGuestMessage(id: string): Promise<boolean> {
+  if (hasDatabase()) {
+    return deleteGuestMessageFromDb(id);
+  }
+  const store = await readStore();
+  const before = store.guestMessages?.length || 0;
+  store.guestMessages = (store.guestMessages || []).filter(
+    (item) => item.id !== id,
+  );
+  if ((store.guestMessages?.length || 0) === before) return false;
+  await writeStore(store);
+  return true;
 }
 
 function matchesGuest(

@@ -45,6 +45,7 @@ const ACTION_LABEL: Record<GuestActivityAction, string> = {
   stay: "Requested stay",
   photos: "Uploaded photos",
   query: "Asked a question",
+  message: "Shared a wish",
 };
 
 const ACTION_ICON: Record<GuestActivityAction, typeof LogIn> = {
@@ -55,6 +56,7 @@ const ACTION_ICON: Record<GuestActivityAction, typeof LogIn> = {
   stay: BedDouble,
   photos: Camera,
   query: MessageSquare,
+  message: MessageSquare,
 };
 
 function formatWhen(value?: string) {

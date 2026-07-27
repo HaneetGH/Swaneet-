@@ -4,6 +4,7 @@ import type {
   AccommodationRequest,
   ContentStore,
   EmailLogEntry,
+  GuestMessage,
   RsvpEntry,
 } from "@/lib/types";
 
@@ -127,6 +128,17 @@ async function runSchemaEnsure() {
         data JSONB NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS guest_messages (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
+    `
+      CREATE INDEX IF NOT EXISTS guest_messages_created_at_idx
+      ON guest_messages (created_at DESC)
     `,
   ];
 
@@ -445,6 +457,50 @@ export async function deleteRsvpFromDb(id: string): Promise<boolean> {
   const db = sql();
   const result = await db.query(
     `DELETE FROM rsvps WHERE id = $1 RETURNING id`,
+    [id],
+  );
+  return asRows(result).length > 0;
+}
+
+export async function listGuestMessagesFromDb(): Promise<GuestMessage[]> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `
+      SELECT data FROM guest_messages
+      ORDER BY created_at DESC
+    `,
+  );
+  return asRows<{ data: unknown }>(result).map((row) =>
+    parseJsonb<GuestMessage>(row.data),
+  );
+}
+
+export async function upsertGuestMessageToDb(
+  entry: GuestMessage,
+): Promise<void> {
+  await ensureDatabase();
+  const db = sql();
+  await db.query(
+    `
+      INSERT INTO guest_messages (id, data, created_at)
+      VALUES ($1, $2::jsonb, $3::timestamptz)
+      ON CONFLICT (id)
+      DO UPDATE SET data = EXCLUDED.data
+    `,
+    [
+      entry.id,
+      JSON.stringify(entry),
+      entry.createdAt || new Date().toISOString(),
+    ],
+  );
+}
+
+export async function deleteGuestMessageFromDb(id: string): Promise<boolean> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `DELETE FROM guest_messages WHERE id = $1 RETURNING id`,
     [id],
   );
   return asRows(result).length > 0;

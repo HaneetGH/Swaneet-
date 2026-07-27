@@ -171,7 +171,8 @@ export type FeatureKey =
   | "gallery"
   | "guest_photos"
   | "stay_banner"
-  | "face_find";
+  | "face_find"
+  | "guest_messages";
 
 export type SiteFeatureFlags = Record<FeatureKey, boolean>;
 
@@ -186,6 +187,7 @@ export type AdminPermission =
   | "faces"
   | "events"
   | "guests"
+  | "messages"
   | "team";
 
 export type AdminMember = {
@@ -206,12 +208,32 @@ export type GuestActivityAction =
   | "rsvp"
   | "gallery_view"
   | "gallery_download"
-  | "query";
+  | "query"
+  | "message";
 
 export type GuestActivityEntry = {
   action: GuestActivityAction;
   at: string;
   detail?: string;
+};
+
+export type GuestMessageStatus = "pending" | "approved" | "rejected";
+
+/** Public guestbook wish / quote for the couple */
+export type GuestMessage = {
+  id: string;
+  body: string;
+  displayName: string;
+  authUid: string;
+  authEmail?: string;
+  status: GuestMessageStatus;
+  inviteSite?: FeatureSite;
+  inviteSide?: "bride" | "groom";
+  inviteTier?: "mehfil" | "laavan";
+  inviteSlug?: string;
+  createdAt: string;
+  moderatedAt?: string;
+  moderatedBy?: string;
 };
 
 /** Gallery items a guest downloaded (newest first) */
@@ -439,6 +461,8 @@ export type ContentStore = {
   faceMergeLogs?: FaceMergeLog[];
   /** Guest “email me when ready” photo requests */
   facePhotoRequests?: FacePhotoRequest[];
+  /** Guest wishes / quotes for the couple (local fallback; Neon uses guest_messages) */
+  guestMessages?: GuestMessage[];
   /** Outbound email attempts (newest first, capped) */
   emailLogs?: EmailLogEntry[];
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */

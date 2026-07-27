@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Heart,
   Images,
   LogOut,
   Mail,
@@ -38,6 +39,7 @@ import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
 import { GuestLoginsManager } from "@/components/dashboard/GuestLoginsManager";
 import { GuestPhotoReview } from "@/components/dashboard/GuestPhotoReview";
+import { GuestWishesReview } from "@/components/dashboard/GuestWishesReview";
 import { RsvpManager } from "@/components/dashboard/RsvpManager";
 import { StorageBanner } from "@/components/dashboard/StorageBanner";
 import { TeamManager } from "@/components/dashboard/TeamManager";
@@ -67,6 +69,7 @@ type Tab =
   | "review"
   | "faces"
   | "guests"
+  | "wishes"
   | "team"
   | "emails"
   | "settings";
@@ -195,6 +198,14 @@ export function DashboardShell({
         id: "guests",
         label: "Guest analytics",
         Icon: UserRound,
+        count: 0,
+      });
+    }
+    if (can(session, "messages")) {
+      peopleItems.push({
+        id: "wishes",
+        label: "Wishes",
+        Icon: Heart,
         count: 0,
       });
     }
@@ -508,6 +519,8 @@ export function DashboardShell({
               <FacesManager />
             ) : activeTab === "guests" ? (
               <GuestLoginsManager />
+            ) : activeTab === "wishes" ? (
+              <GuestWishesReview />
             ) : activeTab === "team" ? (
               <TeamManager />
             ) : activeTab === "emails" ? (

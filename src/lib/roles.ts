@@ -13,6 +13,7 @@ export const ALL_PERMISSIONS: AdminPermission[] = [
   "faces",
   "events",
   "guests",
+  "messages",
   "team",
 ];
 
@@ -24,6 +25,7 @@ export const PERMISSION_LABELS: Record<AdminPermission, string> = {
   faces: "Faces (index, merge, email photo links)",
   events: "Events",
   guests: "Logged-in guests",
+  messages: "Wishes (approve & reject)",
   team: "Manage team (master tools)",
 };
 

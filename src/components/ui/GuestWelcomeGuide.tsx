@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, Heart, ScanFace, X } from "lucide-react";
+import { Camera, Heart, Quote, ScanFace, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -43,6 +43,17 @@ export function GuestWelcomeGuide() {
         title: "RSVP",
         hint: "Say you’re coming — and if you need a stay",
         icon: Heart,
+      });
+    }
+
+    if (!ready || enabled("guest_messages")) {
+      items.push({
+        id: "wishes",
+        href: `${base}#wishes`,
+        eyebrow: "Bless",
+        title: "Leave a wish",
+        hint: "A quote or message for the bride and groom",
+        icon: Quote,
       });
     }
 
@@ -138,7 +149,7 @@ export function GuestWelcomeGuide() {
                 ? "Here’s what you can do"
                 : actions.length === 2
                   ? "Two things you can do"
-                  : "Three things you can do"}
+                  : `${actions.length} things you can do`}
             </h2>
             <p className="mt-2 font-body text-sm leading-relaxed text-muted">
               Use the same Google account for gallery, uploads, and finding your

@@ -6,6 +6,7 @@ import { Events } from "@/components/sections/Events";
 import { Family } from "@/components/sections/Family";
 import { Gallery } from "@/components/sections/Gallery";
 import { GuestPhotoShare } from "@/components/sections/GuestPhotoShare";
+import { GuestWishes } from "@/components/sections/GuestWishes";
 import { Hero } from "@/components/sections/Hero";
 import { RSVP } from "@/components/sections/RSVP";
 import { RsvpStayBanner } from "@/components/sections/RsvpStayBanner";
@@ -58,6 +59,7 @@ export default async function BrideInvitePage({ params }: Params) {
         <Venue />
         <Gallery />
         <Family />
+        <GuestWishes />
         <RSVP />
         <GuestPhotoShare />
         <Footer />

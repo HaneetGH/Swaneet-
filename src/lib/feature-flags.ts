@@ -43,6 +43,11 @@ export const FEATURE_KEYS: Array<{ id: FeatureKey; label: string; hint: string }
       label: "Find my photos (face)",
       hint: "Guests upload a selfie to get a private album of photos of them",
     },
+    {
+      id: "guest_messages",
+      label: "Wishes & quotes",
+      hint: "Guests post messages for the bride and groom",
+    },
   ];
 
 /** Most features on; face find stays off until you enable it. */
@@ -53,6 +58,7 @@ const ALL_ON: SiteFeatureFlags = {
   guest_photos: true,
   stay_banner: true,
   face_find: false,
+  guest_messages: true,
 };
 
 export function defaultFeatureFlags(): FeatureFlags {
@@ -75,6 +81,7 @@ export function normalizeFeatureFlags(
     "guest_photos",
     "stay_banner",
     "face_find",
+    "guest_messages",
   ];
 
   const next = { ...defaults };
