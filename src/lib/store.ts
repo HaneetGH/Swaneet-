@@ -708,28 +708,65 @@ export function computeRoomInventory(
   accommodations: AccommodationRequest[],
   hotels: StayHotel[],
 ): RoomInventory {
-  const countedGroups = new Set<string>();
+  /** One inventory charge per solo stay or shared-room group */
+  const charges: Array<{
+    key: string;
+    hotelId?: string;
+    hotelName?: string;
+    rooms: number;
+  }> = [];
+  const seenGroups = new Set<string>();
 
+  for (const item of accommodations) {
+    if (item.status !== "confirmed") continue;
+    if (typeof item.roomsAssigned !== "number" || item.roomsAssigned <= 0) {
+      continue;
+    }
+    if (item.roomGroupId) {
+      if (item.roomGroupRole === "member") continue;
+      if (seenGroups.has(item.roomGroupId)) continue;
+      seenGroups.add(item.roomGroupId);
+      charges.push({
+        key: item.roomGroupId,
+        hotelId: item.hotelId,
+        hotelName: item.hotelName,
+        rooms: item.roomsAssigned,
+      });
+      continue;
+    }
+    charges.push({
+      key: item.id,
+      hotelId: item.hotelId,
+      hotelName: item.hotelName,
+      rooms: item.roomsAssigned,
+    });
+  }
+
+  const roomsForHotel = (
+    hotel: StayHotel,
+    charge: (typeof charges)[number],
+  ) => {
+    if (charge.hotelId) {
+      return charge.hotelId === hotel.id ? charge.rooms : 0;
+    }
+    if (
+      charge.hotelName &&
+      charge.hotelName.trim().toLowerCase() === hotel.name.trim().toLowerCase()
+    ) {
+      return charge.rooms;
+    }
+    if (hotels.length === 1 && hotels[0]!.id === hotel.id) {
+      return charge.rooms;
+    }
+    return 0;
+  };
+
+  const matched = new Set<string>();
   const hotelRows = hotels.map((hotel) => {
-    const assigned = accommodations.reduce((sum, item) => {
-      if (item.status !== "confirmed") return sum;
-      if (typeof item.roomsAssigned !== "number" || item.roomsAssigned <= 0) {
-        return sum;
-      }
-      // Shared room: only the primary's roomsAssigned counts once
-      if (item.roomGroupId) {
-        if (item.roomGroupRole === "member") return sum;
-        if (countedGroups.has(item.roomGroupId)) return sum;
-        countedGroups.add(item.roomGroupId);
-      }
-      if (item.hotelId) {
-        return item.hotelId === hotel.id ? sum + item.roomsAssigned : sum;
-      }
-      // Legacy assignments without hotelId count against the only hotel
-      if (hotels.length === 1 && hotels[0].id === hotel.id) {
-        return sum + item.roomsAssigned;
-      }
-      return sum;
+    const assigned = charges.reduce((sum, charge) => {
+      const rooms = roomsForHotel(hotel, charge);
+      if (rooms > 0) matched.add(charge.key);
+      return sum + rooms;
     }, 0);
 
     return {
@@ -743,8 +780,14 @@ export function computeRoomInventory(
     };
   });
 
+  const orphanAssigned = charges.reduce(
+    (sum, charge) => (matched.has(charge.key) ? sum : sum + charge.rooms),
+    0,
+  );
+
   const total = hotelRows.reduce((sum, row) => sum + row.totalRooms, 0);
-  const assigned = hotelRows.reduce((sum, row) => sum + row.assigned, 0);
+  const assigned =
+    hotelRows.reduce((sum, row) => sum + row.assigned, 0) + orphanAssigned;
 
   return {
     total,
