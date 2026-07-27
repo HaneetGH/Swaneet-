@@ -21,7 +21,6 @@ import {
 } from "@/lib/db";
 import {
   buildSampleGuestMessages,
-  SAMPLE_WISH_AUTH_UID,
   isSampleWish,
 } from "@/data/sample-wishes";
 import {
@@ -566,7 +565,7 @@ export async function listRsvps(): Promise<RsvpEntry[]> {
   return store.rsvps;
 }
 
-const MAX_MESSAGES_PER_GUEST = 5;
+export const MAX_MESSAGES_PER_GUEST = 10;
 
 /**
  * Write catalog sample wishes into the DB (or local store) as approved rows.
@@ -608,6 +607,21 @@ export async function listGuestMessages(options?: {
   return sorted.filter((item) => item.status === "approved");
 }
 
+/** Wishes written by one signed-in guest (excludes seeded samples). */
+export async function listGuestMessagesByAuthUid(
+  uid: string,
+): Promise<GuestMessage[]> {
+  const messages = hasDatabase()
+    ? await listGuestMessagesFromDb()
+    : (await readStore()).guestMessages || [];
+  return messages
+    .filter((item) => item.authUid === uid && !isSampleWish(item))
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+}
+
 export async function createGuestMessage(input: {
   body: string;
   displayName: string;
@@ -623,7 +637,7 @@ export async function createGuestMessage(input: {
   const existingCount = all.filter(
     (item) =>
       item.authUid === input.guest.uid &&
-      item.authUid !== SAMPLE_WISH_AUTH_UID &&
+      !isSampleWish(item) &&
       item.status !== "rejected",
   ).length;
   if (existingCount >= MAX_MESSAGES_PER_GUEST) {

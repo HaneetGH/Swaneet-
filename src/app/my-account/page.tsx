@@ -6,7 +6,7 @@ import { wedding } from "@/data/wedding";
 
 export const metadata: Metadata = {
   title: `My account | ${wedding.hashtag}`,
-  description: `Your RSVP, stay booking, photo uploads, and questions — ${wedding.hashtag}`,
+  description: `Your RSVP, stay booking, photo uploads, wishes, and questions — ${wedding.hashtag}`,
 };
 
 export default function MyAccountPage() {
