@@ -872,8 +872,8 @@ export function AccommodationManager({
               Who is in which room
             </p>
             <p className="mt-1 font-body text-xs text-muted">
-              Add someone to a room, remove them, swap two guests, or release a
-              solo room back to inventory.
+              Add someone to a room, remove them, swap two guests (emails both
+              their new details), or release a solo room back to inventory.
             </p>
           </div>
           <p className="font-body text-xs text-gold-soft">
@@ -951,7 +951,7 @@ export function AccommodationManager({
                               );
                               if (
                                 !confirm(
-                                  `Swap rooms?\n${from?.name || "Guest"} ↔ ${guest.name}`,
+                                  `Swap rooms and email both guests their new details?\n${from?.name || "Guest"} ↔ ${guest.name}`,
                                 )
                               ) {
                                 return;
