@@ -13,6 +13,7 @@ const bodySchema = z.object({
     "rsvp",
     "stay",
     "photos",
+    "query",
   ]),
   detail: z.string().trim().max(200).optional(),
 });

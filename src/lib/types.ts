@@ -205,7 +205,8 @@ export type GuestActivityAction =
   | "photos"
   | "rsvp"
   | "gallery_view"
-  | "gallery_download";
+  | "gallery_download"
+  | "query";
 
 export type GuestActivityEntry = {
   action: GuestActivityAction;

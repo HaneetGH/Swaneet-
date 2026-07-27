@@ -28,7 +28,8 @@ export function GuestWelcomeGuide() {
 
   const skipPage =
     pathname?.startsWith("/dashboard") ||
-    pathname?.startsWith("/shared-photos");
+    pathname?.startsWith("/shared-photos") ||
+    pathname?.startsWith("/my-account");
 
   const actions = useMemo(() => {
     const base = invite?.basePath || "";

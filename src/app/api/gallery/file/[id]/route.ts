@@ -54,8 +54,31 @@ export async function GET(request: Request, { params }: Params) {
       );
     }
 
-    // Guests (token or bearer) must have gallery enabled for their invite site
-    if (!isAdmin) {
+    // If both bearer and access present, they should match when possible
+    if (!isAdmin && guest && access && guest.uid !== access.uid) {
+      return NextResponse.json({ error: "Invalid access" }, { status: 403 });
+    }
+
+    const image = await getGalleryImageById(id);
+    if (!image) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const emailKey = (value?: string) => value?.trim().toLowerCase() || "";
+    const isOwner =
+      (Boolean(guest) &&
+        (image.uploadedByUid === guest?.uid ||
+          (Boolean(guest?.email) &&
+            emailKey(image.uploadedByEmail) === emailKey(guest?.email)))) ||
+      (Boolean(access?.uid) && image.uploadedByUid === access?.uid);
+
+    // Guests only see approved media, unless it is their own upload
+    if (image.status !== "approved" && !isAdmin && !isOwner) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    // Public gallery browsing requires gallery feature; own uploads always ok
+    if (!isAdmin && !isOwner) {
       const site = access?.site || "main";
       const flags = await getFeatureFlags();
       if (!isFeatureEnabled(flags, site, "gallery")) {
@@ -64,20 +87,6 @@ export async function GET(request: Request, { params }: Params) {
           { status: 403 },
         );
       }
-      // If both bearer and access present, they should match when possible
-      if (guest && access && guest.uid !== access.uid) {
-        return NextResponse.json({ error: "Invalid access" }, { status: 403 });
-      }
-    }
-
-    const image = await getGalleryImageById(id);
-    if (!image) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    // Guests only see approved media; admins can preview pending
-    if (image.status !== "approved" && !isAdmin) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     const contentType = guessContentType(image.src, image.kind);

@@ -24,6 +24,7 @@ const ACTION_LABEL: Record<GuestActivityAction, string> = {
   rsvp: "Submitted RSVP",
   stay: "Requested stay",
   photos: "Uploaded photos",
+  query: "Asked a question",
 };
 
 function formatWhen(value?: string) {

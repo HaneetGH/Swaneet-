@@ -1,6 +1,7 @@
 "use client";
 
-import { LogIn, LogOut } from "lucide-react";
+import { LogIn, LogOut, UserRound } from "lucide-react";
+import Link from "next/link";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { cn } from "@/lib/utils";
 
@@ -46,20 +47,30 @@ export function GuestNavAuth({
             : "",
         )}
       >
-        <div className={cn(isMenu ? "" : "hidden sm:block")}>
-          <p className="font-body text-[10px] uppercase tracking-[0.2em] text-gold/70">
-            Signed in
-          </p>
-          <p
-            className={cn(
-              "truncate font-body text-sm text-cream",
-              isMenu ? "" : "max-w-[8rem]",
-            )}
-            title={user.email || label}
-          >
-            {label}
-          </p>
-        </div>
+        {isMenu ? (
+          <div>
+            <p className="font-body text-[10px] uppercase tracking-[0.2em] text-gold/70">
+              Signed in
+            </p>
+            <p
+              className="truncate font-body text-sm text-cream"
+              title={user.email || label}
+            >
+              {label}
+            </p>
+          </div>
+        ) : null}
+        <Link
+          href="/my-account"
+          onClick={() => onDone?.()}
+          className={cn(
+            "inline-flex items-center justify-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-2.5 font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft transition hover:bg-gold/20 sm:px-4",
+            isMenu ? "w-full py-3.5 text-xs" : "min-h-10",
+          )}
+        >
+          <UserRound size={14} />
+          {isMenu ? "My account" : "Account"}
+        </Link>
         <button
           type="button"
           disabled={busy}
@@ -67,12 +78,12 @@ export function GuestNavAuth({
             void signOut().then(() => onDone?.());
           }}
           className={cn(
-            "inline-flex items-center justify-center gap-2 rounded-full border border-gold/40 bg-[#141018] px-4 py-2.5 font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft shadow-[0_0_0_1px_rgba(196,163,90,0.15)] transition hover:bg-gold/15 disabled:opacity-60",
+            "inline-flex items-center justify-center gap-2 rounded-full border border-gold/40 bg-[#141018] px-3 py-2.5 font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft shadow-[0_0_0_1px_rgba(196,163,90,0.15)] transition hover:bg-gold/15 disabled:opacity-60 sm:px-4",
             isMenu ? "w-full py-3.5 text-xs" : "min-h-10",
           )}
         >
           <LogOut size={14} />
-          {busy ? "Signing out…" : "Log out"}
+          {busy ? "…" : "Log out"}
         </button>
         {error ? (
           <p className="font-body text-[11px] text-rose-200">{error}</p>
