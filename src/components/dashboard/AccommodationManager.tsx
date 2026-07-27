@@ -484,6 +484,57 @@ export function AccommodationManager({
     [occupancy],
   );
 
+  /** Booked rooms grouped by hotel for a clearer board */
+  const occupancyByHotel = useMemo(() => {
+    type HotelGroup = {
+      key: string;
+      hotelId: string;
+      hotelName: string;
+      units: RoomOccupancyUnit[];
+      roomsHeld: number;
+      people: number;
+      guests: number;
+    };
+    const map = new Map<string, HotelGroup>();
+
+    for (const unit of occupancy) {
+      const hotelId = unit.hotelId || "";
+      const hotelName = unit.hotelName?.trim() || "Unassigned hotel";
+      const key = hotelId || `name:${hotelName.toLowerCase()}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.units.push(unit);
+        existing.roomsHeld += unit.roomsHeld || 0;
+        existing.people += unit.people || 0;
+        existing.guests += unit.stays.length;
+      } else {
+        map.set(key, {
+          key,
+          hotelId,
+          hotelName,
+          units: [unit],
+          roomsHeld: unit.roomsHeld || 0,
+          people: unit.people || 0,
+          guests: unit.stays.length,
+        });
+      }
+    }
+
+    const groups = [...map.values()];
+    const hotelOrder = new Map(
+      (inventory.hotels || []).map((hotel, index) => [hotel.id, index]),
+    );
+    groups.sort((a, b) => {
+      const ai = a.hotelId ? hotelOrder.get(a.hotelId) : undefined;
+      const bi = b.hotelId ? hotelOrder.get(b.hotelId) : undefined;
+      if (ai !== undefined && bi !== undefined) return ai - bi;
+      if (ai !== undefined) return -1;
+      if (bi !== undefined) return 1;
+      return a.hotelName.localeCompare(b.hotelName);
+    });
+    return groups;
+  }, [occupancy, inventory.hotels]);
+
   /** Anyone not declined can be added/moved into a room (join auto-leaves prior share). */
   const joinCandidates = useMemo(
     () => items.filter((item) => item.status !== "declined"),
@@ -918,18 +969,17 @@ export function AccommodationManager({
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
-              Who is in which room
+              Booked rooms by hotel
             </p>
             <p className="mt-1 font-body text-xs text-muted">
-              Add someone to a room, remove them, swap two guests (emails both
-              their new details), or release a solo room back to inventory.
+              Each hotel shows who is booked there — add, remove, swap, or
+              release from the room cards.
             </p>
           </div>
           <p className="font-body text-xs text-gold-soft">
-            {occupancyHeld} room{occupancyHeld === 1 ? "" : "s"} assigned
-            {occupancy.length !== occupancyHeld
-              ? ` · ${occupancy.length} group${occupancy.length === 1 ? "" : "s"}`
-              : ""}
+            {occupancyByHotel.length} hotel
+            {occupancyByHotel.length === 1 ? "" : "s"} · {occupancyHeld} room
+            {occupancyHeld === 1 ? "" : "s"} assigned
           </p>
         </div>
 
@@ -939,22 +989,67 @@ export function AccommodationManager({
             shared room below.
           </p>
         ) : (
-          <div className="mt-4 space-y-3">
-            {occupancy.map((unit) => (
+          <div className="mt-4 space-y-5">
+            {occupancyByHotel.map((group) => {
+              const hotelInv = (inventory.hotels || []).find(
+                (hotel) => hotel.id === group.hotelId,
+              );
+              return (
+                <section
+                  key={group.key}
+                  className="overflow-hidden rounded-2xl border border-gold/25 bg-[#0d0b10]"
+                >
+                  <div className="border-b border-gold/15 bg-[#141018] px-4 py-3">
+                    <div className="flex flex-wrap items-end justify-between gap-2">
+                      <div>
+                        <p className="font-body text-[10px] uppercase tracking-[0.22em] text-gold/70">
+                          Hotel
+                        </p>
+                        <h3 className="font-display text-2xl text-cream">
+                          {group.hotelName}
+                        </h3>
+                        {hotelInv?.address ? (
+                          <p className="mt-0.5 font-body text-xs text-muted">
+                            {hotelInv.address}
+                          </p>
+                        ) : null}
+                      </div>
+                      <p className="font-body text-xs text-gold-soft">
+                        {group.roomsHeld} room
+                        {group.roomsHeld === 1 ? "" : "s"} booked ·{" "}
+                        {group.guests} guest
+                        {group.guests === 1 ? "" : "s"} · {group.people} people
+                        {hotelInv
+                          ? ` · ${hotelInv.available} free${
+                              hotelInv.blocked
+                                ? ` · ${hotelInv.blocked} blocked`
+                                : ""
+                            }`
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 p-3">
+                    {group.units.map((unit, unitIndex) => (
               <div
                 key={unit.key}
-                className="rounded-xl border border-gold/15 bg-[#0d0b10] px-3 py-3"
+                className="rounded-xl border border-gold/15 bg-[#141018] px-3 py-3"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-display text-lg text-cream">
-                      {unit.hotelName}
+                      {unit.roomGroupId
+                        ? `Shared room ${unitIndex + 1}`
+                        : `Room ${unitIndex + 1}`}
+                      {unit.roomDetails ? ` · ${unit.roomDetails}` : ""}
                     </p>
                     <p className="font-body text-xs text-muted">
                       {unit.roomsHeld} room{unit.roomsHeld === 1 ? "" : "s"} ·{" "}
-                      {unit.people} people
+                      {unit.people} people ·{" "}
+                      {unit.stays.length} guest
+                      {unit.stays.length === 1 ? "" : "s"}
                       {unit.roomGroupId ? " · shared" : " · solo"}
-                      {unit.roomDetails ? ` · ${unit.roomDetails}` : ""}
                     </p>
                   </div>
                 </div>
@@ -963,7 +1058,7 @@ export function AccommodationManager({
                   {unit.stays.map((guest) => (
                     <li
                       key={guest.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gold/10 bg-[#141018] px-2.5 py-2"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gold/10 bg-[#0d0b10] px-2.5 py-2"
                     >
                       <div>
                         <p className="font-body text-sm text-cream">
@@ -1157,7 +1252,11 @@ export function AccommodationManager({
                   </div>
                 ) : null}
               </div>
-            ))}
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         )}
       </div>
