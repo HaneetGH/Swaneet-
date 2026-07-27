@@ -875,38 +875,46 @@ describe("stay dates / shorter offers", () => {
 });
 
 describe("public wishes social proof", () => {
-  it("puts sample wishes on top when few real ones exist", async () => {
-    const { mergePublicWishes, MIN_PUBLIC_WISH_COUNT } = await import(
-      "@/data/sample-wishes"
-    );
-    const merged = mergePublicWishes([], {
-      now: Date.parse("2026-07-27T12:00:00Z"),
-    });
-    expect(merged.length).toBeGreaterThanOrEqual(6);
-    expect(merged[0]?.id.startsWith("sample-wish-")).toBe(true);
-    expect(merged.every((item) => item.id.startsWith("sample-wish-"))).toBe(
-      true,
-    );
+  it("builds DB-ready sample rows and prefers person-written wishes", async () => {
+    const {
+      buildSampleGuestMessages,
+      preferRealWishes,
+      toPublicWishes,
+      SAMPLE_WISH_AUTH_UID,
+    } = await import("@/data/sample-wishes");
 
-    const mixed = mergePublicWishes([
-      {
-        id: "real-1",
-        body: "A real guest wish for the couple to celebrate.",
-        displayName: "Real Guest",
-        createdAt: "2026-07-20T12:00:00Z",
-      },
-    ]);
-    expect(mixed[0]?.id.startsWith("sample-wish-")).toBe(true);
-    expect(mixed.some((item) => item.id === "real-1")).toBe(true);
+    const seeded = buildSampleGuestMessages(
+      Date.parse("2026-07-27T12:00:00Z"),
+    );
+    expect(seeded.length).toBeGreaterThanOrEqual(10);
+    expect(
+      seeded.every(
+        (item) =>
+          item.status === "approved" &&
+          item.source === "sample" &&
+          item.authUid === SAMPLE_WISH_AUTH_UID,
+      ),
+    ).toBe(true);
 
-    const real = Array.from({ length: MIN_PUBLIC_WISH_COUNT }, (_, i) => ({
-      id: `real-${i}`,
-      body: `Real wish number ${i + 1} for the couple here.`,
-      displayName: `Guest ${i + 1}`,
-      createdAt: new Date(Date.now() - i * 1000).toISOString(),
-    }));
-    const onlyReal = mergePublicWishes(real);
-    expect(onlyReal.every((item) => item.id.startsWith("real-"))).toBe(true);
-    expect(onlyReal).toHaveLength(MIN_PUBLIC_WISH_COUNT);
+    const onlySamples = preferRealWishes(toPublicWishes(seeded));
+    expect(onlySamples.every((item) => item.source === "sample")).toBe(true);
+
+    const mixed = preferRealWishes(
+      toPublicWishes([
+        ...seeded.slice(0, 2),
+        {
+          id: "real-1",
+          body: "A real guest wish for the couple to celebrate.",
+          displayName: "Real Guest",
+          authUid: "guest-1",
+          status: "approved",
+          source: "guest",
+          createdAt: "2026-07-20T12:00:00Z",
+        },
+      ]),
+    );
+    expect(mixed).toHaveLength(1);
+    expect(mixed[0]?.id).toBe("real-1");
+    expect(mixed[0]?.source).toBe("guest");
   });
 });

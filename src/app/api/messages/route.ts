@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { mergePublicWishes } from "@/data/sample-wishes";
+import { preferRealWishes, toPublicWishes } from "@/data/sample-wishes";
 import { notifyOwner } from "@/lib/email";
 import {
   featureSiteFromInviteTier,
@@ -24,18 +24,13 @@ const postSchema = z.object({
   inviteSide: z.enum(["bride", "groom"]).optional(),
 });
 
-/** Public approved wishes, newest first (plus sample fillers while the wall is new). */
+/** Public approved wishes from the database (samples are seeded DB rows too). */
 export async function GET() {
   try {
     const messages = await listGuestMessages();
-    const real = messages.map((item) => ({
-      id: item.id,
-      body: item.body,
-      displayName: item.displayName,
-      createdAt: item.createdAt,
-    }));
+    // Person-written rows win; seeded samples only when no real wishes yet
     return NextResponse.json({
-      messages: mergePublicWishes(real),
+      messages: preferRealWishes(toPublicWishes(messages)),
     });
   } catch (error) {
     console.error("GET /api/messages failed", error);

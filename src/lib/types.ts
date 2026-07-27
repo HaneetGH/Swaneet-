@@ -227,6 +227,8 @@ export type GuestMessage = {
   authUid: string;
   authEmail?: string;
   status: GuestMessageStatus;
+  /** guest = person-written; sample = seeded social-proof wish stored in DB */
+  source?: "guest" | "sample";
   inviteSite?: FeatureSite;
   inviteSide?: "bride" | "groom";
   inviteTier?: "mehfil" | "laavan";

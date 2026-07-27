@@ -496,6 +496,28 @@ export async function upsertGuestMessageToDb(
   );
 }
 
+/** Idempotent insert for seeded sample wishes — never overwrite edited rows. */
+export async function insertGuestMessageIfAbsent(
+  entry: GuestMessage,
+): Promise<boolean> {
+  await ensureDatabase();
+  const db = sql();
+  const result = await db.query(
+    `
+      INSERT INTO guest_messages (id, data, created_at)
+      VALUES ($1, $2::jsonb, $3::timestamptz)
+      ON CONFLICT (id) DO NOTHING
+      RETURNING id
+    `,
+    [
+      entry.id,
+      JSON.stringify(entry),
+      entry.createdAt || new Date().toISOString(),
+    ],
+  );
+  return asRows(result).length > 0;
+}
+
 export async function deleteGuestMessageFromDb(id: string): Promise<boolean> {
   await ensureDatabase();
   const db = sql();

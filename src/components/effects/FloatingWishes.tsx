@@ -1,9 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useMemo } from "react";
-import { SAMPLE_WISHES } from "@/data/sample-wishes";
+import { useEffect, useMemo, useState } from "react";
+import { preferRealWishes } from "@/data/sample-wishes";
 import { cn } from "@/lib/utils";
+
+type WishItem = { id: string; body: string; name: string; source?: string };
 
 type Lane = {
   id: string;
@@ -12,7 +14,7 @@ type Lane = {
   duration: number;
   /** Mix of flowing lines + light quote tiles */
   style: "line" | "card";
-  wishes: Array<{ id: string; body: string; name: string }>;
+  wishes: WishItem[];
 };
 
 type FloatingWishesProps = {
@@ -23,19 +25,45 @@ type FloatingWishesProps = {
 
 /**
  * Continuous L↔R flow behind the invitation.
- * Mix of soft text lines and light quote tiles (no heavy card grid).
- * Center blur on the parent screen makes them readable only outside the blur.
+ * Wishes always come from the database via `/api/messages` (including seeded samples).
  */
 export function FloatingWishes({
   variant = "hero",
   className,
 }: FloatingWishesProps) {
+  const [pool, setPool] = useState<WishItem[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/messages", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then(
+        (data: {
+          messages?: Array<{
+            id: string;
+            body: string;
+            displayName: string;
+            source?: string;
+          }>;
+        } | null) => {
+          if (!active || !data?.messages?.length) return;
+          const mapped = data.messages.map((wish) => ({
+            id: wish.id,
+            body: wish.body,
+            name: wish.displayName,
+            source: wish.source,
+          }));
+          setPool(preferRealWishes(mapped));
+        },
+      )
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const lanes = useMemo<Lane[]>(() => {
-    const pool = SAMPLE_WISHES.map((wish) => ({
-      id: wish.id,
-      body: wish.body,
-      name: wish.displayName,
-    }));
+    if (pool.length === 0) return [];
 
     const tops =
       variant === "gate"
@@ -57,7 +85,9 @@ export function FloatingWishes({
         wishes: row,
       };
     });
-  }, [variant]);
+  }, [pool, variant]);
+
+  if (lanes.length === 0) return null;
 
   return (
     <div

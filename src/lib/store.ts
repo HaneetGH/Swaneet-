@@ -7,6 +7,7 @@ import {
   deleteGuestMessageFromDb,
   deleteRsvpFromDb,
   insertEmailLogToDb,
+  insertGuestMessageIfAbsent,
   listAccommodationsFromDb,
   listEmailLogsFromDb,
   listGuestMessagesFromDb,
@@ -18,6 +19,11 @@ import {
   upsertRsvpToDb,
   writeStoreToDb,
 } from "@/lib/db";
+import {
+  buildSampleGuestMessages,
+  SAMPLE_WISH_AUTH_UID,
+  isSampleWish,
+} from "@/data/sample-wishes";
 import {
   canPersistData,
   hasBlobStorage,
@@ -562,16 +568,42 @@ export async function listRsvps(): Promise<RsvpEntry[]> {
 
 const MAX_MESSAGES_PER_GUEST = 5;
 
+/**
+ * Write catalog sample wishes into the DB (or local store) as approved rows.
+ * Idempotent — safe to call on every public list.
+ */
+export async function seedSampleWishes(): Promise<void> {
+  const samples = buildSampleGuestMessages();
+
+  if (hasDatabase()) {
+    for (const entry of samples) {
+      await insertGuestMessageIfAbsent(entry);
+    }
+    return;
+  }
+
+  const store = await readStore();
+  const existing = new Set((store.guestMessages || []).map((item) => item.id));
+  const missing = samples.filter((item) => !existing.has(item.id));
+  if (missing.length === 0) return;
+  store.guestMessages = [...missing, ...(store.guestMessages || [])];
+  await writeStore(store);
+}
+
 export async function listGuestMessages(options?: {
   includePending?: boolean;
 }): Promise<GuestMessage[]> {
+  await seedSampleWishes();
   const messages = hasDatabase()
     ? await listGuestMessagesFromDb()
     : (await readStore()).guestMessages || [];
-  const sorted = [...messages].sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+  const sorted = [...messages].sort((a, b) => {
+    // Person-written wishes before seeded samples, then newest first
+    const aSample = isSampleWish(a) ? 1 : 0;
+    const bSample = isSampleWish(b) ? 1 : 0;
+    if (aSample !== bSample) return aSample - bSample;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
   if (options?.includePending) return sorted;
   return sorted.filter((item) => item.status === "approved");
 }
@@ -590,7 +622,9 @@ export async function createGuestMessage(input: {
     : (await readStore()).guestMessages || [];
   const existingCount = all.filter(
     (item) =>
-      item.authUid === input.guest.uid && item.status !== "rejected",
+      item.authUid === input.guest.uid &&
+      item.authUid !== SAMPLE_WISH_AUTH_UID &&
+      item.status !== "rejected",
   ).length;
   if (existingCount >= MAX_MESSAGES_PER_GUEST) {
     throw new Error(
@@ -605,6 +639,7 @@ export async function createGuestMessage(input: {
     authUid: input.guest.uid,
     authEmail: input.guest.email,
     status: "pending",
+    source: "guest",
     inviteSite: input.inviteSite || "main",
     inviteSide: input.inviteSide,
     inviteTier: input.inviteTier,

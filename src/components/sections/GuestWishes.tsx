@@ -9,6 +9,7 @@ import {
 } from "@/components/rsvp/GuestAuthPanel";
 import { Button } from "@/components/ui/Button";
 import { SectionHeading } from "@/components/ui/SectionHeading";
+import { preferRealWishes } from "@/data/sample-wishes";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { useInvite } from "@/lib/invite-context";
@@ -98,21 +99,28 @@ export function GuestWishes() {
     }
   }, [displayName, user?.displayName]);
 
+  // Person-written wishes win; samples only when the wall is still empty
+  const displayWishes = useMemo(() => preferRealWishes(wishes), [wishes]);
+
   useEffect(() => {
-    if (wishes.length <= 1) return;
+    if (displayWishes.length <= 1) return;
     const timer = window.setInterval(() => {
-      setFeaturedIndex((current) => (current + 1) % wishes.length);
+      setFeaturedIndex((current) => (current + 1) % displayWishes.length);
     }, 5200);
     return () => window.clearInterval(timer);
-  }, [wishes.length]);
+  }, [displayWishes.length]);
 
-  const featured = wishes[featuredIndex] || wishes[0] || null;
-  const topWishes = wishes.slice(0, 3);
+  const featured =
+    displayWishes[featuredIndex % Math.max(displayWishes.length, 1)] || null;
+  const topWishes = displayWishes.slice(0, 3);
   const marqueeItems = useMemo(() => {
-    if (wishes.length === 0) return [];
-    const base = wishes.length < 4 ? [...wishes, ...wishes, ...wishes] : wishes;
+    if (displayWishes.length === 0) return [];
+    const base =
+      displayWishes.length < 4
+        ? [...displayWishes, ...displayWishes, ...displayWishes]
+        : displayWishes;
     return [...base, ...base];
-  }, [wishes]);
+  }, [displayWishes]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
