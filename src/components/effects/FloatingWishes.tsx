@@ -18,8 +18,8 @@ type WishPoolProps = {
   className?: string;
 };
 
-/** One shared marquee speed for every lane */
-const FLOW_DURATION = 56;
+/** One shared marquee speed for every lane — slow, calm drift */
+const FLOW_DURATION = 96;
 
 /** Instant public fallback — visible without login / API wait */
 const PUBLIC_FALLBACK: WishItem[] = buildDisplayWishPool(
