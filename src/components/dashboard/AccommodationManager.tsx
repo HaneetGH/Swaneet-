@@ -6,8 +6,10 @@ import type {
   AccommodationRequest,
   AccommodationStatus,
   RoomInventory,
+  RoomOccupancyUnit,
   StayHotel,
 } from "@/lib/types";
+import { buildRoomOccupancy } from "@/lib/room-occupancy";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -82,6 +84,8 @@ export function AccommodationManager({
   const [mergeIds, setMergeIds] = useState<string[]>([]);
   const [mergeHotelId, setMergeHotelId] = useState("");
   const [mergeRoomDetails, setMergeRoomDetails] = useState("");
+  const [joinStayId, setJoinStayId] = useState<Record<string, string>>({});
+  const [roomBusyKey, setRoomBusyKey] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
 
   useEffect(() => {
@@ -132,18 +136,25 @@ export function AccommodationManager({
     };
   }, [items]);
 
-  const draftFor = (item: AccommodationRequest): StayDraft => ({
-    status: item.status || "pending",
-    hotelId: item.hotelId || "",
-    hotelName: item.hotelName || "",
-    hotelAddress: item.hotelAddress || "",
-    roomDetails: item.roomDetails || "",
-    adminNotes: item.adminNotes || "",
-    email: item.email || item.authEmail || "",
-    roomsAssigned:
-      typeof item.roomsAssigned === "number" ? item.roomsAssigned : "",
-    ...drafts[item.id],
-  });
+  const draftFor = (item: AccommodationRequest): StayDraft => {
+    const baseRooms =
+      typeof item.roomsAssigned === "number"
+        ? item.roomsAssigned
+        : item.roomGroupRole === "member"
+          ? 0
+          : Math.max(1, item.rooms || 1);
+    return {
+      status: item.status || "pending",
+      hotelId: item.hotelId || "",
+      hotelName: item.hotelName || "",
+      hotelAddress: item.hotelAddress || "",
+      roomDetails: item.roomDetails || "",
+      adminNotes: item.adminNotes || "",
+      email: item.email || item.authEmail || "",
+      roomsAssigned: baseRooms,
+      ...drafts[item.id],
+    };
+  };
 
   const setDraft = (id: string, patch: StayDraft) => {
     setDrafts((prev) => ({
@@ -273,21 +284,43 @@ export function AccommodationManager({
         email: draft.email ?? current.email ?? current.authEmail ?? "",
         sendEmail,
       };
-      // Only assign when hotel + room count are filled — never auto
-      const rawAssign = draft.roomsAssigned;
+
       const hotelId = (draft.hotelId || current.hotelId || "").trim();
-      if (rawAssign !== "" && rawAssign !== undefined && rawAssign !== null) {
-        const roomsAssigned = Number(rawAssign);
-        if (Number.isFinite(roomsAssigned)) {
-          body.roomsAssigned = roomsAssigned;
-          if (roomsAssigned > 0) {
-            if (!hotelId) {
-              setMessage("Select a hotel before assigning rooms.");
-              setSavingId(null);
-              return;
-            }
-            body.hotelId = hotelId;
+      const rawAssign = draft.roomsAssigned;
+      const parsedAssign =
+        rawAssign === "" || rawAssign === undefined || rawAssign === null
+          ? NaN
+          : Number(rawAssign);
+      const isSharedMember =
+        Boolean(current.roomGroupId) && current.roomGroupRole === "member";
+
+      if (status === "confirmed" && !isSharedMember) {
+        if (!hotelId) {
+          setMessage(
+            "To confirm, pick a hotel and set rooms to assign — inventory only updates when rooms are assigned.",
+          );
+          setSavingId(null);
+          return;
+        }
+        const roomsAssigned = Number.isFinite(parsedAssign)
+          ? parsedAssign
+          : Math.max(1, current.rooms || 1);
+        if (roomsAssigned < 1) {
+          setMessage("Rooms to assign must be at least 1 when confirming.");
+          setSavingId(null);
+          return;
+        }
+        body.hotelId = hotelId;
+        body.roomsAssigned = roomsAssigned;
+      } else if (Number.isFinite(parsedAssign)) {
+        body.roomsAssigned = parsedAssign;
+        if (parsedAssign > 0) {
+          if (!hotelId) {
+            setMessage("Select a hotel before assigning rooms.");
+            setSavingId(null);
+            return;
           }
+          body.hotelId = hotelId;
         }
       } else if (hotelId && status === "confirmed") {
         body.hotelId = hotelId;
@@ -394,6 +427,106 @@ export function AccommodationManager({
     return true;
   };
 
+  const occupancy = useMemo<RoomOccupancyUnit[]>(() => {
+    const hotelRows: StayHotel[] = (inventory.hotels || []).map((hotel) => ({
+      id: hotel.id,
+      name: hotel.name,
+      address: hotel.address,
+      totalRooms: hotel.totalRooms,
+      notes: hotel.notes,
+      createdAt: "",
+    }));
+    return buildRoomOccupancy(items, hotelRows);
+  }, [items, inventory.hotels]);
+
+  const joinCandidates = useMemo(
+    () =>
+      items.filter(
+        (item) => item.status !== "declined" && !item.roomGroupId,
+      ),
+    [items],
+  );
+
+  const refreshStays = async () => {
+    try {
+      const res = await fetch("/api/accommodation");
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        accommodations?: AccommodationRequest[];
+        inventory?: RoomInventory;
+      };
+      if (data.accommodations) setItems(data.accommodations);
+      if (data.inventory) {
+        setInventory({
+          ...emptyInventory,
+          ...data.inventory,
+          hotels: data.inventory.hotels || [],
+        });
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const applyInventoryAndStays = (
+    inventoryNext?: RoomInventory,
+    staysNext?: AccommodationRequest[],
+  ) => {
+    if (inventoryNext) {
+      setInventory({
+        ...emptyInventory,
+        ...inventoryNext,
+        hotels: inventoryNext.hotels || [],
+      });
+    }
+    if (staysNext?.length) {
+      setItems((prev) => {
+        const map = new Map(staysNext.map((row) => [row.id, row]));
+        const merged = prev.map((row) => map.get(row.id) || row);
+        for (const row of staysNext) {
+          if (!prev.some((item) => item.id === row.id)) merged.unshift(row);
+        }
+        return merged;
+      });
+    }
+  };
+
+  const roomAction = async (
+    key: string,
+    body: Record<string, unknown>,
+  ) => {
+    setRoomBusyKey(key);
+    setMessage("");
+    try {
+      const res = await fetch("/api/accommodation/rooms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        inventory?: RoomInventory;
+        stays?: AccommodationRequest[];
+        stay?: AccommodationRequest;
+      };
+      if (!res.ok) {
+        setMessage(data.error || "Could not update room");
+        return;
+      }
+      applyInventoryAndStays(
+        data.inventory,
+        data.stays || (data.stay ? [data.stay] : undefined),
+      );
+      await refreshStays();
+      setMessage(data.message || "Room updated.");
+    } catch {
+      setMessage("Could not update room. Please try again.");
+    } finally {
+      setRoomBusyKey(null);
+    }
+  };
+
   const toggleMergeId = (id: string) => {
     setMergeIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
@@ -483,8 +616,8 @@ export function AccommodationManager({
           <h2 className="font-display text-2xl text-cream">Accommodation</h2>
         </div>
         <p className="mt-1 font-body text-sm text-muted">
-          Add hotels with room counts, then when approving a guest pick the
-          hotel and how many rooms to assign.
+          Inventory only drops when you assign rooms (hotel + room count) or a
+          shared room. Use Assigned rooms below to see who is in which room.
         </p>
       </div>
 
@@ -565,7 +698,7 @@ export function AccommodationManager({
           </label>
           <label className="block">
             <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-              Rooms available
+              Total rooms in pool
             </span>
             <input
               type="number"
@@ -612,6 +745,176 @@ export function AccommodationManager({
             ) : null}
           </div>
         </div>
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-gold/20 bg-[#141018] p-4">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
+              Assigned rooms
+            </p>
+            <p className="mt-1 font-body text-xs text-muted">
+              Who has which room — add someone, remove them, or release the
+              assignment (inventory updates).
+            </p>
+          </div>
+          <p className="font-body text-xs text-gold-soft">
+            {occupancy.length} room unit{occupancy.length === 1 ? "" : "s"}
+          </p>
+        </div>
+
+        {occupancy.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-dashed border-gold/20 px-3 py-5 text-center font-body text-sm text-muted">
+            No rooms assigned yet. Confirm a stay with a hotel + rooms, or use
+            Share one room below.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {occupancy.map((unit) => (
+              <div
+                key={unit.key}
+                className="rounded-xl border border-gold/15 bg-[#0d0b10] px-3 py-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-display text-lg text-cream">
+                      {unit.hotelName}
+                    </p>
+                    <p className="font-body text-xs text-muted">
+                      {unit.roomsHeld} room{unit.roomsHeld === 1 ? "" : "s"} ·{" "}
+                      {unit.people} people
+                      {unit.roomGroupId ? " · shared" : " · solo"}
+                      {unit.roomDetails ? ` · ${unit.roomDetails}` : ""}
+                    </p>
+                  </div>
+                </div>
+
+                <ul className="mt-3 space-y-1.5">
+                  {unit.stays.map((guest) => (
+                    <li
+                      key={guest.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gold/10 bg-[#141018] px-2.5 py-2"
+                    >
+                      <div>
+                        <p className="font-body text-sm text-cream">
+                          {guest.name}
+                          <span className="ml-2 text-[10px] uppercase tracking-[0.16em] text-muted">
+                            {guest.role === "primary"
+                              ? "holds inventory"
+                              : guest.role === "solo"
+                                ? "solo"
+                                : "sharing"}
+                          </span>
+                        </p>
+                        <p className="font-body text-[11px] text-muted">
+                          {guest.people} people
+                          {guest.email ? ` · ${guest.email}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {unit.roomGroupId ? (
+                          <button
+                            type="button"
+                            disabled={roomBusyKey === `leave-${guest.id}`}
+                            onClick={() =>
+                              void roomAction(`leave-${guest.id}`, {
+                                action: "leave",
+                                stayId: guest.id,
+                              })
+                            }
+                            className="rounded-full border border-gold/25 px-2.5 py-1 font-body text-[10px] uppercase tracking-[0.12em] text-gold-soft hover:bg-gold/10 disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={roomBusyKey === `release-${guest.id}`}
+                            onClick={() => {
+                              if (
+                                !confirm(
+                                  `Release ${guest.name}'s room assignment? Inventory will go back up.`,
+                                )
+                              ) {
+                                return;
+                              }
+                              void roomAction(`release-${guest.id}`, {
+                                action: "release",
+                                stayId: guest.id,
+                              });
+                            }}
+                            className="rounded-full border border-rose-400/30 px-2.5 py-1 font-body text-[10px] uppercase tracking-[0.12em] text-rose-200 hover:bg-rose-400/10 disabled:opacity-50"
+                          >
+                            Release
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+
+                {unit.roomGroupId || unit.stays[0] ? (
+                  <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-gold/10 pt-3">
+                    <label className="min-w-[12rem] flex-1">
+                      <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+                        Add another person
+                      </span>
+                      <select
+                        className={fieldClass}
+                        value={joinStayId[unit.key] || ""}
+                        onChange={(e) =>
+                          setJoinStayId((prev) => ({
+                            ...prev,
+                            [unit.key]: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Select a stay request…</option>
+                        {joinCandidates
+                          .filter(
+                            (item) =>
+                              !unit.stays.some((guest) => guest.id === item.id),
+                          )
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name} · {item.people} people
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={
+                        !joinStayId[unit.key] ||
+                        roomBusyKey === `join-${unit.key}`
+                      }
+                      onClick={() => {
+                        const stayId = joinStayId[unit.key];
+                        if (!stayId) return;
+                        void roomAction(`join-${unit.key}`, {
+                          action: "join",
+                          stayId,
+                          ...(unit.roomGroupId
+                            ? { roomGroupId: unit.roomGroupId }
+                            : { primaryStayId: unit.stays[0]?.id }),
+                        }).then(() =>
+                          setJoinStayId((prev) => ({
+                            ...prev,
+                            [unit.key]: "",
+                          })),
+                        );
+                      }}
+                    >
+                      <Users size={14} />
+                      Add to room
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
@@ -893,7 +1196,7 @@ export function AccommodationManager({
                       >
                         <option value="pending">Pending</option>
                         <option value="confirmed">
-                          Approved — send hotel details
+                          Confirm &amp; assign rooms (uses inventory)
                         </option>
                         <option value="declined">
                           Declined — cannot arrange
@@ -957,13 +1260,18 @@ export function AccommodationManager({
                         disabled={draft.status !== "confirmed"}
                       />
                       <span className="mt-1 block font-body text-[11px] text-muted">
+                        Required when confirming — this subtracts from hotel
+                        inventory
                         {(inventory.hotels || []).find(
                           (hotel) => hotel.id === draft.hotelId,
                         )
-                          ? `Free at this hotel: ${(inventory.hotels || []).find((hotel) => hotel.id === draft.hotelId)!.available}`
-                          : "Pick a hotel, then enter rooms"}
+                          ? ` · free here: ${(inventory.hotels || []).find((hotel) => hotel.id === draft.hotelId)!.available}`
+                          : ""}
                         {item.status === "confirmed" && item.roomsAssigned
-                          ? ` · currently assigned: ${item.roomsAssigned}`
+                          ? ` · currently holding: ${item.roomsAssigned}`
+                          : ""}
+                        {item.roomGroupRole === "member"
+                          ? " · shared member (inventory held by primary)"
                           : ""}
                         .
                       </span>

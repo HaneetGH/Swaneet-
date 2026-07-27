@@ -108,7 +108,12 @@ export async function PUT(request: Request, { params }: Params) {
     console.error("PUT /api/accommodation failed", error);
     const message =
       error instanceof Error ? error.message : "Could not update request";
-    const status = message.includes("Not enough rooms") ? 409 : 500;
+    const status = message.includes("Not enough rooms") ||
+      message.includes("requires a hotel") ||
+      message.includes("Select a hotel") ||
+      message.includes("Confirming")
+        ? 409
+        : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

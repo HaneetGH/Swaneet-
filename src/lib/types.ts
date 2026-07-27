@@ -128,6 +128,25 @@ export type AccommodationRequest = {
   roomShareWith?: string[];
 };
 
+/** One assigned room unit for the occupancy board */
+export type RoomOccupancyUnit = {
+  key: string;
+  hotelId: string;
+  hotelName: string;
+  roomDetails?: string;
+  roomsHeld: number;
+  people: number;
+  roomGroupId?: string;
+  stays: Array<{
+    id: string;
+    name: string;
+    people: number;
+    role?: "primary" | "member" | "solo";
+    email?: string;
+    phone?: string;
+  }>;
+};
+
 export type EmailOtpEntry = {
   hash: string;
   expiresAt: string;
