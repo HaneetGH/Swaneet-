@@ -2182,13 +2182,31 @@ export async function listGuestProfiles(): Promise<GuestProfile[]> {
     );
     const rsvp = matchedRsvps[0] || null;
     const stay = matchedStays[0] || null;
-    const photoUploads = store.gallery.filter(
-      (image) =>
-        image.source === "guest" &&
-        (image.uploadedByUid === guest.uid ||
-          (guest.email &&
-            emailKey(image.uploadedByEmail) === emailKey(guest.email))),
-    ).length;
+    const matchedUploads = store.gallery
+      .filter(
+        (image) =>
+          image.source === "guest" &&
+          (image.uploadedByUid === guest.uid ||
+            (guest.email &&
+              emailKey(image.uploadedByEmail) === emailKey(guest.email))),
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    const photoUploads = matchedUploads.length;
+    const eventsById = new Map(
+      store.events.map((event) => [event.id, event.name] as const),
+    );
+    const uploadedImages = matchedUploads.slice(0, 24).map((image) => ({
+      id: image.id,
+      src: `/api/gallery/file/${encodeURIComponent(image.id)}`,
+      alt: image.alt,
+      kind: image.kind,
+      status: image.status,
+      createdAt: image.createdAt,
+      eventName: eventsById.get(image.eventId),
+    }));
 
     const inviteFromActivity = (guest.activity || [])
       .map((item) => item.detail)
@@ -2272,6 +2290,7 @@ export async function listGuestProfiles(): Promise<GuestProfile[]> {
       stay: stay ? mapStay(stay) : null,
       stays: matchedStays.map(mapStay),
       photoUploads,
+      uploadedImages,
       downloadedImages,
       inviteSide,
       inviteTier,

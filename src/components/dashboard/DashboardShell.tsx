@@ -193,7 +193,7 @@ export function DashboardShell({
     if (can(session, "guests")) {
       peopleItems.push({
         id: "guests",
-        label: "Guest logins",
+        label: "Guest analytics",
         Icon: UserRound,
         count: 0,
       });
