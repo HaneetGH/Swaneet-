@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { wedding } from "@/data/wedding";
 import { Fireflies } from "@/components/effects/Fireflies";
 import { FloatingLanterns } from "@/components/effects/FloatingLanterns";
+import { FloatingWishes } from "@/components/effects/FloatingWishes";
 import { Petals } from "@/components/effects/Petals";
 import { Sparkles } from "@/components/effects/Sparkles";
 import { MusicToggle } from "@/components/ui/MusicToggle";
@@ -39,8 +40,9 @@ export function Hero() {
       <Petals />
       <Fireflies />
       <Sparkles />
+      <FloatingWishes />
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.55)_70%,rgba(7,6,10,0.92)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.55)_70%,rgba(7,6,10,0.92)_100%)]" />
 
       <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center px-6 pb-16 pt-28 text-center">
         <motion.p
