@@ -7,22 +7,18 @@ import { cn } from "@/lib/utils";
 
 type WishItem = { id: string; body: string; name: string; source?: string };
 
-type FloatingSlot = {
+type WishLane = {
   id: string;
-  side: "left" | "right";
   top: string;
-  wish: WishItem;
+  direction: "ltr" | "rtl";
   duration: number;
-  delay: number;
+  wishes: WishItem[];
 };
 
 type WishPoolProps = {
   variant?: "hero" | "gate";
   className?: string;
 };
-
-const LEFT_TOPS = ["11%", "30%", "49%", "68%", "84%"];
-const RIGHT_TOPS = ["16%", "35%", "54%", "73%", "88%"];
 
 /** Instant public fallback — visible without login / API wait */
 const PUBLIC_FALLBACK: WishItem[] = buildDisplayWishPool(
@@ -72,8 +68,33 @@ function useWishPool() {
   return pool;
 }
 
+function MoonBlur({ sizeClass }: { sizeClass: string }) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute left-1/2 top-[44%] z-[2] -translate-x-1/2 -translate-y-1/2"
+    >
+      {/* Soft moon glow */}
+      <div
+        className={cn(
+          "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold/10 blur-3xl",
+          sizeClass,
+        )}
+      />
+      {/* Circular blur disc — wishes under the moon soften; outside stays readable */}
+      <div
+        className={cn(
+          "relative rounded-full border border-gold/20 bg-[radial-gradient(circle_at_35%_30%,rgba(255,246,216,0.16),rgba(212,175,55,0.08)_38%,rgba(7,6,10,0.35)_68%,rgba(7,6,10,0.55)_100%)] shadow-[0_0_80px_rgba(232,213,163,0.18),inset_0_0_50px_rgba(255,246,216,0.06)] backdrop-blur-md sm:backdrop-blur-lg",
+          sizeClass,
+        )}
+      />
+    </div>
+  );
+}
+
 /**
- * Soft blurred background wishes — atmospheric only, behind the invitation.
+ * Background wishes drift left↔right behind a moon blur circle.
+ * Readable outside the moon; softly blurred as they pass through it.
  */
 export function FloatingWishBackdrop({
   variant = "hero",
@@ -81,31 +102,41 @@ export function FloatingWishBackdrop({
 }: WishPoolProps) {
   const pool = useWishPool();
 
-  const slots = useMemo<FloatingSlot[]>(() => {
+  const lanes = useMemo<WishLane[]>(() => {
     if (pool.length === 0) return [];
-    const leftTops = variant === "gate" ? LEFT_TOPS.slice(0, 4) : LEFT_TOPS;
-    const rightTops = variant === "gate" ? RIGHT_TOPS.slice(0, 4) : RIGHT_TOPS;
-    const maxSlots = leftTops.length + rightTops.length;
-    // Skip the first wish so the spotlight can feature it without doubling immediately
-    const unique = pool.slice(1, 1 + maxSlots);
-    const source = unique.length > 0 ? unique : pool.slice(0, maxSlots);
 
-    return source.map((wish, index) => {
-      const onLeft = index % 2 === 0;
-      const sideIndex = Math.floor(index / 2);
-      const tops = onLeft ? leftTops : rightTops;
+    const tops =
+      variant === "gate"
+        ? ["12%", "32%", "52%", "72%"]
+        : ["10%", "28%", "46%", "64%", "80%"];
+
+    return tops.map((top, index) => {
+      const rotated = [
+        ...pool.slice(index * 2),
+        ...pool.slice(0, index * 2),
+      ];
+      // Enough copies for a seamless marquee without cloning one wish alone
+      const row =
+        rotated.length < 4
+          ? [...rotated, ...rotated, ...rotated, ...rotated]
+          : [...rotated, ...rotated];
+
       return {
-        id: `bg-${wish.id}`,
-        side: (onLeft ? "left" : "right") as "left" | "right",
-        top: tops[sideIndex % tops.length] || "20%",
-        wish,
-        duration: 9 + (index % 4) * 1.3,
-        delay: index * 0.3,
+        id: `lane-${index}`,
+        top,
+        direction: index % 2 === 0 ? ("ltr" as const) : ("rtl" as const),
+        duration: 48 + index * 8,
+        wishes: row,
       };
     });
   }, [pool, variant]);
 
-  if (slots.length === 0) return null;
+  if (lanes.length === 0) return null;
+
+  const moonSize =
+    variant === "gate"
+      ? "h-[min(68vw,22rem)] w-[min(68vw,22rem)] sm:h-[24rem] sm:w-[24rem]"
+      : "h-[min(78vw,26rem)] w-[min(78vw,26rem)] sm:h-[30rem] sm:w-[30rem] md:h-[34rem] md:w-[34rem]";
 
   return (
     <div
@@ -115,38 +146,44 @@ export function FloatingWishBackdrop({
         className,
       )}
     >
-      {/* Soft blur so background wishes stay atmospheric */}
-      <div className="absolute inset-0 scale-[1.01] blur-[2px] sm:blur-[2.5px]">
-        {slots.map((slot) => (
+      {lanes.map((lane) => (
+        <div
+          key={lane.id}
+          className="absolute inset-x-0 overflow-hidden"
+          style={{ top: lane.top }}
+        >
           <motion.div
-            key={slot.id}
-            className={cn(
-              "absolute max-w-[12.5rem] sm:max-w-[15rem]",
-              slot.side === "left"
-                ? "left-2 text-left sm:left-5 md:left-8"
-                : "right-2 text-right sm:right-5 md:right-8",
-            )}
-            style={{ top: slot.top }}
-            animate={{
-              opacity: [0.18, 0.38, 0.22],
-              y: [0, -12, 0],
-            }}
+            className="flex w-max items-center gap-10 sm:gap-14"
+            animate={
+              lane.direction === "ltr"
+                ? { x: ["-50%", "0%"] }
+                : { x: ["0%", "-50%"] }
+            }
             transition={{
-              duration: slot.duration,
-              delay: slot.delay,
+              duration: lane.duration,
+              ease: "linear",
               repeat: Infinity,
-              ease: "easeInOut",
             }}
           >
-            <p className="font-display text-[13px] leading-snug text-cream/70 sm:text-[14px]">
-              “{slot.wish.body}”
-            </p>
-            <p className="mt-2 font-body text-[9px] uppercase tracking-[0.2em] text-gold/45 sm:text-[10px]">
-              — {slot.wish.name}
-            </p>
+            {lane.wishes.map((wish, index) => (
+              <p
+                key={`${lane.id}-${wish.id}-${index}`}
+                className="shrink-0 whitespace-nowrap font-display text-[15px] text-cream/80 sm:text-[16px] md:text-[17px]"
+              >
+                <span>“{wish.body}”</span>
+                <span className="ml-3 font-body text-[10px] uppercase tracking-[0.22em] text-gold/65 sm:text-[11px]">
+                  — {wish.name}
+                </span>
+                <span className="ml-10 inline-block text-gold/30" aria-hidden>
+                  ·
+                </span>
+              </p>
+            ))}
           </motion.div>
-        ))}
-      </div>
+        </div>
+      ))}
+
+      <MoonBlur sizeClass={moonSize} />
     </div>
   );
 }
