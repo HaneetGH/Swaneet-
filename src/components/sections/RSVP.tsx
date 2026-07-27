@@ -1,10 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { User } from "firebase/auth";
 import { AnimatePresence, motion } from "framer-motion";
 import { Heart } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { wedding } from "@/data/wedding";
@@ -18,6 +17,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { useInvite } from "@/lib/invite-context";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import { useGuestAuth } from "@/hooks/useGuestAuth";
 import {
   deriveOverallAttendance,
   rsvpDaysForSite,
@@ -135,19 +135,37 @@ function pickMessage(attendance: FormValues["attendance"]): ThankYouMessage {
   return list[Math.floor(Math.random() * list.length)];
 }
 
+function stableThankYou(
+  attendance: FormValues["attendance"],
+): ThankYouMessage {
+  return thankYouMessages[attendance][0];
+}
+
+function attendanceLabel(attendance: FormValues["attendance"]) {
+  if (attendance === "yes") return "Joyfully attending";
+  if (attendance === "maybe") return "Hopefully attending";
+  return "Unable to attend";
+}
+
 export function RSVP() {
   const invite = useInvite();
   const { enabled, ready, site } = useFeatureFlags();
+  const { user, ready: authReady } = useGuestAuth();
   const rsvpOn = enabled("rsvp");
   const accommodationOn = enabled("accommodation");
-  const [user, setUser] = useState<User | null>(null);
   const [success, setSuccess] = useState(false);
   const [message, setMessage] = useState<ThankYouMessage | null>(null);
   const [staySubmitted, setStaySubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [hasExisting, setHasExisting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [wasUpdate, setWasUpdate] = useState(false);
+  const [savedSummary, setSavedSummary] = useState<{
+    attendance: FormValues["attendance"];
+    guests: number;
+    name: string;
+  } | null>(null);
   const [dayAnswers, setDayAnswers] = useState<
     Record<string, "yes" | "no" | "maybe">
   >({});
@@ -157,10 +175,6 @@ export function RSVP() {
     [site, invite?.events],
   );
   const multiDay = siteDays.length > 1;
-
-  const onAuthed = useCallback((next: User) => {
-    setUser(next);
-  }, []);
 
   const {
     register,
@@ -199,6 +213,10 @@ export function RSVP() {
   useEffect(() => {
     if (!user) {
       setHasExisting(false);
+      setIsEditing(false);
+      setSavedSummary(null);
+      setSuccess(false);
+      setMessage(null);
       return;
     }
 
@@ -241,8 +259,25 @@ export function RSVP() {
         if (cancelled) return;
 
         if (data.rsvp) {
-          setHasExisting(true);
           const overall = data.rsvp.attendance || "yes";
+          const guestCount = data.rsvp.guests || 1;
+          const displayName = data.rsvp.name || user.displayName || "";
+          setSavedSummary({
+            attendance: overall,
+            guests: guestCount,
+            name: displayName,
+          });
+          let firstDiscovery = false;
+          setHasExisting((prev) => {
+            firstDiscovery = !prev;
+            return true;
+          });
+          // Returning guests land on thanks — not the full form — until they choose Edit
+          if (firstDiscovery) {
+            setIsEditing(false);
+            setMessage(stableThankYou(overall));
+            setStaySubmitted(Boolean(data.accommodation));
+          }
           const answers: Record<string, "yes" | "no" | "maybe"> = {};
           for (const day of siteDays) {
             const saved = data.rsvp.dayResponses?.find(
@@ -252,8 +287,8 @@ export function RSVP() {
           }
           setDayAnswers(answers);
           reset({
-            name: data.rsvp.name || user.displayName || "",
-            guests: data.rsvp.guests || 1,
+            name: displayName,
+            guests: guestCount,
             attendance: overall,
             meal: data.rsvp.meal || "no-preference",
             notes: data.rsvp.notes || "",
@@ -269,9 +304,12 @@ export function RSVP() {
             stayCheckOut: data.accommodation?.checkOut || "2026-08-13",
             stayNotes: data.accommodation?.notes || "",
           });
-        } else if (user.displayName) {
-          setHasExisting(Boolean(data.accommodation));
-          setValue("name", user.displayName);
+        } else {
+          setHasExisting(false);
+          setSavedSummary(null);
+          setIsEditing(true);
+          setMessage(null);
+          if (user.displayName) setValue("name", user.displayName);
           if (data.accommodation) {
             setValue("needsAccommodation", "yes");
             setValue("stayPhone", data.accommodation.phone || "");
@@ -311,13 +349,54 @@ export function RSVP() {
   );
   const familyOptions = invite?.invite.rsvpFamilies || wedding.rsvpFamilies;
 
+  const headingSubtitle = useMemo(() => {
+    if (ready && !rsvpOn) {
+      return "RSVP is temporarily closed for this invite.";
+    }
+    if (!authReady || !user) {
+      return invite
+        ? `Sign in with Google, then RSVP. Mehfil & Laavan share your reply for the same days — main wedding site stays separate. Please reply via ${familyList}.`
+        : `Sign in with Google, then RSVP for this invite only. Please reply via ${familyList}.`;
+    }
+    if (hasExisting && !isEditing) {
+      return "Thank you — your reply is saved. You can update it anytime.";
+    }
+    return invite
+      ? `Mehfil & Laavan share your reply for the same days — main wedding site stays separate. Please reply via ${familyList}.`
+      : `RSVP for this invite only. Please reply via ${familyList}.`;
+  }, [
+    ready,
+    rsvpOn,
+    authReady,
+    user,
+    invite,
+    familyList,
+    hasExisting,
+    isEditing,
+  ]);
+
+  const showThanks =
+    Boolean(message) &&
+    ((success && !isEditing) || (hasExisting && !isEditing && !loadingExisting));
+
+  const openEditor = () => {
+    setSuccess(false);
+    setIsEditing(true);
+    setSubmitError("");
+  };
+
+  const handleSignOut = async () => {
+    await signOutGuest();
+    // useGuestAuth clears `user`; local RSVP state resets in the user effect
+  };
+
   const onSubmit = async (data: FormValues) => {
     setSubmitError("");
     try {
       const token = await getGuestIdToken();
       if (!token) {
         setSubmitError("Please sign in with Google again");
-        setUser(null);
+        await signOutGuest();
         return;
       }
 
@@ -380,7 +459,6 @@ export function RSVP() {
         setSubmitError(payload.error || "Could not send your RSVP. Please try again.");
         if (res.status === 401) {
           await signOutGuest();
-          setUser(null);
         }
         return;
       }
@@ -388,6 +466,12 @@ export function RSVP() {
       setMessage(pickMessage(overall));
       setStaySubmitted(Boolean(payload.accommodation) && data.needsAccommodation === "yes");
       setHasExisting(true);
+      setIsEditing(false);
+      setSavedSummary({
+        attendance: overall,
+        guests: data.guests,
+        name: data.name,
+      });
       setSuccess(true);
     } catch {
       setSubmitError("Could not send your RSVP. Please try again.");
@@ -407,13 +491,7 @@ export function RSVP() {
         <SectionHeading
           eyebrow="Kindly reply"
           title="RSVP"
-          subtitle={
-            ready && !rsvpOn
-              ? "RSVP is temporarily closed for this invite."
-              : invite
-                ? `Sign in with Google, then RSVP. Mehfil & Laavan share your reply for the same days — main wedding site stays separate. Please reply via ${familyList}.`
-                : `Sign in with Google, then RSVP for this invite only. Please reply via ${familyList}.`
-          }
+          subtitle={headingSubtitle}
         />
 
         {ready && !rsvpOn ? (
@@ -426,7 +504,7 @@ export function RSVP() {
         ) : (
         <GlassCard glow>
           <AnimatePresence mode="wait">
-            {success && message ? (
+            {showThanks && message ? (
               <motion.div
                 key="success"
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -451,27 +529,55 @@ export function RSVP() {
                 <p className="mt-4 max-w-sm font-body text-sm leading-relaxed text-muted">
                   {message.body}
                 </p>
-                {staySubmitted ? (
-                  <p className="mt-4 max-w-sm font-body text-sm text-gold-soft">
-                    Your stay request was {wasUpdate ? "updated" : "received"} —
-                    the family will confirm by email.
+                {savedSummary ? (
+                  <p className="mt-4 max-w-sm font-body text-sm text-cream">
+                    {savedSummary.name
+                      ? `${savedSummary.name} · `
+                      : ""}
+                    {attendanceLabel(savedSummary.attendance)}
+                    {` · ${savedSummary.guests} guest${
+                      savedSummary.guests === 1 ? "" : "s"
+                    }`}
                   </p>
                 ) : null}
+                {staySubmitted ? (
+                  <p className="mt-4 max-w-sm font-body text-sm text-gold-soft">
+                    Your stay request was{" "}
+                    {success && wasUpdate
+                      ? "updated"
+                      : success
+                        ? "received"
+                        : "noted"}{" "}
+                    — the family will confirm by email.
+                  </p>
+                ) : null}
+                {user ? (
+                  <div className="mt-5 rounded-xl border border-gold/20 bg-[#100e14] px-4 py-3">
+                    <p className="font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                      Signed in
+                    </p>
+                    <p className="mt-1 font-body text-sm text-cream">
+                      {user.email}
+                    </p>
+                    <button
+                      type="button"
+                      className="mt-2 font-body text-xs text-gold-soft"
+                      onClick={() => void handleSignOut()}
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                ) : null}
                 <p className="mt-4 max-w-sm font-body text-xs text-muted">
-                  Need to change something? Sign in with the same Google account
-                  anytime to update your RSVP or stay.
+                  Need to change something? Update your RSVP or stay below.
                 </p>
                 <Button
                   type="button"
                   variant="outline"
                   className="mt-8"
-                  onClick={() => {
-                    setSuccess(false);
-                    setMessage(null);
-                    setStaySubmitted(false);
-                  }}
+                  onClick={openEditor}
                 >
-                  {hasExisting ? "Edit your reply" : "Submit another"}
+                  Edit your reply
                 </Button>
               </motion.div>
             ) : !user ? (
@@ -481,12 +587,30 @@ export function RSVP() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                <GuestAuthPanel
-                  onAuthed={onAuthed}
-                  title="RSVP with Google"
-                  subtitle="Sign in with Gmail to RSVP. Come back anytime with the same account to update your reply or stay request."
-                  ctaLabel="Continue with Google"
-                />
+                {!authReady ? (
+                  <p className="py-8 text-center font-body text-sm text-muted">
+                    Checking your sign-in…
+                  </p>
+                ) : (
+                  <GuestAuthPanel
+                    onAuthed={() => undefined}
+                    title="RSVP with Google"
+                    subtitle="Sign in with Gmail to RSVP. Come back anytime with the same account to update your reply or stay request."
+                    ctaLabel="Continue with Google"
+                  />
+                )}
+              </motion.div>
+            ) : loadingExisting ? (
+              <motion.div
+                key="loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="py-10 text-center"
+              >
+                <p className="font-body text-sm text-muted">
+                  Loading your saved RSVP…
+                </p>
               </motion.div>
             ) : (
               <motion.form
@@ -505,24 +629,19 @@ export function RSVP() {
                   <p className="mt-1 font-body text-sm text-cream">
                     {user.email}
                   </p>
-                  {loadingExisting ? (
-                    <p className="mt-2 font-body text-xs text-muted">
-                      Loading your saved RSVP…
-                    </p>
-                  ) : hasExisting ? (
+                  {hasExisting ? (
                     <p className="mt-2 font-body text-xs text-gold-soft">
-                      We found your earlier reply — edit below and save to
-                      update.
+                      Editing your earlier reply — save to update.
                     </p>
-                  ) : null}
+                  ) : (
+                    <p className="mt-2 font-body text-xs text-muted">
+                      You’re signed in — fill in your RSVP below.
+                    </p>
+                  )}
                   <button
                     type="button"
                     className="mt-2 font-body text-xs text-gold-soft"
-                    onClick={async () => {
-                      await signOutGuest();
-                      setUser(null);
-                      setHasExisting(false);
-                    }}
+                    onClick={() => void handleSignOut()}
                   >
                     Sign out
                   </button>
