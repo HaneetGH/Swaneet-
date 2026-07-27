@@ -17,30 +17,6 @@ const Scene3D = dynamic(
   { ssr: false },
 );
 
-/** Soft center blur so couple names stay primary; edge wishes stay readable */
-function HeroBlurPlane() {
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-0 z-[2]"
-    >
-      {/* Lighter radial blur — keep side wishes sharp enough to read */}
-      <div
-        className="absolute inset-0 backdrop-blur-sm sm:backdrop-blur-md"
-        style={{
-          WebkitMaskImage:
-            "radial-gradient(ellipse 48% 44% at 50% 46%, black 0%, black 28%, transparent 62%)",
-          maskImage:
-            "radial-gradient(ellipse 48% 44% at 50% 46%, black 0%, black 28%, transparent 62%)",
-        }}
-      />
-
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.42)_0%,rgba(7,6,10,0.12)_38%,transparent_64%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.35)_78%,rgba(7,6,10,0.88)_100%)]" />
-    </div>
-  );
-}
-
 export function Hero() {
   const invite = useInvite();
   const brideFirst = Boolean(invite);
@@ -59,10 +35,9 @@ export function Hero() {
       id="hero"
       className="relative flex min-h-[100svh] items-center justify-center overflow-hidden ambient-bg"
     >
-      {/* Picture / atmosphere — lightly blurred so flowing wishes can pop at the edges */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 scale-105 blur-[3px] sm:blur-[4px]"
+        className="pointer-events-none absolute inset-0 z-0"
       >
         <Scene3D />
         <FloatingLanterns />
@@ -71,8 +46,7 @@ export function Hero() {
         <Sparkles />
       </div>
 
-      <FloatingWishes variant="hero" />
-      <HeroBlurPlane />
+      <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.45)_70%,rgba(7,6,10,0.92)_100%)]" />
 
       <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center px-6 pb-16 pt-28 text-center">
         <motion.p
@@ -167,12 +141,21 @@ export function Hero() {
           {wedding.hashtag}
         </motion.p>
 
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.2, duration: 0.7 }}
+          className="w-full"
+        >
+          <FloatingWishes variant="hero" />
+        </motion.div>
+
         <motion.a
           href="#countdown"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.25 }}
-          className="mt-12 font-body text-[11px] uppercase tracking-[0.35em] text-gold/70 transition hover:text-gold"
+          transition={{ delay: 1.35 }}
+          className="mt-10 font-body text-[11px] uppercase tracking-[0.35em] text-gold/70 transition hover:text-gold"
         >
           Scroll to explore
           <span className="mt-3 mx-auto block h-8 w-px bg-gradient-to-b from-gold/60 to-transparent animate-pulse-glow" />

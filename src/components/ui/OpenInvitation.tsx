@@ -2,7 +2,6 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { FloatingWishes } from "@/components/effects/FloatingWishes";
 import { wedding } from "@/data/wedding";
 
 type OpenInvitationProps = {
@@ -95,10 +94,10 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.9, ease: easeLuxury }}
         >
-          {/* Atmosphere behind wishes — softly blurred like the hero picture */}
+          {/* Atmosphere */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 scale-105 blur-[3px]"
+            className="pointer-events-none absolute inset-0"
           >
             <motion.div
               className="absolute left-1/2 top-[30%] h-[26rem] w-[26rem] -translate-x-1/2 rounded-full bg-gold/15 blur-[120px]"
@@ -133,23 +132,7 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
                 }}
               />
             ))}
-          </div>
-
-          <FloatingWishes variant="gate" />
-
-          {/* Center blur — keep seal primary; side wishes stay readable */}
-          <div aria-hidden className="pointer-events-none absolute inset-0 z-[2]">
-            <div
-              className="absolute inset-0 backdrop-blur-sm sm:backdrop-blur-md"
-              style={{
-                WebkitMaskImage:
-                  "radial-gradient(ellipse 46% 42% at 50% 48%, black 0%, black 26%, transparent 60%)",
-                maskImage:
-                  "radial-gradient(ellipse 46% 42% at 50% 48%, black 0%, black 26%, transparent 60%)",
-              }}
-            />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.4)_0%,rgba(7,6,10,0.12)_36%,transparent_62%)]" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.4)_70%,rgba(7,6,10,0.92)_100%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.45)_65%,rgba(7,6,10,0.95)_100%)]" />
           </div>
 
           <motion.div
