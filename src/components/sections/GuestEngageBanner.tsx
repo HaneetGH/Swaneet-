@@ -7,7 +7,7 @@ import { guestActionPath, wishesWritePath } from "@/lib/guest-paths";
 import { useInvite } from "@/lib/invite-context";
 
 /**
- * Guest wish + photo shortcuts (used on dedicated pages / guides — not on invitation home).
+ * Top ATL shortcuts: Wish + photo upload → dedicated pages.
  */
 export function GuestEngageBanner() {
   const invite = useInvite();
