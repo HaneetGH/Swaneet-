@@ -27,12 +27,19 @@ import {
 import { Button } from "@/components/ui/Button";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import { wedding } from "@/data/wedding";
 import { useInvite } from "@/lib/invite-context";
+import {
+  deriveOverallAttendance,
+  rsvpDaysForSite,
+  type RsvpDayOption,
+} from "@/lib/rsvp-days";
 import type {
   AccommodationRequest,
   GalleryStatus,
   GuestFaceProfile,
   GuestMessageStatus,
+  RsvpDayResponse,
   RsvpEntry,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -266,6 +273,23 @@ export function GuestAccountPanel() {
   const [editBody, setEditBody] = useState("");
   const [editBusy, setEditBusy] = useState(false);
   const [removingWishId, setRemovingWishId] = useState<string | null>(null);
+  const [editingRsvp, setEditingRsvp] = useState(false);
+  const [rsvpBusy, setRsvpBusy] = useState(false);
+  const [rsvpError, setRsvpError] = useState("");
+  const [rsvpDone, setRsvpDone] = useState("");
+  const [rsvpName, setRsvpName] = useState("");
+  const [rsvpGuests, setRsvpGuests] = useState(1);
+  const [rsvpAttendance, setRsvpAttendance] = useState<
+    "yes" | "no" | "maybe"
+  >("yes");
+  const [rsvpMeal, setRsvpMeal] = useState<
+    "vegetarian" | "non-vegetarian" | "no-preference"
+  >("no-preference");
+  const [rsvpNotes, setRsvpNotes] = useState("");
+  const [rsvpFamily, setRsvpFamily] = useState("");
+  const [rsvpDayAnswers, setRsvpDayAnswers] = useState<
+    Record<string, "yes" | "no" | "maybe">
+  >({});
 
   const navItems = useMemo<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -517,6 +541,128 @@ export function GuestAccountPanel() {
       setWishError("Could not remove your wish.");
     } finally {
       setRemovingWishId(null);
+    }
+  };
+
+  const siteDays = useMemo<RsvpDayOption[]>(
+    () => rsvpDaysForSite(site, invite?.events),
+    [site, invite?.events],
+  );
+  const multiDayRsvp = siteDays.length > 1;
+  const familyOptions = invite?.invite.rsvpFamilies || wedding.rsvpFamilies;
+
+  const startEditRsvp = (entry?: RsvpEntry | null) => {
+    setRsvpError("");
+    setRsvpDone("");
+    const source = entry || null;
+    setRsvpName(
+      source?.name ||
+        user?.displayName?.trim() ||
+        data?.guest?.name?.trim() ||
+        "",
+    );
+    setRsvpGuests(source?.guests || 1);
+    setRsvpAttendance(source?.attendance || "yes");
+    setRsvpMeal(source?.meal || "no-preference");
+    setRsvpNotes(source?.notes || "");
+    setRsvpFamily(source?.contactFamily || "");
+    const answers: Record<string, "yes" | "no" | "maybe"> = {};
+    for (const day of siteDays) {
+      const saved = source?.dayResponses?.find((d) => d.dateKey === day.dateKey);
+      answers[day.dateKey] = saved?.attendance || source?.attendance || "yes";
+    }
+    setRsvpDayAnswers(answers);
+    setEditingRsvp(true);
+  };
+
+  const cancelEditRsvp = () => {
+    setEditingRsvp(false);
+    setRsvpBusy(false);
+    setRsvpError("");
+  };
+
+  const saveRsvp = async (event: FormEvent) => {
+    event.preventDefault();
+    setRsvpBusy(true);
+    setRsvpError("");
+    setRsvpDone("");
+    try {
+      const token = await getGuestIdToken();
+      if (!token) {
+        setRsvpError("Please sign in again.");
+        return;
+      }
+
+      const dayResponses: RsvpDayResponse[] = multiDayRsvp
+        ? siteDays.map((day) => ({
+            dateKey: day.dateKey,
+            date: day.date,
+            label: day.label,
+            attendance: rsvpDayAnswers[day.dateKey] || "yes",
+          }))
+        : siteDays.map((day) => ({
+            dateKey: day.dateKey,
+            date: day.date,
+            label: day.label,
+            attendance: rsvpAttendance,
+          }));
+
+      const overall = multiDayRsvp
+        ? deriveOverallAttendance(dayResponses)
+        : rsvpAttendance;
+
+      const existing = data?.rsvp || null;
+      const stay = data?.accommodation || null;
+      const needsAccommodation = Boolean(
+        existing?.needsAccommodation || stay,
+      );
+
+      const res = await fetch("/api/rsvp", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: rsvpName,
+          guests: rsvpGuests,
+          attendance: overall,
+          meal: rsvpMeal,
+          notes: rsvpNotes || undefined,
+          contactFamily: rsvpFamily || undefined,
+          needsAccommodation,
+          inviteSite: site,
+          inviteSide: invite ? "bride" : undefined,
+          inviteTier: invite?.tier,
+          inviteSlug: invite?.slug,
+          dayResponses,
+          stay:
+            stay
+              ? {
+                  phone: stay.phone,
+                  people: stay.people,
+                  rooms: stay.rooms,
+                  checkIn: stay.checkIn,
+                  checkOut: stay.checkOut,
+                  notes: stay.notes,
+                }
+              : undefined,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setRsvpError(json.error || "Could not save your RSVP.");
+        return;
+      }
+      setEditingRsvp(false);
+      setRsvpDone(
+        existing ? "RSVP updated." : "RSVP saved — thank you.",
+      );
+      await load();
+    } catch {
+      setRsvpError("Could not save your RSVP.");
+    } finally {
+      setRsvpBusy(false);
     }
   };
 
@@ -845,23 +991,254 @@ export function GuestAccountPanel() {
               {activeTab === "rsvp" ? (
                 <Panel
                   title="RSVP"
-                  subtitle="Your attendance reply for this celebration."
+                  subtitle="Your attendance reply for this celebration. Edit anytime from here."
                   action={
-                    flagsReady && enabled("rsvp") ? (
-                      <Link
-                        href={rsvpHref}
+                    flagsReady && enabled("rsvp") && !editingRsvp ? (
+                      <button
+                        type="button"
+                        onClick={() => startEditRsvp(rsvp)}
                         className="font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft transition hover:text-gold"
                       >
-                        {rsvp ? "Update RSVP" : "Send RSVP"}
-                      </Link>
+                        {rsvp ? "Edit RSVP" : "Send RSVP"}
+                      </button>
                     ) : null
                   }
                 >
                   <div className="rounded-2xl border border-gold/20 bg-white/[0.03] px-5 py-6">
-                    {!rsvp ? (
-                      <p className="font-body text-sm text-muted">
-                        No RSVP submitted yet with this Google account.
+                    {rsvpDone ? (
+                      <p className="mb-4 font-body text-sm text-emerald-200">
+                        {rsvpDone}
                       </p>
+                    ) : null}
+                    {rsvpError ? (
+                      <p className="mb-4 font-body text-sm text-rose-200">
+                        {rsvpError}
+                      </p>
+                    ) : null}
+
+                    {editingRsvp ? (
+                      <form onSubmit={saveRsvp} className="space-y-4">
+                        <p className="font-body text-[11px] uppercase tracking-[0.22em] text-gold-soft">
+                          {rsvp ? "Edit your RSVP" : "Send your RSVP"}
+                        </p>
+                        <label className="block">
+                          <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                            Full name
+                          </span>
+                          <input
+                            className={cn(fieldClass, "mt-2")}
+                            value={rsvpName}
+                            onChange={(event) => setRsvpName(event.target.value)}
+                            required
+                            minLength={2}
+                          />
+                        </label>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                              Number of guests
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={20}
+                              className={cn(fieldClass, "mt-2")}
+                              value={rsvpGuests}
+                              onChange={(event) =>
+                                setRsvpGuests(Number(event.target.value) || 1)
+                              }
+                              required
+                            />
+                          </label>
+                          {!multiDayRsvp ? (
+                            <label className="block">
+                              <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                                Attendance
+                                {siteDays[0] ? (
+                                  <span className="normal-case tracking-normal text-muted/80">
+                                    {" "}
+                                    · {siteDays[0].date}
+                                  </span>
+                                ) : null}
+                              </span>
+                              <select
+                                className={cn(fieldClass, "mt-2 appearance-none")}
+                                value={rsvpAttendance}
+                                onChange={(event) =>
+                                  setRsvpAttendance(
+                                    event.target.value as "yes" | "no" | "maybe",
+                                  )
+                                }
+                              >
+                                <option value="yes">Joyfully attending</option>
+                                <option value="maybe">Hopefully attending</option>
+                                <option value="no">Unable to attend</option>
+                              </select>
+                            </label>
+                          ) : null}
+                        </div>
+
+                        {multiDayRsvp ? (
+                          <div className="space-y-3 rounded-xl border border-gold/20 bg-[#120f16] p-4">
+                            <p className="font-body text-[10px] uppercase tracking-[0.2em] text-gold/70">
+                              Days
+                            </p>
+                            {siteDays.map((day) => (
+                              <div
+                                key={day.dateKey}
+                                className="grid gap-2 border-t border-gold/10 pt-3 first:border-t-0 first:pt-0 sm:grid-cols-[1fr_auto] sm:items-center"
+                              >
+                                <div>
+                                  <p className="font-body text-sm text-cream">
+                                    {day.date}
+                                    {day.label ? (
+                                      <span className="text-muted">
+                                        {" "}
+                                        · {day.label}
+                                      </span>
+                                    ) : null}
+                                  </p>
+                                  <p className="mt-0.5 font-body text-xs text-muted">
+                                    {day.eventNames.join(" · ")}
+                                  </p>
+                                </div>
+                                <select
+                                  className={cn(
+                                    fieldClass,
+                                    "appearance-none sm:min-w-[12rem]",
+                                  )}
+                                  value={rsvpDayAnswers[day.dateKey] || "yes"}
+                                  onChange={(event) => {
+                                    const value = event.target.value as
+                                      | "yes"
+                                      | "no"
+                                      | "maybe";
+                                    setRsvpDayAnswers((prev) => ({
+                                      ...prev,
+                                      [day.dateKey]: value,
+                                    }));
+                                  }}
+                                  aria-label={`Attendance for ${day.date}`}
+                                >
+                                  <option value="yes">Joyfully attending</option>
+                                  <option value="maybe">
+                                    Hopefully attending
+                                  </option>
+                                  <option value="no">Unable to attend</option>
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        <label className="block">
+                          <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                            Meal preference
+                          </span>
+                          <select
+                            className={cn(fieldClass, "mt-2 appearance-none")}
+                            value={rsvpMeal}
+                            onChange={(event) =>
+                              setRsvpMeal(
+                                event.target.value as
+                                  | "vegetarian"
+                                  | "non-vegetarian"
+                                  | "no-preference",
+                              )
+                            }
+                          >
+                            <option value="no-preference">No preference</option>
+                            <option value="vegetarian">Vegetarian</option>
+                            <option value="non-vegetarian">Non-vegetarian</option>
+                          </select>
+                        </label>
+
+                        <label className="block">
+                          <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                            RSVP via
+                          </span>
+                          <select
+                            className={cn(fieldClass, "mt-2 appearance-none")}
+                            value={rsvpFamily}
+                            onChange={(event) =>
+                              setRsvpFamily(event.target.value)
+                            }
+                          >
+                            <option value="">Select a family</option>
+                            {familyOptions.map((family) => (
+                              <option key={family.name} value={family.name}>
+                                {family.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="block">
+                          <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                            Message for the couple (optional)
+                          </span>
+                          <textarea
+                            className={cn(fieldClass, "mt-2 min-h-24 resize-y")}
+                            value={rsvpNotes}
+                            onChange={(event) =>
+                              setRsvpNotes(event.target.value)
+                            }
+                            maxLength={500}
+                            placeholder="Blessings or a short note"
+                          />
+                        </label>
+
+                        {data?.accommodation ? (
+                          <p className="font-body text-xs text-muted">
+                            Stay booking stays as-is — manage hotel details in{" "}
+                            <button
+                              type="button"
+                              className="text-gold-soft underline-offset-2 hover:underline"
+                              onClick={() => {
+                                cancelEditRsvp();
+                                setTab("booking");
+                              }}
+                            >
+                              Stay booking
+                            </button>
+                            .
+                          </p>
+                        ) : null}
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Button type="submit" disabled={rsvpBusy}>
+                            {rsvpBusy
+                              ? "Saving…"
+                              : rsvp
+                                ? "Save RSVP"
+                                : "Send RSVP"}
+                          </Button>
+                          <button
+                            type="button"
+                            className="font-body text-xs uppercase tracking-[0.18em] text-muted transition hover:text-cream"
+                            onClick={cancelEditRsvp}
+                            disabled={rsvpBusy}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    ) : !rsvp ? (
+                      <div>
+                        <p className="font-body text-sm text-muted">
+                          No RSVP submitted yet with this Google account.
+                        </p>
+                        {flagsReady && enabled("rsvp") ? (
+                          <button
+                            type="button"
+                            onClick={() => startEditRsvp(null)}
+                            className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-gold/30 px-3 py-1.5 font-body text-[11px] uppercase tracking-[0.16em] text-gold-soft transition hover:border-gold/50 hover:bg-gold/10"
+                          >
+                            <Pencil size={12} />
+                            Send RSVP
+                          </button>
+                        ) : null}
+                      </div>
                     ) : (
                       <>
                         <div className="flex flex-wrap items-center gap-3">
@@ -880,6 +1257,14 @@ export function GuestAccountPanel() {
                             {rsvp.meal ? ` · ${rsvp.meal}` : ""}
                           </p>
                         </div>
+                        {rsvp.name ? (
+                          <p className="mt-3 font-body text-sm text-cream">
+                            {rsvp.name}
+                            {rsvp.contactFamily
+                              ? ` · via ${rsvp.contactFamily}`
+                              : ""}
+                          </p>
+                        ) : null}
                         {rsvp.dayResponses && rsvp.dayResponses.length > 0 ? (
                           <ul className="mt-5 space-y-2">
                             {rsvp.dayResponses.map((day) => (
@@ -894,6 +1279,29 @@ export function GuestAccountPanel() {
                               </li>
                             ))}
                           </ul>
+                        ) : null}
+                        {rsvp.notes ? (
+                          <p className="mt-4 font-body text-sm leading-relaxed text-muted">
+                            “{rsvp.notes}”
+                          </p>
+                        ) : null}
+                        {flagsReady && enabled("rsvp") ? (
+                          <div className="mt-5 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => startEditRsvp(rsvp)}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 px-3 py-1.5 font-body text-[11px] uppercase tracking-[0.16em] text-gold-soft transition hover:border-gold/50 hover:bg-gold/10"
+                            >
+                              <Pencil size={12} />
+                              Edit RSVP
+                            </button>
+                            <Link
+                              href={rsvpHref}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-gold/20 px-3 py-1.5 font-body text-[11px] uppercase tracking-[0.16em] text-muted transition hover:border-gold/40 hover:text-cream"
+                            >
+                              Open full RSVP page
+                            </Link>
+                          </div>
                         ) : null}
                       </>
                     )}
