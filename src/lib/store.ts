@@ -730,6 +730,74 @@ export async function deleteGuestMessage(id: string): Promise<boolean> {
   return true;
 }
 
+async function findGuestMessageById(id: string): Promise<GuestMessage | null> {
+  const messages = hasDatabase()
+    ? await listGuestMessagesFromDb()
+    : (await readStore()).guestMessages || [];
+  return messages.find((item) => item.id === id) || null;
+}
+
+/** Guest edits their own wish — returns to pending for family review. */
+export async function updateGuestMessageForGuest(input: {
+  id: string;
+  guest: VerifiedGuest;
+  body: string;
+  displayName: string;
+}): Promise<GuestMessage> {
+  const current = await findGuestMessageById(input.id);
+  if (!current || isSampleWish(current)) {
+    const error = new Error("Wish not found");
+    (error as Error & { status?: number }).status = 404;
+    throw error;
+  }
+  if (current.authUid !== input.guest.uid) {
+    const error = new Error("You can only edit your own wishes");
+    (error as Error & { status?: number }).status = 403;
+    throw error;
+  }
+
+  const { moderatedAt: _moderatedAt, moderatedBy: _moderatedBy, ...rest } =
+    current;
+  const next: GuestMessage = {
+    ...rest,
+    body: input.body.trim(),
+    displayName: input.displayName.trim(),
+    authEmail: input.guest.email || current.authEmail,
+    status: "pending",
+  };
+
+  if (hasDatabase()) {
+    await upsertGuestMessageToDb(next);
+    return next;
+  }
+
+  const store = await readStore();
+  store.guestMessages = (store.guestMessages || []).map((item) =>
+    item.id === next.id ? next : item,
+  );
+  await writeStore(store);
+  return next;
+}
+
+/** Guest deletes their own wish. */
+export async function deleteGuestMessageForGuest(input: {
+  id: string;
+  guest: VerifiedGuest;
+}): Promise<boolean> {
+  const current = await findGuestMessageById(input.id);
+  if (!current || isSampleWish(current)) {
+    const error = new Error("Wish not found");
+    (error as Error & { status?: number }).status = 404;
+    throw error;
+  }
+  if (current.authUid !== input.guest.uid) {
+    const error = new Error("You can only remove your own wishes");
+    (error as Error & { status?: number }).status = 403;
+    throw error;
+  }
+  return deleteGuestMessage(input.id);
+}
+
 function matchesGuest(
   entry: { authUid?: string; authEmail?: string; email?: string },
   uid: string,
