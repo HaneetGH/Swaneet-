@@ -875,15 +875,29 @@ describe("stay dates / shorter offers", () => {
 });
 
 describe("public wishes social proof", () => {
-  it("fills the wall with sample wishes when few real ones exist", async () => {
+  it("puts sample wishes on top when few real ones exist", async () => {
     const { mergePublicWishes, MIN_PUBLIC_WISH_COUNT } = await import(
       "@/data/sample-wishes"
     );
-    const merged = mergePublicWishes([], { now: Date.parse("2026-07-27T12:00:00Z") });
-    expect(merged.length).toBeGreaterThanOrEqual(4);
+    const merged = mergePublicWishes([], {
+      now: Date.parse("2026-07-27T12:00:00Z"),
+    });
+    expect(merged.length).toBeGreaterThanOrEqual(6);
+    expect(merged[0]?.id.startsWith("sample-wish-")).toBe(true);
     expect(merged.every((item) => item.id.startsWith("sample-wish-"))).toBe(
       true,
     );
+
+    const mixed = mergePublicWishes([
+      {
+        id: "real-1",
+        body: "A real guest wish for the couple to celebrate.",
+        displayName: "Real Guest",
+        createdAt: "2026-07-20T12:00:00Z",
+      },
+    ]);
+    expect(mixed[0]?.id.startsWith("sample-wish-")).toBe(true);
+    expect(mixed.some((item) => item.id === "real-1")).toBe(true);
 
     const real = Array.from({ length: MIN_PUBLIC_WISH_COUNT }, (_, i) => ({
       id: `real-${i}`,
