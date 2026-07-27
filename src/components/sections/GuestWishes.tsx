@@ -269,8 +269,9 @@ export function GuestWishes() {
             </p>
           </div>
           <p className="mt-2 font-body text-sm text-muted">
-            Join the wall above — add your blessing for Haneet and Swarandeep.
-            Sign in with Google; the family reviews each wish before it appears.
+            Anyone can read the wishes above. To add yours for Haneet and
+            Swarandeep, sign in with Google — the family reviews each post before
+            it appears on the wall.
           </p>
 
           {!authReady ? (
