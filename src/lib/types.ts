@@ -374,6 +374,16 @@ export type GuestProfile = GuestLogin & {
     kind: GalleryImage["kind"];
     at: string;
   }>;
+  /** Photos this guest uploaded (newest first) */
+  uploadedImages?: Array<{
+    id: string;
+    src: string;
+    alt: string;
+    kind: GalleryImage["kind"];
+    status: GalleryStatus;
+    createdAt: string;
+    eventName?: string;
+  }>;
 };
 
 export type EmailKind =
