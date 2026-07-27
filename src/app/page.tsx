@@ -12,6 +12,7 @@ import { DownloadPhotosBanner } from "@/components/sections/DownloadPhotosBanner
 import { RsvpStayBanner } from "@/components/sections/RsvpStayBanner";
 import { Family } from "@/components/sections/Family";
 import { RSVP } from "@/components/sections/RSVP";
+import { GuestWelcomeGuide } from "@/components/ui/GuestWelcomeGuide";
 
 export default function Home() {
   return (
@@ -30,6 +31,7 @@ export default function Home() {
       <RSVP />
       <GuestPhotoShare />
       <Footer />
+      <GuestWelcomeGuide />
     </main>
   );
 }

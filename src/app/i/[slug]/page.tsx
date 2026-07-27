@@ -12,6 +12,7 @@ import { RsvpStayBanner } from "@/components/sections/RsvpStayBanner";
 import { SharePhotosBanner } from "@/components/sections/SharePhotosBanner";
 import { DownloadPhotosBanner } from "@/components/sections/DownloadPhotosBanner";
 import { Venue } from "@/components/sections/Venue";
+import { GuestWelcomeGuide } from "@/components/ui/GuestWelcomeGuide";
 import { getBrideInvite } from "@/data/bride-invites";
 import { InviteProvider } from "@/lib/invite-context";
 import { wedding } from "@/data/wedding";
@@ -60,6 +61,7 @@ export default async function BrideInvitePage({ params }: Params) {
         <RSVP />
         <GuestPhotoShare />
         <Footer />
+        <GuestWelcomeGuide />
       </main>
     </InviteProvider>
   );

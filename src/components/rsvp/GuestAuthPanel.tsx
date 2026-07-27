@@ -21,6 +21,8 @@ type GuestAuthPanelProps = {
   title?: string;
   subtitle?: string;
   ctaLabel?: string;
+  /** Extra line under the CTA about one Google account across features */
+  accountHint?: boolean;
 };
 
 export function GuestAuthPanel({
@@ -28,6 +30,7 @@ export function GuestAuthPanel({
   title = "Request accommodation",
   subtitle = "Sign in with Google to share stay details. We’ll use your email for confirmation.",
   ctaLabel = "Continue with Google",
+  accountHint = true,
 }: GuestAuthPanelProps) {
   const invite = useInvite();
   const [configured] = useState(() => isFirebaseClientConfigured());
@@ -94,6 +97,13 @@ export function GuestAuthPanel({
           {busy ? "Opening Google…" : ctaLabel}
         </Button>
       </div>
+
+      {accountHint ? (
+        <p className="mt-3 font-body text-[11px] leading-relaxed text-muted/90">
+          One Google account works for RSVP, gallery, uploads, and finding your
+          photos.
+        </p>
+      ) : null}
 
       {error ? <p className="mt-3 text-xs text-red-300">{error}</p> : null}
     </div>

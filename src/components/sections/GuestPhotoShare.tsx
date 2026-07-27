@@ -200,14 +200,35 @@ export function GuestPhotoShare() {
     >
       <div className="mx-auto max-w-xl">
         <SectionHeading
-          eyebrow="Share"
-          title="Add a photo"
+          eyebrow="Upload"
+          title="Share a photo you took"
           subtitle={
             ready && !enabled("guest_photos")
               ? "Photo sharing is temporarily closed for this invite."
-              : "Pick an event (or create one), then upload — we’ll review before it appears"
+              : "Photos go live after the family approves them — not instantly."
           }
         />
+
+        {ready && enabled("guest_photos") ? (
+          <ol className="mb-8 grid gap-2 sm:grid-cols-2">
+            {[
+              "Sign in with Google",
+              "Pick or create the event",
+              "Choose your photos",
+              "Submit for family review",
+            ].map((step, index) => (
+              <li
+                key={step}
+                className="flex items-start gap-3 border border-gold/15 bg-[#100e14]/80 px-3.5 py-3"
+              >
+                <span className="font-body text-[10px] uppercase tracking-[0.2em] text-gold/70">
+                  {index + 1}
+                </span>
+                <span className="font-body text-sm text-cream/90">{step}</span>
+              </li>
+            ))}
+          </ol>
+        ) : null}
 
         {ready && !enabled("guest_photos") ? (
           <div className="rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-5 py-10 text-center font-body text-sm text-muted">
@@ -232,8 +253,8 @@ export function GuestPhotoShare() {
         ) : !user ? (
           <GuestAuthPanel
             onAuthed={onAuthed}
-            title="Share a moment"
-            subtitle="Sign in with Google for a quick photo upload. Photos go live after the family approves them."
+            title="Share a photo you took"
+            subtitle="Sign in with Google, then pick an event and upload. Use the same account for the gallery and finding your photos."
             ctaLabel="Sign in to upload"
           />
         ) : (

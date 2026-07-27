@@ -6,36 +6,48 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import { wedding } from "@/data/wedding";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
-const homeLinks = [
-  { href: "#countdown", label: "Countdown" },
-  { href: "#story", label: "Story" },
-  { href: "#events", label: "Events" },
-  { href: "#venue", label: "Venue" },
-  { href: "/gallery", label: "Gallery" },
-  { href: "#family", label: "Family" },
-  { href: "#rsvp", label: "RSVP" },
-  { href: "#share-photos", label: "Share" },
-];
-
-const inviteLinks = [
-  { href: "#countdown", label: "Countdown" },
-  { href: "#events", label: "Events" },
-  { href: "#venue", label: "Venue" },
-  { href: "/gallery", label: "Gallery" },
-  { href: "#family", label: "Family" },
-  { href: "#rsvp", label: "RSVP" },
-  { href: "#share-photos", label: "Share" },
-];
+type NavLink = { href: string; label: string };
 
 export function Navigation() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const invite = useInvite();
+  const { enabled, ready } = useFeatureFlags();
   const onHome = pathname === "/";
-  const links = invite ? inviteLinks : homeLinks;
+
+  const links = useMemo(() => {
+    const base: NavLink[] = invite
+      ? [
+          { href: "#countdown", label: "Countdown" },
+          { href: "#events", label: "Events" },
+          { href: "#venue", label: "Venue" },
+          { href: "/gallery", label: "Gallery" },
+          { href: "#family", label: "Family" },
+        ]
+      : [
+          { href: "#countdown", label: "Countdown" },
+          { href: "#story", label: "Story" },
+          { href: "#events", label: "Events" },
+          { href: "#venue", label: "Venue" },
+          { href: "/gallery", label: "Gallery" },
+          { href: "#family", label: "Family" },
+        ];
+
+    if (!ready || enabled("rsvp")) {
+      base.push({ href: "#rsvp", label: "RSVP" });
+    }
+    if (!ready || enabled("guest_photos")) {
+      base.push({ href: "#share-photos", label: "Upload" });
+    }
+    if (ready && enabled("face_find")) {
+      base.push({ href: "/my-photos", label: "Find mine" });
+    }
+    return base;
+  }, [enabled, invite, ready]);
 
   const resolveHref = (href: string) => {
     if (href.startsWith("/")) return href;

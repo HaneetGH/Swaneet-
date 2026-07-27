@@ -31,10 +31,10 @@ export function DownloadPhotosBanner() {
               Your album
             </span>
             <span className="font-display text-lg text-cream sm:text-xl">
-              Download your photos
+              Find photos of you
             </span>
             <span className="mt-0.5 block truncate font-body text-xs text-muted">
-              Sign in, upload a selfie — we’ll find pictures of you
+              Sign in, upload a selfie — we’ll match pictures of you
             </span>
           </span>
         </span>

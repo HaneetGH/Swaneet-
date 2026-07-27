@@ -299,6 +299,33 @@ function useGalleryData(
   return { gallery, events, loading };
 }
 
+function GalleryEmptyState() {
+  const invite = useInvite();
+  const shareHref = invite ? `${invite.basePath}#share-photos` : "/#share-photos";
+  const { enabled, ready } = useFeatureFlags();
+  const canShare = !ready || enabled("guest_photos");
+
+  return (
+    <div className="mx-auto flex max-w-md flex-col items-center border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">
+      <Images className="mb-4 text-gold/50" size={32} />
+      <p className="font-display text-xl text-cream">No photos yet</p>
+      <p className="mt-2 font-body text-sm text-muted">
+        {canShare
+          ? "Nothing here yet — share a photo you took and the family will review it."
+          : "Approved wedding photos will appear here soon."}
+      </p>
+      {canShare ? (
+        <Link
+          href={shareHref}
+          className="mt-6 rounded-full border border-gold/30 bg-gold/10 px-6 py-2.5 font-body text-[10px] uppercase tracking-[0.22em] text-gold-soft transition hover:bg-gold/20"
+        >
+          Share a photo you took
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 function GalleryLoginGate({
   onAuthed,
 }: {
@@ -308,8 +335,8 @@ function GalleryLoginGate({
     <div className="mx-auto max-w-md">
       <GuestAuthPanel
         onAuthed={onAuthed}
-        title="View the gallery"
-        subtitle="Sign in with Google to see wedding photos. Only guests who sign in can open the gallery."
+        title="View wedding photos"
+        subtitle="Sign in with Google to open the gallery. Use the same account if you also upload or find your photos."
         ctaLabel="Continue with Google"
       />
     </div>
@@ -356,8 +383,8 @@ export function Gallery() {
     <section id="gallery" className="section-pad relative">
       <div className="mx-auto max-w-6xl">
         <SectionHeading
-          eyebrow="Moments"
-          title="Gallery"
+          eyebrow="Photos"
+          title="View wedding photos"
           subtitle={
             flagsReady && !enabled("gallery")
               ? "Gallery is temporarily closed for this invite"
@@ -365,7 +392,7 @@ export function Gallery() {
                 ? "Sign in with Google to view wedding photos"
                 : gallery.length
                   ? "A glimpse from each celebration — open the full gallery for more"
-                  : "Photos coming soon — check back later"
+                  : "Nothing here yet — share a photo you took below"
           }
         />
 
@@ -386,13 +413,7 @@ export function Gallery() {
             Loading photos…
           </p>
         ) : gallery.length === 0 ? (
-          <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">
-            <Images className="mb-4 text-gold/50" size={32} />
-            <p className="font-display text-xl text-cream">No photos yet</p>
-            <p className="mt-2 font-body text-sm text-muted">
-              Share a moment below — approved photos will show up here.
-            </p>
-          </div>
+          <GalleryEmptyState />
         ) : (
           <>
             <div className="mb-10 flex justify-center">
@@ -564,10 +585,7 @@ export function GalleryFull() {
             Loading photos…
           </p>
         ) : gallery.length === 0 ? (
-          <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-gold/25 bg-white/[0.02] px-6 py-16 text-center">
-            <Images className="mb-4 text-gold/50" size={32} />
-            <p className="font-display text-xl text-cream">No photos yet</p>
-          </div>
+          <GalleryEmptyState />
         ) : (
           <>
             {visibleEvents.length > 0 ? (

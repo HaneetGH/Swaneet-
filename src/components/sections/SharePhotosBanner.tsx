@@ -17,16 +17,19 @@ export function SharePhotosBanner() {
         href="#share-photos"
         className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-gold/5 sm:px-8"
       >
-        <span className="flex items-center gap-3">
+        <span className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gold/35 bg-gold/10 text-gold-soft">
             <Camera size={16} />
           </span>
-          <span className="text-left">
+          <span className="min-w-0 text-left">
             <span className="block font-body text-[10px] uppercase tracking-[0.28em] text-gold/70">
-              Guests
+              Upload
             </span>
             <span className="font-display text-lg text-cream sm:text-xl">
-              Share a wedding photo
+              Share a photo you took
+            </span>
+            <span className="mt-0.5 block truncate font-body text-xs text-muted">
+              Family reviews it before it appears in the gallery
             </span>
           </span>
         </span>
