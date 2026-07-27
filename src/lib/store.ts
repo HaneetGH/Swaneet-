@@ -1408,10 +1408,16 @@ export async function joinStayToRoomGroup(input: {
   if (stay.roomGroupId === groupId) {
     throw new Error(`${stay.name} is already in this room`);
   }
+  // Moving from another shared room — leave first, then re-join fresh
   if (stay.roomGroupId) {
-    throw new Error(
-      `${stay.name} is already in another shared room — remove them from it first.`,
-    );
+    await leaveRoomGroup(stay.id);
+    const refreshed = await listAccommodations();
+    const moved = refreshed.find((item) => item.id === input.stayId);
+    if (!moved) throw new Error("Stay request not found");
+    return joinStayToRoomGroup({
+      roomGroupId: groupId,
+      stayId: moved.id,
+    });
   }
 
   const primary =
@@ -1573,6 +1579,156 @@ export async function leaveRoomGroup(
   await persistAccommodationRows([released, ...nextRemaining]);
   return {
     stays: [released, ...nextRemaining],
+    inventory: await getRoomInventory(),
+  };
+}
+
+function assignmentSnapshot(stay: AccommodationRequest) {
+  return {
+    status: stay.status,
+    hotelId: stay.hotelId,
+    hotelName: stay.hotelName,
+    hotelAddress: stay.hotelAddress,
+    roomDetails: stay.roomDetails,
+    roomsAssigned: stay.roomsAssigned,
+    roomGroupId: stay.roomGroupId,
+    roomGroupRole: stay.roomGroupRole,
+    roomShareWith: stay.roomShareWith ? [...stay.roomShareWith] : undefined,
+    confirmedAt: stay.confirmedAt,
+    adminNotes: stay.adminNotes,
+  };
+}
+
+function isStayRoomAssigned(stay: AccommodationRequest) {
+  if (stay.status !== "confirmed") return false;
+  if (stay.roomGroupId) return true;
+  return typeof stay.roomsAssigned === "number" && stay.roomsAssigned > 0;
+}
+
+/**
+ * Swap two guests’ room assignments (solo↔solo, solo↔shared, shared↔shared).
+ * Inventory counts stay the same — only who sits where changes.
+ */
+export async function swapStayRooms(
+  stayIdA: string,
+  stayIdB: string,
+): Promise<{ stays: AccommodationRequest[]; inventory: RoomInventory }> {
+  if (stayIdA === stayIdB) {
+    throw new Error("Pick two different guests to swap");
+  }
+
+  const all = await listAccommodations();
+  const a = all.find((item) => item.id === stayIdA);
+  const b = all.find((item) => item.id === stayIdB);
+  if (!a || !b) throw new Error("Stay request not found");
+  if (!isStayRoomAssigned(a) || !isStayRoomAssigned(b)) {
+    throw new Error("Both guests need a room assignment before you can swap");
+  }
+  if (a.roomGroupId && a.roomGroupId === b.roomGroupId) {
+    throw new Error("Both guests are already in the same room");
+  }
+
+  const snapA = assignmentSnapshot(a);
+  const snapB = assignmentSnapshot(b);
+
+  const applySnap = (
+    stay: AccommodationRequest,
+    snap: ReturnType<typeof assignmentSnapshot>,
+    note: string,
+  ): AccommodationRequest => {
+    const next: AccommodationRequest = {
+      ...stay,
+      status: "confirmed",
+      hotelId: snap.hotelId,
+      hotelName: snap.hotelName,
+      hotelAddress: snap.hotelAddress,
+      roomDetails: snap.roomDetails,
+      roomsAssigned: snap.roomsAssigned,
+      roomGroupId: snap.roomGroupId,
+      roomGroupRole: snap.roomGroupRole,
+      roomShareWith: snap.roomShareWith,
+      confirmedAt: snap.confirmedAt || stay.confirmedAt || new Date().toISOString(),
+      adminNotes: [stay.adminNotes, note].filter(Boolean).join(" · "),
+    };
+    if (!snap.roomGroupId) {
+      delete (next as { roomGroupId?: string }).roomGroupId;
+      delete (next as { roomGroupRole?: string }).roomGroupRole;
+      delete (next as { roomShareWith?: string[] }).roomShareWith;
+    }
+    if (!(typeof snap.roomsAssigned === "number")) {
+      delete (next as { roomsAssigned?: number }).roomsAssigned;
+    }
+    return next;
+  };
+
+  let nextA = applySnap(a, snapB, `Swapped rooms with ${b.name}`);
+  let nextB = applySnap(b, snapA, `Swapped rooms with ${a.name}`);
+
+  const byId = new Map(all.map((item) => [item.id, item]));
+  byId.set(nextA.id, nextA);
+  byId.set(nextB.id, nextB);
+
+  const touchGroup = (groupId: string | undefined) => {
+    if (!groupId) return [] as AccommodationRequest[];
+    const members = [...byId.values()].filter(
+      (item) => item.roomGroupId === groupId,
+    );
+    if (members.length === 0) return [];
+
+    let primary =
+      members.find((item) => item.roomGroupRole === "primary") || members[0]!;
+    // Prefer whoever currently holds roomsAssigned > 0
+    const holder = members.find(
+      (item) =>
+        typeof item.roomsAssigned === "number" && item.roomsAssigned > 0,
+    );
+    if (holder) primary = holder;
+
+    const held =
+      typeof primary.roomsAssigned === "number" && primary.roomsAssigned > 0
+        ? primary.roomsAssigned
+        : 1;
+    const names = shareNamesForGroup(members);
+
+    return members.map((row) => {
+      const isPrimary = row.id === primary.id;
+      const updated: AccommodationRequest = {
+        ...row,
+        status: "confirmed",
+        roomGroupId: groupId,
+        roomGroupRole: isPrimary ? "primary" : "member",
+        roomShareWith: names.filter((name) => name !== row.name),
+        roomsAssigned: isPrimary ? held : 0,
+        hotelId: primary.hotelId || row.hotelId,
+        hotelName: primary.hotelName || row.hotelName,
+        hotelAddress: primary.hotelAddress || row.hotelAddress,
+        roomDetails: primary.roomDetails || row.roomDetails,
+      };
+      byId.set(updated.id, updated);
+      return updated;
+    });
+  };
+
+  const touched = new Map<string, AccommodationRequest>();
+  for (const row of [nextA, nextB]) {
+    touched.set(row.id, row);
+  }
+  for (const groupId of [snapA.roomGroupId, snapB.roomGroupId]) {
+    for (const row of touchGroup(groupId)) {
+      touched.set(row.id, row);
+    }
+  }
+
+  // Re-read A/B after group normalization
+  nextA = touched.get(a.id) || nextA;
+  nextB = touched.get(b.id) || nextB;
+  touched.set(nextA.id, nextA);
+  touched.set(nextB.id, nextB);
+
+  const rows = [...touched.values()];
+  await persistAccommodationRows(rows);
+  return {
+    stays: rows,
     inventory: await getRoomInventory(),
   };
 }
