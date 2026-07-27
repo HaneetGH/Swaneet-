@@ -8,7 +8,6 @@ import { useMemo, useState } from "react";
 import { GuestNavAuth } from "@/components/layout/GuestNavAuth";
 import { wedding } from "@/data/wedding";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
-import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
@@ -19,9 +18,7 @@ export function Navigation() {
   const pathname = usePathname();
   const invite = useInvite();
   const { enabled, ready } = useFeatureFlags();
-  const { user, ready: authReady } = useGuestAuth();
   const onHome = pathname === "/";
-  const signedIn = authReady && Boolean(user);
 
   const links = useMemo(() => {
     const base: NavLink[] = invite
@@ -53,11 +50,9 @@ export function Navigation() {
     if (ready && enabled("face_find")) {
       base.push({ href: "/my-photos", label: "Find mine" });
     }
-    if (signedIn) {
-      base.push({ href: "/my-account", label: "My account" });
-    }
+    // My account lives in the header auth chip — avoid a duplicate nav link
     return base;
-  }, [enabled, invite, ready, signedIn]);
+  }, [enabled, invite, ready]);
 
   const resolveHref = (href: string) => {
     if (href.startsWith("/")) return href;
@@ -85,8 +80,9 @@ export function Navigation() {
           {wedding.hashtag}
         </Link>
 
+        {/* Full link row only when there is room — never a horizontal slider */}
         <nav
-          className="hidden min-w-0 flex-1 items-center justify-end gap-4 overflow-x-auto xl:gap-6 lg:flex"
+          className="hidden items-center justify-end gap-3 xl:flex 2xl:gap-5"
           aria-label="Primary"
         >
           {links.map((link) => (
@@ -94,12 +90,8 @@ export function Navigation() {
               key={link.href}
               href={resolveHref(link.href)}
               className={cn(
-                "shrink-0 font-body text-[11px] uppercase tracking-[0.22em] transition hover:text-gold-soft",
-                pathname === link.href ||
-                  (link.href === "/my-account" &&
-                    pathname?.startsWith("/my-account"))
-                  ? "text-gold-soft"
-                  : "text-muted",
+                "font-body text-[10px] uppercase tracking-[0.18em] transition hover:text-gold-soft 2xl:text-[11px] 2xl:tracking-[0.2em]",
+                pathname === link.href ? "text-gold-soft" : "text-muted",
               )}
             >
               {link.label}
@@ -112,7 +104,7 @@ export function Navigation() {
           <GuestNavAuth variant="header" />
           <button
             type="button"
-            className="glass gold-border flex h-10 w-10 items-center justify-center rounded-full text-gold-soft lg:hidden"
+            className="glass gold-border flex h-10 w-10 items-center justify-center rounded-full text-gold-soft xl:hidden"
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
@@ -124,7 +116,7 @@ export function Navigation() {
 
       <div
         className={cn(
-          "glass border-t border-gold/20 px-5 py-6 lg:hidden",
+          "glass border-t border-gold/20 px-5 py-6 xl:hidden",
           open ? "block" : "hidden",
         )}
       >

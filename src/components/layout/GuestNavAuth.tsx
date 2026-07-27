@@ -51,20 +51,24 @@ export function GuestNavAuth({
           href="/my-account"
           onClick={() => onDone?.()}
           className={cn(
-            "group flex min-w-0 items-center gap-2 rounded-full border border-gold/35 bg-gold/10 px-3 py-2 transition hover:border-gold/55 hover:bg-gold/20",
-            isMenu ? "w-full justify-start px-4 py-3.5" : "min-h-10",
+            "group flex min-w-0 items-center gap-2 rounded-full border border-gold/35 bg-gold/10 transition hover:border-gold/55 hover:bg-gold/20",
+            isMenu
+              ? "w-full justify-start px-4 py-3.5"
+              : "min-h-10 max-w-[8.5rem] px-2.5 py-1.5 sm:max-w-[10rem] sm:px-3",
           )}
           title="Open your booking, RSVP, and uploads"
         >
           <UserRound size={14} className="shrink-0 text-gold-soft" />
           <span className="min-w-0 text-left">
-            <span className="block font-body text-[9px] uppercase tracking-[0.18em] text-gold/80">
-              My account
-            </span>
+            {isMenu ? (
+              <span className="block font-body text-[9px] uppercase tracking-[0.18em] text-gold/80">
+                My account
+              </span>
+            ) : null}
             <span
               className={cn(
-                "block truncate font-body text-sm text-cream group-hover:text-gold-soft",
-                isMenu ? "" : "max-w-[7rem] sm:max-w-[9rem]",
+                "block truncate font-body text-cream group-hover:text-gold-soft",
+                isMenu ? "text-sm" : "text-xs sm:text-sm",
               )}
             >
               {label}
@@ -78,12 +82,16 @@ export function GuestNavAuth({
             void signOut().then(() => onDone?.());
           }}
           className={cn(
-            "inline-flex items-center justify-center gap-2 rounded-full border border-gold/40 bg-[#141018] px-3 py-2.5 font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft shadow-[0_0_0_1px_rgba(196,163,90,0.15)] transition hover:bg-gold/15 disabled:opacity-60 sm:px-4",
-            isMenu ? "w-full py-3.5 text-xs" : "min-h-10",
+            "inline-flex items-center justify-center gap-2 rounded-full border border-gold/40 bg-[#141018] font-body uppercase tracking-[0.18em] text-gold-soft shadow-[0_0_0_1px_rgba(196,163,90,0.15)] transition hover:bg-gold/15 disabled:opacity-60",
+            isMenu
+              ? "w-full px-3 py-3.5 text-xs"
+              : "h-10 w-10 shrink-0",
           )}
+          aria-label={busy ? "Signing out" : "Log out"}
+          title="Log out"
         >
           <LogOut size={14} />
-          {busy ? "…" : "Log out"}
+          {isMenu ? (busy ? "…" : "Log out") : null}
         </button>
         {error ? (
           <p className="font-body text-[11px] text-rose-200">{error}</p>
