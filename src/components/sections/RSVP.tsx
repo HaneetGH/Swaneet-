@@ -353,7 +353,10 @@ export function RSVP() {
     if (ready && !rsvpOn) {
       return "RSVP is temporarily closed for this invite.";
     }
-    if (!authReady || !user) {
+    if (!authReady) {
+      return `Please reply via ${familyList}.`;
+    }
+    if (!user) {
       return invite
         ? `Sign in with Google, then RSVP. Mehfil & Laavan share your reply for the same days — main wedding site stays separate. Please reply via ${familyList}.`
         : `Sign in with Google, then RSVP for this invite only. Please reply via ${familyList}.`;
