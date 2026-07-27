@@ -21,8 +21,8 @@ type WishPoolProps = {
   className?: string;
 };
 
-const LEFT_TOPS = ["11%", "30%", "49%", "68%", "84%"];
-const RIGHT_TOPS = ["16%", "35%", "54%", "73%", "88%"];
+const LEFT_TOPS = ["22%", "38%", "54%", "70%", "84%"];
+const RIGHT_TOPS = ["26%", "42%", "58%", "74%", "88%"];
 
 /** Instant public fallback — visible without login / API wait */
 const PUBLIC_FALLBACK: WishItem[] = buildDisplayWishPool(
@@ -112,6 +112,8 @@ export function FloatingWishBackdrop({
       aria-hidden
       className={cn(
         "pointer-events-none absolute inset-0 z-[1] overflow-hidden",
+        // Keep wish text clear of the fixed navigation band
+        "pt-20 sm:pt-24",
         className,
       )}
     >

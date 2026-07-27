@@ -75,18 +75,18 @@ export function Navigation() {
       initial={{ y: -24, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ delay: 0.4, duration: 0.7 }}
-      className="fixed inset-x-0 top-0 z-50"
+      className="fixed inset-x-0 top-0 z-50 border-b border-gold/10 bg-[#07060a]/80 backdrop-blur-md"
     >
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4 sm:px-8">
         <Link
           href={brandHref}
-          className="shrink-0 font-script text-2xl text-gold-soft transition hover:text-gold"
+          className="relative z-10 shrink-0 bg-[#07060a]/80 pr-3 font-script text-2xl text-gold-soft transition hover:text-gold"
         >
           {wedding.hashtag}
         </Link>
 
         <nav
-          className="hidden min-w-0 flex-1 items-center justify-end gap-5 xl:gap-7 lg:flex"
+          className="hidden min-w-0 flex-1 items-center justify-end gap-4 overflow-x-auto xl:gap-6 lg:flex"
           aria-label="Primary"
         >
           {links.map((link) => (
