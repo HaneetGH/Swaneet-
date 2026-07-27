@@ -880,6 +880,8 @@ export async function addAccommodation(
     ...entry,
     status: entry.status || "pending",
     email: entry.email || entry.authEmail || "",
+    requestedCheckIn: entry.requestedCheckIn || entry.checkIn,
+    requestedCheckOut: entry.requestedCheckOut || entry.checkOut,
     id: `stay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString(),
   };
@@ -1072,6 +1074,20 @@ export async function updateAccommodation(
     roomGroupId,
     roomGroupRole,
     roomShareWith,
+    checkIn: patch.checkIn?.trim() || existing.checkIn,
+    checkOut: patch.checkOut?.trim() || existing.checkOut,
+    requestedCheckIn:
+      patch.requestedCheckIn ||
+      existing.requestedCheckIn ||
+      existing.checkIn,
+    requestedCheckOut:
+      patch.requestedCheckOut ||
+      existing.requestedCheckOut ||
+      existing.checkOut,
+    offerStatus:
+      patch.offerStatus !== undefined
+        ? patch.offerStatus
+        : existing.offerStatus,
   };
 
   if (nextStatus !== "confirmed") {
@@ -1615,6 +1631,15 @@ export async function upsertAccommodationForGuest(
       rooms: entry.rooms,
       checkIn: entry.checkIn,
       checkOut: entry.checkOut,
+      ...(existing.status === "pending" && existing.offerStatus !== "pending"
+        ? {
+            requestedCheckIn: entry.checkIn,
+            requestedCheckOut: entry.checkOut,
+          }
+        : {
+            requestedCheckIn: existing.requestedCheckIn || existing.checkIn,
+            requestedCheckOut: existing.requestedCheckOut || existing.checkOut,
+          }),
       notes: entry.notes,
       contactFamily: entry.contactFamily,
       rsvpId: entry.rsvpId ?? existing.rsvpId,

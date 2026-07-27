@@ -10,6 +10,7 @@ import type {
   StayHotel,
 } from "@/lib/types";
 import { buildRoomOccupancy } from "@/lib/room-occupancy";
+import { isShorterStayOffer, stayNights } from "@/lib/stay-dates";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,8 @@ type StayDraft = {
   adminNotes?: string;
   email?: string;
   roomsAssigned?: number | "";
+  checkIn?: string;
+  checkOut?: string;
 };
 
 const emptyInventory: RoomInventory = {
@@ -154,6 +157,8 @@ export function AccommodationManager({
       adminNotes: item.adminNotes || "",
       email: item.email || item.authEmail || "",
       roomsAssigned: baseRooms,
+      checkIn: item.checkIn || "",
+      checkOut: item.checkOut || "",
       ...drafts[item.id],
     };
   };
@@ -284,6 +289,8 @@ export function AccommodationManager({
         roomDetails: draft.roomDetails ?? current.roomDetails ?? "",
         adminNotes: draft.adminNotes ?? current.adminNotes ?? "",
         email: draft.email ?? current.email ?? current.authEmail ?? "",
+        checkIn: draft.checkIn || current.checkIn,
+        checkOut: draft.checkOut || current.checkOut,
         sendEmail,
       };
 
@@ -337,7 +344,8 @@ export function AccommodationManager({
         error?: string;
         accommodation?: AccommodationRequest;
         inventory?: RoomInventory;
-        email?: { sent?: boolean; error?: string };
+        email?: { sent?: boolean; error?: string; kind?: string };
+        offer?: boolean;
       };
       if (!res.ok) {
         setMessage(data.error || "Could not save");
@@ -363,27 +371,32 @@ export function AccommodationManager({
         });
       }
       if (sendEmail) {
-        const hasHotelCopy =
-          Boolean(data.accommodation?.hotelName?.trim()) ||
-          Boolean(data.accommodation?.hotelAddress?.trim()) ||
-          Boolean(data.accommodation?.roomDetails?.trim()) ||
-          Boolean(data.accommodation?.adminNotes?.trim());
-        if (
-          status === "confirmed" &&
-          !hasHotelCopy &&
-          data.email?.sent
-        ) {
-          setMessage(
-            "Email sent, but hotel details were empty — add hotel info and email again if needed.",
-          );
-        } else {
+        if (data.offer || data.email?.kind === "offer") {
           setMessage(
             data.email?.sent
-              ? data.accommodation?.roomsAssigned
-                ? `Hotel details emailed. ${data.accommodation.roomsAssigned} room(s) assigned.`
-                : "Hotel details emailed to the guest."
-              : data.email?.error || "Saved, but email could not be sent.",
+              ? "Shorter-stay offer emailed — guest can Accept or Decline from the link."
+              : data.email?.error ||
+                  "Saved, but offer email could not be sent.",
           );
+        } else {
+          const hasHotelCopy =
+            Boolean(data.accommodation?.hotelName?.trim()) ||
+            Boolean(data.accommodation?.hotelAddress?.trim()) ||
+            Boolean(data.accommodation?.roomDetails?.trim()) ||
+            Boolean(data.accommodation?.adminNotes?.trim());
+          if (status === "confirmed" && !hasHotelCopy && data.email?.sent) {
+            setMessage(
+              "Email sent, but hotel details were empty — add hotel info and email again if needed.",
+            );
+          } else {
+            setMessage(
+              data.email?.sent
+                ? data.accommodation?.roomsAssigned
+                  ? `Hotel details emailed. ${data.accommodation.roomsAssigned} room(s) assigned.`
+                  : "Hotel details emailed to the guest."
+                : data.email?.error || "Saved, but email could not be sent.",
+            );
+          }
         }
       } else if (data.accommodation?.roomsAssigned) {
         setMessage(
@@ -1173,6 +1186,22 @@ export function AccommodationManager({
           const status = (item.status || "pending") as AccommodationStatus;
           const mergeable = canMergeStay(item);
           const mergeChecked = mergeIds.includes(item.id);
+          const askedIn = item.requestedCheckIn || item.checkIn;
+          const askedOut = item.requestedCheckOut || item.checkOut;
+          const draftIn = draft.checkIn || item.checkIn;
+          const draftOut = draft.checkOut || item.checkOut;
+          const offeredNights = stayNights(draftIn, draftOut);
+          const askedNights = stayNights(askedIn, askedOut);
+          const shorterOffer =
+            draft.status === "confirmed" &&
+            isShorterStayOffer({
+              requestedCheckIn: askedIn,
+              requestedCheckOut: askedOut,
+              checkIn: draftIn,
+              checkOut: draftOut,
+            });
+          const datesChanged =
+            draftIn !== askedIn || draftOut !== askedOut;
 
           return (
             <div
@@ -1234,6 +1263,21 @@ export function AccommodationManager({
                             : ""}
                         </span>
                       ) : null}
+                      {item.offerStatus === "pending" ? (
+                        <span className="rounded-full border border-amber-300/40 bg-amber-400/15 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-amber-100">
+                          Offer emailed — waiting
+                        </span>
+                      ) : null}
+                      {item.offerStatus === "accepted" ? (
+                        <span className="rounded-full border border-emerald-300/35 bg-emerald-400/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-emerald-100">
+                          Guest accepted offer
+                        </span>
+                      ) : null}
+                      {item.offerStatus === "declined" ? (
+                        <span className="rounded-full border border-rose-300/35 bg-rose-400/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-rose-100">
+                          Guest declined offer
+                        </span>
+                      ) : null}
                       {status === "confirmed" && item.roomsAssigned ? (
                         <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-gold-soft">
                           {item.roomsAssigned} room
@@ -1253,8 +1297,16 @@ export function AccommodationManager({
                   </div>
                   <p className="mt-2 font-body text-sm text-gold-soft">
                     Asked: {item.people} people · {item.rooms} room
-                    {item.rooms === 1 ? "" : "s"} · {formatDate(item.checkIn)} →{" "}
-                    {formatDate(item.checkOut)}
+                    {item.rooms === 1 ? "" : "s"} · {formatDate(askedIn)} →{" "}
+                    {formatDate(askedOut)}
+                    {item.checkIn !== askedIn ||
+                    item.checkOut !== askedOut ? (
+                      <>
+                        {" "}
+                        · Offering: {formatDate(item.checkIn)} →{" "}
+                        {formatDate(item.checkOut)}
+                      </>
+                    ) : null}
                   </p>
                   <p className="mt-1 font-body text-xs text-muted">
                     {item.inviteTier === "mehfil"
@@ -1396,6 +1448,68 @@ export function AccommodationManager({
                     </label>
                   </div>
 
+                  <div className="rounded-2xl border border-gold/20 bg-[#0d0b10]/70 p-4">
+                    <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
+                      Stay dates
+                    </p>
+                    <p className="mt-1 font-body text-xs text-muted">
+                      Guest asked{" "}
+                      {formatDate(askedIn)} → {formatDate(askedOut)}
+                      {askedNights > 0
+                        ? ` (${askedNights} night${askedNights === 1 ? "" : "s"})`
+                        : ""}
+                      . Change dates below if you can add a night, or only offer
+                      fewer nights.
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                          Check-in (assign)
+                        </span>
+                        <input
+                          type="date"
+                          className={fieldClass}
+                          value={draftIn}
+                          onChange={(e) =>
+                            setDraft(item.id, { checkIn: e.target.value })
+                          }
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                          Check-out (assign)
+                        </span>
+                        <input
+                          type="date"
+                          className={fieldClass}
+                          value={draftOut}
+                          onChange={(e) =>
+                            setDraft(item.id, { checkOut: e.target.value })
+                          }
+                        />
+                      </label>
+                    </div>
+                    {datesChanged ? (
+                      <p className="mt-2 font-body text-xs text-gold-soft">
+                        Offering {formatDate(draftIn)} → {formatDate(draftOut)}
+                        {offeredNights > 0
+                          ? ` · ${offeredNights} night${offeredNights === 1 ? "" : "s"}`
+                          : ""}
+                        {shorterOffer
+                          ? " — shorter than asked; Approve will email an Accept / Decline link."
+                          : offeredNights > askedNights
+                            ? " — longer than asked; guest gets normal confirmation."
+                            : "."}
+                      </p>
+                    ) : null}
+                    {item.offerStatus === "pending" ? (
+                      <p className="mt-2 font-body text-xs text-amber-100/90">
+                        Waiting for guest to accept this shorter stay from their
+                        email.
+                      </p>
+                    ) : null}
+                  </div>
+
                   <label className="block">
                     <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
                       Guest email
@@ -1418,8 +1532,9 @@ export function AccommodationManager({
                           Hotel details for guest email
                         </p>
                         <p className="mt-1 font-body text-xs text-muted">
-                          Fill this in, then tap Approve &amp; email. Everything
-                          below is sent to the guest.
+                          {shorterOffer
+                            ? "Fill hotel details, then offer & email. Guest gets Accept / Decline for the shorter stay."
+                            : "Fill this in, then tap Approve & email. Everything below is sent to the guest."}
                         </p>
                       </div>
 
@@ -1524,7 +1639,11 @@ export function AccommodationManager({
                     >
                       <Mail size={14} />
                       {draft.status === "confirmed"
-                        ? "Approve & email hotel details"
+                        ? shorterOffer
+                          ? offeredNights === 1
+                            ? "Offer 1 night & email accept link"
+                            : `Offer ${offeredNights} nights & email accept link`
+                          : "Approve & email hotel details"
                         : "Save & email guest"}
                     </Button>
                   </div>

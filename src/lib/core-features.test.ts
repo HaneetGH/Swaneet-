@@ -41,6 +41,7 @@ import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinera
 import { buildStayConfirmationParts } from "@/lib/email-stay-template";
 import { computeRoomInventory } from "@/lib/store";
 import { buildRoomOccupancy } from "@/lib/room-occupancy";
+import { isShorterStayOffer, stayNights } from "@/lib/stay-dates";
 import {
   buildSharedRoomRoommateContacts,
   collectSharedRoomEmailRecipients,
@@ -713,5 +714,32 @@ describe("stay email itinerary", () => {
     expect(html).not.toContain("Already done");
     expect(text).toContain("Bir");
     expect(text).not.toContain("Already done");
+  });
+});
+
+describe("stay dates / shorter offers", () => {
+  it("counts hotel nights between check-in and check-out", () => {
+    expect(stayNights("2026-08-11", "2026-08-12")).toBe(1);
+    expect(stayNights("2026-08-11", "2026-08-13")).toBe(2);
+    expect(stayNights("2026-08-12", "2026-08-12")).toBe(0);
+  });
+
+  it("detects when offered nights are fewer than requested", () => {
+    expect(
+      isShorterStayOffer({
+        requestedCheckIn: "2026-08-11",
+        requestedCheckOut: "2026-08-13",
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+      }),
+    ).toBe(true);
+    expect(
+      isShorterStayOffer({
+        requestedCheckIn: "2026-08-12",
+        requestedCheckOut: "2026-08-13",
+        checkIn: "2026-08-11",
+        checkOut: "2026-08-13",
+      }),
+    ).toBe(false);
   });
 });
