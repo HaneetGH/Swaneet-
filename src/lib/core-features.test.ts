@@ -40,6 +40,8 @@ import {
 import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinerary";
 import { buildStayConfirmationParts } from "@/lib/email-stay-template";
 import { computeRoomInventory } from "@/lib/store";
+import { buildRoomOccupancy } from "@/lib/room-occupancy";
+import { isShorterStayOffer, stayNights } from "@/lib/stay-dates";
 import {
   buildSharedRoomRoommateContacts,
   collectSharedRoomEmailRecipients,
@@ -365,6 +367,72 @@ describe("shared room inventory", () => {
     expect(inv.available).toBe(4);
   });
 
+  it("lists occupancy with shared members under one room unit", () => {
+    const hotel: StayHotel = {
+      id: "h1",
+      name: "Test Hotel",
+      totalRooms: 5,
+      createdAt: new Date().toISOString(),
+    };
+    const stays: AccommodationRequest[] = [
+      {
+        id: "1",
+        name: "A",
+        phone: "1",
+        email: "a@b.com",
+        people: 2,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        hotelId: "h1",
+        hotelName: "Test Hotel",
+        roomsAssigned: 1,
+        roomGroupId: "g1",
+        roomGroupRole: "primary",
+      },
+      {
+        id: "2",
+        name: "B",
+        phone: "2",
+        email: "b@b.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        hotelId: "h1",
+        roomsAssigned: 0,
+        roomGroupId: "g1",
+        roomGroupRole: "member",
+      },
+      {
+        id: "3",
+        name: "Solo",
+        phone: "3",
+        email: "s@b.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        hotelId: "h1",
+        roomsAssigned: 2,
+      },
+    ];
+    const units = buildRoomOccupancy(stays, [hotel]);
+    expect(units).toHaveLength(2);
+    const shared = units.find((unit) => unit.roomGroupId === "g1");
+    expect(shared?.stays.map((s) => s.name).sort()).toEqual(["A", "B"]);
+    expect(shared?.roomsHeld).toBe(1);
+    const solo = units.find((unit) => unit.key === "3");
+    expect(solo?.roomsHeld).toBe(2);
+    expect(solo?.stays).toHaveLength(1);
+  });
+
   it("sends one email per stay request (n requests → n emails)", () => {
     const stays: AccommodationRequest[] = [
       {
@@ -646,5 +714,32 @@ describe("stay email itinerary", () => {
     expect(html).not.toContain("Already done");
     expect(text).toContain("Bir");
     expect(text).not.toContain("Already done");
+  });
+});
+
+describe("stay dates / shorter offers", () => {
+  it("counts hotel nights between check-in and check-out", () => {
+    expect(stayNights("2026-08-11", "2026-08-12")).toBe(1);
+    expect(stayNights("2026-08-11", "2026-08-13")).toBe(2);
+    expect(stayNights("2026-08-12", "2026-08-12")).toBe(0);
+  });
+
+  it("detects when offered nights are fewer than requested", () => {
+    expect(
+      isShorterStayOffer({
+        requestedCheckIn: "2026-08-11",
+        requestedCheckOut: "2026-08-13",
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+      }),
+    ).toBe(true);
+    expect(
+      isShorterStayOffer({
+        requestedCheckIn: "2026-08-12",
+        requestedCheckOut: "2026-08-13",
+        checkIn: "2026-08-11",
+        checkOut: "2026-08-13",
+      }),
+    ).toBe(false);
   });
 });

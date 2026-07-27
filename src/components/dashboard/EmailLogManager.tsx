@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const KIND_LABELS: Record<EmailKind, string> = {
   otp: "Verification code",
   stay: "Stay / accommodation",
+  stay_offer: "Stay offer (accept)",
   team_invite: "Team invite",
   team_update: "Team update",
   photo_reject: "Photo rejection",

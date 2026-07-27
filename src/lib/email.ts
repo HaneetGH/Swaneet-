@@ -181,6 +181,124 @@ export async function sendAccommodationEmail(
   });
 }
 
+/** Offer fewer nights than requested — guest must accept via magic link. */
+export async function sendStayOfferEmail(
+  request: AccommodationRequest,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const to = request.email || request.authEmail;
+  const subject = "Revised stay dates for #Swaneet — please confirm";
+  if (!to) {
+    const error = "This request has no email address to send to.";
+    await logEmail({
+      kind: "stay_offer",
+      to: "",
+      subject,
+      status: "failed",
+      error,
+    });
+    return { ok: false, error };
+  }
+
+  const { createStayOfferToken, stayOfferPageUrl } = await import(
+    "@/lib/stay-offer"
+  );
+  const {
+    formatStayDateLabel,
+    stayNights,
+  } = await import("@/lib/stay-dates");
+
+  const requestedIn = request.requestedCheckIn || request.checkIn;
+  const requestedOut = request.requestedCheckOut || request.checkOut;
+  const askedNights = stayNights(requestedIn, requestedOut);
+  const offeredNights = stayNights(request.checkIn, request.checkOut);
+
+  const acceptToken = createStayOfferToken({
+    stayId: request.id,
+    checkIn: request.checkIn,
+    checkOut: request.checkOut,
+    action: "accept",
+  });
+  const declineToken = createStayOfferToken({
+    stayId: request.id,
+    checkIn: request.checkIn,
+    checkOut: request.checkOut,
+    action: "decline",
+  });
+  const acceptUrl = stayOfferPageUrl(acceptToken);
+  const declineUrl = stayOfferPageUrl(declineToken);
+
+  const greet = request.name?.trim() || "there";
+  const text = [
+    `Dear ${greet},`,
+    "",
+    "Thank you for your accommodation request for #Swaneet.",
+    "",
+    `You asked for: ${formatStayDateLabel(requestedIn)} → ${formatStayDateLabel(requestedOut)} (${askedNights} night${askedNights === 1 ? "" : "s"}).`,
+    `We can offer: ${formatStayDateLabel(request.checkIn)} → ${formatStayDateLabel(request.checkOut)} (${offeredNights} night${offeredNights === 1 ? "" : "s"}).`,
+    request.hotelName ? `Hotel: ${request.hotelName}` : null,
+    request.roomDetails ? `Details: ${request.roomDetails}` : null,
+    "",
+    "If this works for you, please accept:",
+    acceptUrl,
+    "",
+    "If not, you can decline:",
+    declineUrl,
+    "",
+    "This link works for 14 days.",
+    "",
+    "#Swaneet",
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+
+  const html = `
+    <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
+      <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
+      <h1 style="font-weight: 400; font-size: 26px;">Revised stay dates</h1>
+      <p>Dear ${escapeHtml(greet)},</p>
+      <p>Thank you for your accommodation request. We can’t arrange the full dates you asked for, but we can offer the following:</p>
+      <table style="width:100%; border-collapse:collapse; margin: 18px 0;">
+        <tr>
+          <td style="padding:8px 0; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:#9a7b2f;">You asked</td>
+          <td style="padding:8px 0; font-size:15px;">${escapeHtml(formatStayDateLabel(requestedIn))} → ${escapeHtml(formatStayDateLabel(requestedOut))} (${askedNights} night${askedNights === 1 ? "" : "s"})</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:#9a7b2f;">We can offer</td>
+          <td style="padding:8px 0; font-size:15px;"><strong>${escapeHtml(formatStayDateLabel(request.checkIn))} → ${escapeHtml(formatStayDateLabel(request.checkOut))} (${offeredNights} night${offeredNights === 1 ? "" : "s"})</strong></td>
+        </tr>
+        ${
+          request.hotelName
+            ? `<tr><td style="padding:8px 0; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:#9a7b2f;">Hotel</td><td style="padding:8px 0; font-size:15px;">${escapeHtml(request.hotelName)}</td></tr>`
+            : ""
+        }
+        ${
+          request.roomDetails
+            ? `<tr><td style="padding:8px 0; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:#9a7b2f;">Details</td><td style="padding:8px 0; font-size:15px;">${escapeHtml(request.roomDetails)}</td></tr>`
+            : ""
+        }
+      </table>
+      <p style="margin: 28px 0 12px;">
+        <a href="${escapeHtml(acceptUrl)}"
+           style="display:inline-block;background:#1a1208;color:#f7f1e6;padding:12px 22px;border-radius:999px;text-decoration:none;letter-spacing:0.08em;font-size:13px;text-transform:uppercase;">
+          Accept this stay
+        </a>
+      </p>
+      <p style="margin: 0 0 24px;">
+        <a href="${escapeHtml(declineUrl)}" style="color:#6b5c4a; font-size:13px;">Decline offer</a>
+      </p>
+      <p style="font-size: 13px; color: #6b5c4a;">This private link works for 14 days.</p>
+    </div>
+  `;
+
+  return sendResendEmail({
+    kind: "stay_offer",
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
 export async function sendGuestPhotoRejectionEmail(
   image: Pick<
     GalleryImage,

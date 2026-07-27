@@ -46,6 +46,7 @@ import {
 } from "@/lib/guest-downloads";
 import { sortEventsByDateTime } from "@/lib/datetime";
 import { normalizeFeatureFlags } from "@/lib/feature-flags";
+import { buildRoomOccupancy as buildRoomOccupancyPure } from "@/lib/room-occupancy";
 import {
   deriveOverallAttendance,
   isBrideFeatureSite,
@@ -879,6 +880,8 @@ export async function addAccommodation(
     ...entry,
     status: entry.status || "pending",
     email: entry.email || entry.authEmail || "",
+    requestedCheckIn: entry.requestedCheckIn || entry.checkIn,
+    requestedCheckOut: entry.requestedCheckOut || entry.checkOut,
     id: `stay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString(),
   };
@@ -902,13 +905,19 @@ export async function updateAccommodation(
   if (!existing) return null;
 
   const nextStatus = patch.status ?? existing.status;
+  const existingIsMember =
+    Boolean(existing.roomGroupId) && existing.roomGroupRole === "member";
+
   let roomsAssigned =
     typeof existing.roomsAssigned === "number"
       ? existing.roomsAssigned
       : undefined;
   let hotelId = existing.hotelId;
+  let roomGroupId = existing.roomGroupId;
+  let roomGroupRole = existing.roomGroupRole;
+  let roomShareWith = existing.roomShareWith;
 
-  // Confirm alone does not auto-assign. Assign only when roomsAssigned is set.
+  // Explicit room count from admin
   if (typeof patch.roomsAssigned === "number") {
     if (nextStatus === "confirmed" && patch.roomsAssigned > 0) {
       const nextHotelId =
@@ -928,7 +937,8 @@ export async function updateAccommodation(
       const currentlyHolding =
         existing.status === "confirmed" &&
         existing.hotelId === nextHotelId &&
-        typeof existing.roomsAssigned === "number"
+        typeof existing.roomsAssigned === "number" &&
+        !existingIsMember
           ? existing.roomsAssigned
           : 0;
       const availableForThis = hotelRow.available + currentlyHolding;
@@ -942,7 +952,14 @@ export async function updateAccommodation(
       roomsAssigned = patch.roomsAssigned;
       hotelId = nextHotelId;
 
-      // Prefill hotel name/address from inventory when not provided
+      // Moving to a solo assignment releases any previous shared-room membership
+      if (existing.roomGroupId) {
+        await leaveRoomGroup(id, { skipMissing: true });
+        roomGroupId = undefined;
+        roomGroupRole = undefined;
+        roomShareWith = undefined;
+      }
+
       const store = await readStore();
       const hotel = (store.hotels || []).find((item) => item.id === nextHotelId);
       if (hotel) {
@@ -956,14 +973,95 @@ export async function updateAccommodation(
     } else {
       roomsAssigned = undefined;
       hotelId = undefined;
+      roomGroupId = undefined;
+      roomGroupRole = undefined;
+      roomShareWith = undefined;
     }
   } else if (typeof patch.hotelId === "string") {
     hotelId = patch.hotelId || undefined;
   }
 
+  // Confirming a solo stay always takes inventory — default to guest's asked rooms
+  if (nextStatus === "confirmed" && !existingIsMember && !roomGroupId) {
+    if (!hotelId) {
+      const patchHotel =
+        typeof patch.hotelId === "string" ? patch.hotelId.trim() : "";
+      if (patchHotel) hotelId = patchHotel;
+    }
+    if (!hotelId) {
+      throw new Error(
+        "Confirming a stay requires a hotel and rooms assigned (so inventory updates).",
+      );
+    }
+    if (!(typeof roomsAssigned === "number" && roomsAssigned > 0)) {
+      const asked = Math.max(1, Math.floor(existing.rooms || 1));
+      const inventory = await getRoomInventory();
+      const hotelRow = inventory.hotels.find((hotel) => hotel.id === hotelId);
+      if (!hotelRow) {
+        throw new Error("Selected hotel was not found. Add the hotel first.");
+      }
+      const currentlyHolding =
+        existing.status === "confirmed" &&
+        existing.hotelId === hotelId &&
+        typeof existing.roomsAssigned === "number"
+          ? existing.roomsAssigned
+          : 0;
+      const availableForThis = hotelRow.available + currentlyHolding;
+      if (asked > availableForThis) {
+        throw new Error(
+          `Not enough rooms at ${hotelRow.name}. Available: ${availableForThis}, needed: ${asked}. Set “Rooms to assign” to a smaller number.`,
+        );
+      }
+      roomsAssigned = asked;
+      const store = await readStore();
+      const hotel = (store.hotels || []).find((item) => item.id === hotelId);
+      if (hotel) {
+        if (!patch.hotelName && !existing.hotelName) patch.hotelName = hotel.name;
+        if (!patch.hotelAddress && !existing.hotelAddress && hotel.address) {
+          patch.hotelAddress = hotel.address;
+        }
+      }
+    }
+  }
+
   if (nextStatus === "pending" || nextStatus === "declined") {
+    // Leaving confirmed → release inventory and shared-room membership
+    if (existing.roomGroupId) {
+      await leaveRoomGroup(id, { skipMissing: true });
+      const refreshed = (await listAccommodations()).find((item) => item.id === id);
+      if (refreshed) {
+        const released: AccommodationRequest = {
+          ...refreshed,
+          ...patch,
+          id,
+          status: nextStatus,
+          roomsAssigned: undefined,
+          hotelId: undefined,
+          roomGroupId: undefined,
+          roomGroupRole: undefined,
+          roomShareWith: undefined,
+          hotelName:
+            nextStatus === "declined"
+              ? undefined
+              : patch.hotelName ?? refreshed.hotelName,
+        };
+        if (hasDatabase()) {
+          await upsertAccommodationToDb(released);
+          return released;
+        }
+        const store = await readStore();
+        const index = store.accommodations.findIndex((item) => item.id === id);
+        if (index === -1) return null;
+        store.accommodations[index] = released;
+        await writeStore(store);
+        return released;
+      }
+    }
     roomsAssigned = undefined;
     hotelId = undefined;
+    roomGroupId = undefined;
+    roomGroupRole = undefined;
+    roomShareWith = undefined;
   }
 
   const updated: AccommodationRequest = {
@@ -973,11 +1071,38 @@ export async function updateAccommodation(
     status: nextStatus,
     roomsAssigned,
     hotelId,
+    roomGroupId,
+    roomGroupRole,
+    roomShareWith,
+    checkIn: patch.checkIn?.trim() || existing.checkIn,
+    checkOut: patch.checkOut?.trim() || existing.checkOut,
+    requestedCheckIn:
+      patch.requestedCheckIn ||
+      existing.requestedCheckIn ||
+      existing.checkIn,
+    requestedCheckOut:
+      patch.requestedCheckOut ||
+      existing.requestedCheckOut ||
+      existing.checkOut,
+    offerStatus:
+      patch.offerStatus !== undefined
+        ? patch.offerStatus
+        : existing.offerStatus,
   };
 
   if (nextStatus !== "confirmed") {
     updated.roomsAssigned = undefined;
     updated.hotelId = undefined;
+    updated.roomGroupId = undefined;
+    updated.roomGroupRole = undefined;
+    updated.roomShareWith = undefined;
+  }
+
+  // Clear stale group fields when explicitly undefined
+  if (!roomGroupId) {
+    delete updated.roomGroupId;
+    delete updated.roomGroupRole;
+    delete updated.roomShareWith;
   }
 
   if (hasDatabase()) {
@@ -1046,17 +1171,26 @@ export async function mergeStaysIntoSharedRoom(input: {
         `${row.name}'s request is declined — leave them out of the merge.`,
       );
     }
-    if (typeof row.roomsAssigned === "number" && row.roomsAssigned > 0) {
-      throw new Error(
-        `${row.name} already has ${row.roomsAssigned} room(s) assigned. Do not merge people who already have a room — their assignment is kept as-is.`,
-      );
-    }
     if (row.roomGroupId) {
       throw new Error(
-        `${row.name} is already in a shared room. Leave them out or undo that share first.`,
+        `${row.name} is already in a shared room. Remove them from it first, or add others into that room instead.`,
       );
     }
   }
+
+  // Release any prior solo room holds so inventory can move into this 1 shared room
+  for (const row of selected) {
+    if (typeof row.roomsAssigned === "number" && row.roomsAssigned > 0) {
+      await releaseStayAssignment(row.id);
+    }
+  }
+
+  const refreshed = await listAccommodations();
+  const selectedFresh = uniqueIds.map((id) => {
+    const row = refreshed.find((item) => item.id === id);
+    if (!row) throw new Error(`Stay request not found: ${id}`);
+    return row;
+  });
 
   const inventory = await getRoomInventory();
   const hotelRow = inventory.hotels.find((hotel) => hotel.id === hotelId);
@@ -1074,7 +1208,7 @@ export async function mergeStaysIntoSharedRoom(input: {
   if (!hotel) throw new Error("Selected hotel was not found.");
 
   // Primary = most people requested, then earliest request
-  const ordered = [...selected].sort((a, b) => {
+  const ordered = [...selectedFresh].sort((a, b) => {
     if (b.people !== a.people) return b.people - a.people;
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
@@ -1131,6 +1265,310 @@ export async function mergeStaysIntoSharedRoom(input: {
     inventory: await getRoomInventory(),
     roomGroupId,
   };
+}
+
+function shareNamesForGroup(members: AccommodationRequest[]) {
+  return members.map((item) => item.name);
+}
+
+async function persistAccommodationRows(rows: AccommodationRequest[]) {
+  if (hasDatabase()) {
+    for (const row of rows) {
+      await upsertAccommodationToDb(row);
+    }
+    return;
+  }
+  const store = await readStore();
+  for (const row of rows) {
+    const index = store.accommodations.findIndex((item) => item.id === row.id);
+    if (index === -1) throw new Error(`Stay request not found: ${row.id}`);
+    store.accommodations[index] = row;
+  }
+  await writeStore(store);
+}
+
+/** Occupancy board: who is in which assigned room (solo or shared). */
+export function buildRoomOccupancy(
+  accommodations: AccommodationRequest[],
+  hotels: StayHotel[],
+): import("@/lib/types").RoomOccupancyUnit[] {
+  return buildRoomOccupancyPure(accommodations, hotels);
+}
+
+export async function listRoomOccupancy() {
+  const [stays, hotels] = await Promise.all([
+    listAccommodations(),
+    listHotels(),
+  ]);
+  return buildRoomOccupancy(stays, hotels);
+}
+
+/**
+ * Add a stay to an existing shared room. Releases any previous solo assignment
+ * first so inventory stays correct (shared room still holds 1 room).
+ * Pass either roomGroupId (existing share) or primaryStayId (solo assigned stay
+ * to convert into a shared room).
+ */
+export async function joinStayToRoomGroup(input: {
+  roomGroupId?: string;
+  primaryStayId?: string;
+  stayId: string;
+}): Promise<{ stays: AccommodationRequest[]; inventory: RoomInventory }> {
+  const all = await listAccommodations();
+  let groupId = input.roomGroupId?.trim() || "";
+  let group = groupId
+    ? all.filter((item) => item.roomGroupId === groupId)
+    : [];
+
+  // Convert a solo assigned stay into a shared room, then add the guest
+  if (!group.length && input.primaryStayId) {
+    const primary = all.find((item) => item.id === input.primaryStayId);
+    if (!primary) throw new Error("Room stay not found");
+    if (primary.roomGroupId) {
+      groupId = primary.roomGroupId;
+      group = all.filter((item) => item.roomGroupId === groupId);
+    } else {
+      if (
+        primary.status !== "confirmed" ||
+        !(typeof primary.roomsAssigned === "number" && primary.roomsAssigned > 0)
+      ) {
+        throw new Error("Pick a confirmed assigned room to share");
+      }
+      if (primary.id === input.stayId) {
+        throw new Error("Cannot add a stay to itself");
+      }
+      groupId = `roomgrp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const seeded: AccommodationRequest = {
+        ...primary,
+        roomGroupId: groupId,
+        roomGroupRole: "primary",
+        roomShareWith: [],
+        roomsAssigned: primary.roomsAssigned,
+      };
+      await persistAccommodationRows([seeded]);
+      group = [seeded];
+    }
+  }
+
+  if (group.length < 1 || !groupId) {
+    throw new Error("Shared room not found");
+  }
+  if (group.length >= 10) {
+    throw new Error("This shared room already has 10 stays");
+  }
+
+  const stay = all.find((item) => item.id === input.stayId);
+  if (!stay) throw new Error("Stay request not found");
+  if (stay.status === "declined") {
+    throw new Error(`${stay.name}'s request is declined`);
+  }
+  if (stay.roomGroupId === groupId) {
+    throw new Error(`${stay.name} is already in this room`);
+  }
+  if (stay.roomGroupId) {
+    throw new Error(
+      `${stay.name} is already in another shared room — remove them from it first.`,
+    );
+  }
+
+  const primary =
+    group.find((item) => item.roomGroupRole === "primary") || group[0]!;
+  if (!primary.hotelId) {
+    throw new Error("Shared room has no hotel");
+  }
+
+  // Release solo inventory if they held rooms alone
+  let nextStay: AccommodationRequest = { ...stay };
+  if (
+    stay.status === "confirmed" &&
+    typeof stay.roomsAssigned === "number" &&
+    stay.roomsAssigned > 0
+  ) {
+    nextStay = {
+      ...stay,
+      roomsAssigned: 0,
+    };
+  }
+
+  const members = [...group, nextStay];
+  const names = shareNamesForGroup(members);
+  const now = new Date().toISOString();
+  const nextRows: AccommodationRequest[] = members.map((row) => {
+    const isPrimary = row.id === primary.id;
+    const isJoining = row.id === stay.id;
+    return {
+      ...row,
+      status: "confirmed" as const,
+      hotelId: primary.hotelId,
+      hotelName: primary.hotelName,
+      hotelAddress: primary.hotelAddress,
+      roomDetails: primary.roomDetails,
+      roomGroupId: groupId,
+      roomGroupRole: isPrimary ? ("primary" as const) : ("member" as const),
+      roomShareWith: names.filter((name) => name !== row.name),
+      roomsAssigned: isPrimary
+        ? typeof primary.roomsAssigned === "number" && primary.roomsAssigned > 0
+          ? primary.roomsAssigned
+          : 1
+        : 0,
+      confirmedAt: row.confirmedAt || now,
+      adminNotes: isJoining
+        ? [row.adminNotes, `Joined shared room with ${names.join(", ")}`]
+            .filter(Boolean)
+            .join(" · ")
+        : row.adminNotes,
+    };
+  });
+
+  await persistAccommodationRows(nextRows);
+  return {
+    stays: nextRows,
+    inventory: await getRoomInventory(),
+  };
+}
+
+/**
+ * Remove a stay from a shared room. If they were primary, promote another
+ * member (inventory stays with the group) or dissolve if alone.
+ */
+export async function leaveRoomGroup(
+  stayId: string,
+  options?: { skipMissing?: boolean },
+): Promise<{ stays: AccommodationRequest[]; inventory: RoomInventory }> {
+  const all = await listAccommodations();
+  const stay = all.find((item) => item.id === stayId);
+  if (!stay?.roomGroupId) {
+    if (options?.skipMissing) {
+      return { stays: stay ? [stay] : [], inventory: await getRoomInventory() };
+    }
+    throw new Error("This stay is not in a shared room");
+  }
+
+  const groupId = stay.roomGroupId;
+  const members = all.filter((item) => item.roomGroupId === groupId);
+  const remaining = members.filter((item) => item.id !== stayId);
+  const now = new Date().toISOString();
+
+  const released: AccommodationRequest = {
+    ...stay,
+    status: "pending",
+    roomsAssigned: undefined,
+    hotelId: undefined,
+    hotelName: undefined,
+    hotelAddress: undefined,
+    roomDetails: undefined,
+    roomGroupId: undefined,
+    roomGroupRole: undefined,
+    roomShareWith: undefined,
+    confirmedAt: undefined,
+  };
+  delete (released as { roomGroupId?: string }).roomGroupId;
+  delete (released as { roomGroupRole?: string }).roomGroupRole;
+  delete (released as { roomShareWith?: string[] }).roomShareWith;
+
+  if (remaining.length === 0) {
+    await persistAccommodationRows([released]);
+    return { stays: [released], inventory: await getRoomInventory() };
+  }
+
+  if (remaining.length === 1) {
+    // Dissolve group — last person keeps the 1 inventory room solo
+    const last = remaining[0]!;
+    const solo: AccommodationRequest = {
+      ...last,
+      status: "confirmed",
+      roomsAssigned:
+        typeof last.roomsAssigned === "number" && last.roomsAssigned > 0
+          ? last.roomsAssigned
+          : stay.roomGroupRole === "primary" &&
+              typeof stay.roomsAssigned === "number" &&
+              stay.roomsAssigned > 0
+            ? stay.roomsAssigned
+            : 1,
+      hotelId: last.hotelId || stay.hotelId,
+      hotelName: last.hotelName || stay.hotelName,
+      hotelAddress: last.hotelAddress || stay.hotelAddress,
+      roomDetails: last.roomDetails || stay.roomDetails,
+      roomGroupId: undefined,
+      roomGroupRole: undefined,
+      roomShareWith: undefined,
+      confirmedAt: last.confirmedAt || now,
+    };
+    delete (solo as { roomGroupId?: string }).roomGroupId;
+    delete (solo as { roomGroupRole?: string }).roomGroupRole;
+    delete (solo as { roomShareWith?: string[] }).roomShareWith;
+    await persistAccommodationRows([released, solo]);
+    return { stays: [released, solo], inventory: await getRoomInventory() };
+  }
+
+  let primary =
+    remaining.find((item) => item.roomGroupRole === "primary") || remaining[0]!;
+  if (stay.roomGroupRole === "primary") {
+    primary = remaining.sort((a, b) => b.people - a.people)[0]!;
+  }
+  const names = shareNamesForGroup(remaining);
+  const nextRemaining: AccommodationRequest[] = remaining.map((row) => {
+    const isPrimary = row.id === primary.id;
+    return {
+      ...row,
+      roomGroupRole: isPrimary ? ("primary" as const) : ("member" as const),
+      roomShareWith: names.filter((name) => name !== row.name),
+      roomsAssigned: isPrimary
+        ? typeof primary.roomsAssigned === "number" && primary.roomsAssigned > 0
+          ? primary.roomsAssigned
+          : typeof stay.roomsAssigned === "number" && stay.roomsAssigned > 0
+            ? stay.roomsAssigned
+            : 1
+        : 0,
+      hotelId: primary.hotelId || stay.hotelId,
+      hotelName: primary.hotelName || stay.hotelName,
+      hotelAddress: primary.hotelAddress || stay.hotelAddress,
+      roomDetails: primary.roomDetails || stay.roomDetails,
+    };
+  });
+
+  await persistAccommodationRows([released, ...nextRemaining]);
+  return {
+    stays: [released, ...nextRemaining],
+    inventory: await getRoomInventory(),
+  };
+}
+
+/** Clear hotel/rooms assignment and leave any shared room. */
+export async function releaseStayAssignment(
+  stayId: string,
+): Promise<{ stay: AccommodationRequest; inventory: RoomInventory }> {
+  const existing = (await listAccommodations()).find((item) => item.id === stayId);
+  if (!existing) throw new Error("Stay request not found");
+
+  if (existing.roomGroupId) {
+    const result = await leaveRoomGroup(stayId);
+    const stay =
+      result.stays.find((item) => item.id === stayId) ||
+      (await listAccommodations()).find((item) => item.id === stayId);
+    if (!stay) throw new Error("Stay request not found");
+    return { stay, inventory: result.inventory };
+  }
+
+  const released: AccommodationRequest = {
+    ...existing,
+    status: existing.status === "confirmed" ? "pending" : existing.status,
+    roomsAssigned: undefined,
+    hotelId: undefined,
+    hotelName: undefined,
+    hotelAddress: undefined,
+    roomDetails: undefined,
+    roomGroupId: undefined,
+    roomGroupRole: undefined,
+    roomShareWith: undefined,
+    confirmedAt: undefined,
+  };
+  delete (released as { roomGroupId?: string }).roomGroupId;
+  delete (released as { roomGroupRole?: string }).roomGroupRole;
+  delete (released as { roomShareWith?: string[] }).roomShareWith;
+
+  await persistAccommodationRows([released]);
+  return { stay: released, inventory: await getRoomInventory() };
 }
 
 /** Create or update stay — main separate; mehfil↔laavan share one bride stay. */
@@ -1193,6 +1631,15 @@ export async function upsertAccommodationForGuest(
       rooms: entry.rooms,
       checkIn: entry.checkIn,
       checkOut: entry.checkOut,
+      ...(existing.status === "pending" && existing.offerStatus !== "pending"
+        ? {
+            requestedCheckIn: entry.checkIn,
+            requestedCheckOut: entry.checkOut,
+          }
+        : {
+            requestedCheckIn: existing.requestedCheckIn || existing.checkIn,
+            requestedCheckOut: existing.requestedCheckOut || existing.checkOut,
+          }),
       notes: entry.notes,
       contactFamily: entry.contactFamily,
       rsvpId: entry.rsvpId ?? existing.rsvpId,
@@ -1232,6 +1679,13 @@ export async function upsertAccommodationForGuest(
 }
 
 export async function deleteAccommodation(id: string): Promise<boolean> {
+  const existing = (await listAccommodations()).find((item) => item.id === id);
+  if (!existing) return false;
+
+  if (existing.roomGroupId) {
+    await leaveRoomGroup(id, { skipMissing: true });
+  }
+
   if (hasDatabase()) {
     return deleteAccommodationFromDb(id);
   }

@@ -92,6 +92,14 @@ export type AccommodationRequest = {
   rooms: number;
   checkIn: string;
   checkOut: string;
+  /** Original dates the guest asked for (snapshot; admin may revise checkIn/Out) */
+  requestedCheckIn?: string;
+  requestedCheckOut?: string;
+  /**
+   * When admin offers fewer nights than requested:
+   * pending = waiting for guest accept, accepted = guest OK, declined = guest said no
+   */
+  offerStatus?: "none" | "pending" | "accepted" | "declined";
   notes?: string;
   contactFamily?: string;
   rsvpId?: string;
@@ -126,6 +134,25 @@ export type AccommodationRequest = {
   roomGroupRole?: "primary" | "member";
   /** Display names of people sharing this room */
   roomShareWith?: string[];
+};
+
+/** One assigned room unit for the occupancy board */
+export type RoomOccupancyUnit = {
+  key: string;
+  hotelId: string;
+  hotelName: string;
+  roomDetails?: string;
+  roomsHeld: number;
+  people: number;
+  roomGroupId?: string;
+  stays: Array<{
+    id: string;
+    name: string;
+    people: number;
+    role?: "primary" | "member" | "solo";
+    email?: string;
+    phone?: string;
+  }>;
 };
 
 export type EmailOtpEntry = {
@@ -346,6 +373,7 @@ export type GuestProfile = GuestLogin & {
 export type EmailKind =
   | "otp"
   | "stay"
+  | "stay_offer"
   | "team_invite"
   | "team_update"
   | "photo_reject"
