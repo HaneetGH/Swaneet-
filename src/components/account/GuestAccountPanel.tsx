@@ -12,8 +12,10 @@ import {
   Images,
   Menu,
   MessageSquare,
+  Pencil,
   ScanFace,
   Send,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react";
@@ -259,6 +261,11 @@ export function GuestAccountPanel() {
   const [wishBusy, setWishBusy] = useState(false);
   const [wishDone, setWishDone] = useState("");
   const [wishError, setWishError] = useState("");
+  const [editingWishId, setEditingWishId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editBody, setEditBody] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const [removingWishId, setRemovingWishId] = useState<string | null>(null);
 
   const navItems = useMemo<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -416,6 +423,100 @@ export function GuestAccountPanel() {
       setWishError("Could not share your wish.");
     } finally {
       setWishBusy(false);
+    }
+  };
+
+  const startEditWish = (wish: {
+    id: string;
+    body: string;
+    displayName: string;
+  }) => {
+    setWishError("");
+    setWishDone("");
+    setEditingWishId(wish.id);
+    setEditName(wish.displayName);
+    setEditBody(wish.body);
+  };
+
+  const cancelEditWish = () => {
+    setEditingWishId(null);
+    setEditName("");
+    setEditBody("");
+    setEditBusy(false);
+  };
+
+  const saveEditWish = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingWishId) return;
+    setEditBusy(true);
+    setWishError("");
+    setWishDone("");
+    try {
+      const token = await getGuestIdToken();
+      if (!token) {
+        setWishError("Please sign in again.");
+        return;
+      }
+      const res = await fetch(`/api/messages/${encodeURIComponent(editingWishId)}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          body: editBody,
+          displayName: editName || undefined,
+          inviteTier: invite?.tier,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setWishError(json.error || "Could not update your wish.");
+        return;
+      }
+      cancelEditWish();
+      setWishDone(
+        "Wish updated — it will be reviewed again before it appears on the wall.",
+      );
+      await load();
+    } catch {
+      setWishError("Could not update your wish.");
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const removeWish = async (wishId: string) => {
+    const confirmed = window.confirm(
+      "Remove this wish? This cannot be undone.",
+    );
+    if (!confirmed) return;
+
+    setRemovingWishId(wishId);
+    setWishError("");
+    setWishDone("");
+    try {
+      const token = await getGuestIdToken();
+      if (!token) {
+        setWishError("Please sign in again.");
+        return;
+      }
+      const res = await fetch(`/api/messages/${encodeURIComponent(wishId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setWishError(json.error || "Could not remove your wish.");
+        return;
+      }
+      if (editingWishId === wishId) cancelEditWish();
+      setWishDone("Wish removed.");
+      await load();
+    } catch {
+      setWishError("Could not remove your wish.");
+    } finally {
+      setRemovingWishId(null);
     }
   };
 
@@ -900,7 +1001,7 @@ export function GuestAccountPanel() {
               {activeTab === "wishes" ? (
                 <Panel
                   title="Your wishes"
-                  subtitle="Write as many blessings as you like (up to the account limit). Each one is reviewed before it appears on the wall."
+                  subtitle="Write, edit, or remove your blessings. Edits go back to family review before they appear on the wall."
                   action={
                     <Link
                       href={wishHref}
@@ -939,6 +1040,17 @@ export function GuestAccountPanel() {
                         )}
                       </div>
 
+                      {wishDone ? (
+                        <p className="mt-4 font-body text-sm text-emerald-200">
+                          {wishDone}
+                        </p>
+                      ) : null}
+                      {wishError ? (
+                        <p className="mt-4 font-body text-sm text-rose-200">
+                          {wishError}
+                        </p>
+                      ) : null}
+
                       {!wishes || wishes.items.length === 0 ? (
                         <p className="mt-5 font-body text-sm text-muted">
                           You have not written a wish yet — add your first below.
@@ -947,26 +1059,109 @@ export function GuestAccountPanel() {
                         <ul className="mt-5 space-y-3">
                           {wishes.items.map((wish) => {
                             const meta = wishStatusMeta(wish.status);
+                            const isEditing = editingWishId === wish.id;
+                            const isRemoving = removingWishId === wish.id;
                             return (
                               <li
                                 key={wish.id}
                                 className="rounded-xl border border-gold/15 bg-[#120f16] px-4 py-4"
                               >
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <StatusPill
-                                    label={meta.label}
-                                    tone={meta.tone}
-                                  />
-                                  <span className="font-body text-xs text-muted">
-                                    {formatDate(wish.createdAt)}
-                                  </span>
-                                  <span className="font-body text-xs text-gold/70">
-                                    — {wish.displayName}
-                                  </span>
-                                </div>
-                                <p className="mt-3 font-display text-lg leading-relaxed text-cream">
-                                  “{wish.body}”
-                                </p>
+                                {isEditing ? (
+                                  <form
+                                    onSubmit={saveEditWish}
+                                    className="space-y-4"
+                                  >
+                                    <p className="font-body text-[11px] uppercase tracking-[0.22em] text-gold-soft">
+                                      Edit wish
+                                    </p>
+                                    <label className="block">
+                                      <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                                        Your name
+                                      </span>
+                                      <input
+                                        className={cn(fieldClass, "mt-2")}
+                                        value={editName}
+                                        onChange={(event) =>
+                                          setEditName(event.target.value)
+                                        }
+                                        maxLength={60}
+                                        required
+                                      />
+                                    </label>
+                                    <label className="block">
+                                      <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                                        Message / quote
+                                      </span>
+                                      <textarea
+                                        className={cn(
+                                          fieldClass,
+                                          "mt-2 min-h-28 resize-y",
+                                        )}
+                                        value={editBody}
+                                        onChange={(event) =>
+                                          setEditBody(event.target.value)
+                                        }
+                                        maxLength={400}
+                                        required
+                                      />
+                                      <span className="mt-1 block text-right font-body text-[11px] text-muted">
+                                        {editBody.length}/400
+                                      </span>
+                                    </label>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                      <Button type="submit" disabled={editBusy}>
+                                        <Send size={15} />
+                                        {editBusy ? "Saving…" : "Save changes"}
+                                      </Button>
+                                      <button
+                                        type="button"
+                                        className="font-body text-xs uppercase tracking-[0.18em] text-muted transition hover:text-cream"
+                                        onClick={cancelEditWish}
+                                        disabled={editBusy}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </form>
+                                ) : (
+                                  <>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <StatusPill
+                                        label={meta.label}
+                                        tone={meta.tone}
+                                      />
+                                      <span className="font-body text-xs text-muted">
+                                        {formatDate(wish.createdAt)}
+                                      </span>
+                                      <span className="font-body text-xs text-gold/70">
+                                        — {wish.displayName}
+                                      </span>
+                                    </div>
+                                    <p className="mt-3 font-display text-lg leading-relaxed text-cream">
+                                      “{wish.body}”
+                                    </p>
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 px-3 py-1.5 font-body text-[11px] uppercase tracking-[0.16em] text-gold-soft transition hover:border-gold/50 hover:bg-gold/10"
+                                        onClick={() => startEditWish(wish)}
+                                        disabled={Boolean(removingWishId)}
+                                      >
+                                        <Pencil size={12} />
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1.5 rounded-full border border-rose-300/30 px-3 py-1.5 font-body text-[11px] uppercase tracking-[0.16em] text-rose-200 transition hover:border-rose-300/50 hover:bg-rose-400/10"
+                                        onClick={() => void removeWish(wish.id)}
+                                        disabled={isRemoving || editBusy}
+                                      >
+                                        <Trash2 size={12} />
+                                        {isRemoving ? "Removing…" : "Remove"}
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
                               </li>
                             );
                           })}
@@ -1019,20 +1214,10 @@ export function GuestAccountPanel() {
                           </span>
                         </label>
                         <div className="mt-5 flex flex-wrap items-center gap-4">
-                          <Button type="submit" disabled={wishBusy}>
+                          <Button type="submit" disabled={wishBusy || Boolean(editingWishId)}>
                             <Send size={15} />
                             {wishBusy ? "Sending…" : "Share wish"}
                           </Button>
-                          {wishDone ? (
-                            <p className="font-body text-sm text-emerald-200">
-                              {wishDone}
-                            </p>
-                          ) : null}
-                          {wishError ? (
-                            <p className="font-body text-sm text-rose-200">
-                              {wishError}
-                            </p>
-                          ) : null}
                         </div>
                       </form>
                     ) : (
