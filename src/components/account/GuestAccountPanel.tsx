@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/Button";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { wedding } from "@/data/wedding";
+import { guestActionPath, wishesWritePath } from "@/lib/guest-paths";
 import { useInvite } from "@/lib/invite-context";
 import {
   deriveOverallAttendance,
@@ -246,10 +247,8 @@ export function GuestAccountPanel() {
   const { user, ready: authReady, configured } = useGuestAuth();
   const { site, enabled, ready: flagsReady } = useFeatureFlags();
   const invite = useInvite();
-  const rsvpHref = invite ? `${invite.basePath}#rsvp` : "/#rsvp";
-  const uploadHref = invite
-    ? `${invite.basePath}#share-photos`
-    : "/#share-photos";
+  const rsvpHref = guestActionPath("/rsvp", invite);
+  const uploadHref = guestActionPath("/upload", invite);
   const [data, setData] = useState<AccountResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -750,7 +749,7 @@ export function GuestAccountPanel() {
   const uploads = data?.uploads;
   const wishes = data?.wishes;
   const face = data?.face?.profile || null;
-  const wishHref = invite ? `${invite.basePath}#wishes` : "/#wishes";
+  const wishHref = wishesWritePath(invite);
   const greeting =
     user.displayName?.trim().split(/\s+/)[0] ||
     data?.guest?.name?.trim().split(/\s+/)[0] ||

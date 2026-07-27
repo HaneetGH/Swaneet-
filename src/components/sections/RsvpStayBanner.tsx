@@ -2,11 +2,15 @@
 
 import { BedDouble, Heart } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import { guestActionPath } from "@/lib/guest-paths";
+import { useInvite } from "@/lib/invite-context";
 
-/** Homepage shortcut to RSVP + stay, with optional uploaded image on top */
+/** Shortcut to RSVP + stay (not shown on invitation-only home). */
 export function RsvpStayBanner() {
+  const invite = useInvite();
   const { enabled, ready } = useFeatureFlags();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
@@ -45,8 +49,8 @@ export function RsvpStayBanner() {
         </div>
       ) : null}
 
-      <a
-        href="#rsvp"
+      <Link
+        href={guestActionPath("/rsvp", invite)}
         className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-gold/5 sm:px-8"
       >
         <span className="flex min-w-0 items-center gap-3">
@@ -69,7 +73,7 @@ export function RsvpStayBanner() {
           <Heart size={12} fill="currentColor" />
           RSVP
         </span>
-      </a>
+      </Link>
     </div>
   );
 }

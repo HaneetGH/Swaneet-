@@ -5,13 +5,7 @@ import { Countdown } from "@/components/sections/Countdown";
 import { Events } from "@/components/sections/Events";
 import { Family } from "@/components/sections/Family";
 import { Gallery } from "@/components/sections/Gallery";
-import { GuestPhotoShare } from "@/components/sections/GuestPhotoShare";
-import { GuestWishes } from "@/components/sections/GuestWishes";
 import { Hero } from "@/components/sections/Hero";
-import { RSVP } from "@/components/sections/RSVP";
-import { RsvpStayBanner } from "@/components/sections/RsvpStayBanner";
-import { SharePhotosBanner } from "@/components/sections/SharePhotosBanner";
-import { DownloadPhotosBanner } from "@/components/sections/DownloadPhotosBanner";
 import { Venue } from "@/components/sections/Venue";
 import { GuestWelcomeGuide } from "@/components/ui/GuestWelcomeGuide";
 import { getBrideInvite } from "@/data/bride-invites";
@@ -41,6 +35,7 @@ export async function generateMetadata({ params }: Params) {
   };
 }
 
+/** Invitation-only bride invite — guest actions on /i/[slug]/rsvp|wishes|upload. */
 export default async function BrideInvitePage({ params }: Params) {
   const { slug } = await params;
   const invite = getBrideInvite(slug);
@@ -51,17 +46,11 @@ export default async function BrideInvitePage({ params }: Params) {
       <main className="ambient-bg relative min-h-screen">
         <Navigation />
         <Hero />
-        <DownloadPhotosBanner />
-        <SharePhotosBanner />
-        <RsvpStayBanner />
         <Countdown />
         <Events />
         <Venue />
         <Gallery />
         <Family />
-        <GuestWishes />
-        <RSVP />
-        <GuestPhotoShare />
         <Footer />
         <GuestWelcomeGuide />
       </main>

@@ -14,6 +14,7 @@ import {
 import { wedding } from "@/data/wedding";
 import { sortEventsByDateTime } from "@/lib/datetime";
 import { trackGuestActivity } from "@/lib/guest-activity";
+import { guestActionPath } from "@/lib/guest-paths";
 import { useInvite } from "@/lib/invite-context";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import {
@@ -301,7 +302,7 @@ function useGalleryData(
 
 function GalleryEmptyState() {
   const invite = useInvite();
-  const shareHref = invite ? `${invite.basePath}#share-photos` : "/#share-photos";
+  const shareHref = guestActionPath("/upload", invite);
   const { enabled, ready } = useFeatureFlags();
   const canShare = !ready || enabled("guest_photos");
 

@@ -264,11 +264,12 @@ export function GuestWishes() {
         ) : null}
 
         <motion.div
+          id="write-wish"
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          className="mx-auto mt-12 max-w-2xl border border-gold/25 bg-[#120f16]/70 px-5 py-6 sm:px-7"
+          className="mx-auto mt-12 max-w-2xl scroll-mt-28 border border-gold/25 bg-[#120f16]/70 px-5 py-6 sm:px-7"
         >
           <div className="flex items-center gap-2 text-gold-soft">
             <Heart size={16} />

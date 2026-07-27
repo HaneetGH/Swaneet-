@@ -6,32 +6,21 @@ import { OurStory } from "@/components/sections/OurStory";
 import { Events } from "@/components/sections/Events";
 import { Venue } from "@/components/sections/Venue";
 import { Gallery } from "@/components/sections/Gallery";
-import { GuestPhotoShare } from "@/components/sections/GuestPhotoShare";
-import { GuestEngageBanner } from "@/components/sections/GuestEngageBanner";
-import { DownloadPhotosBanner } from "@/components/sections/DownloadPhotosBanner";
-import { RsvpStayBanner } from "@/components/sections/RsvpStayBanner";
 import { Family } from "@/components/sections/Family";
-import { GuestWishes } from "@/components/sections/GuestWishes";
-import { RSVP } from "@/components/sections/RSVP";
 import { GuestWelcomeGuide } from "@/components/ui/GuestWelcomeGuide";
 
+/** Invitation-only homepage — guest actions live on /rsvp, /wishes, /upload. */
 export default function Home() {
   return (
     <main className="ambient-bg relative min-h-screen">
       <Navigation />
       <Hero />
-      <GuestEngageBanner />
-      <DownloadPhotosBanner />
-      <RsvpStayBanner />
       <Countdown />
       <OurStory />
       <Events />
       <Venue />
       <Gallery />
       <Family />
-      <GuestWishes />
-      <RSVP />
-      <GuestPhotoShare />
       <Footer />
       <GuestWelcomeGuide />
     </main>

@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { GuestNavAuth } from "@/components/layout/GuestNavAuth";
 import { wedding } from "@/data/wedding";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import { guestActionPath } from "@/lib/guest-paths";
 import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +19,7 @@ export function Navigation() {
   const pathname = usePathname();
   const invite = useInvite();
   const { enabled, ready } = useFeatureFlags();
-  const onHome = pathname === "/";
+  const onMainHome = pathname === "/";
 
   const links = useMemo(() => {
     const base: NavLink[] = invite
@@ -39,13 +40,13 @@ export function Navigation() {
         ];
 
     if (!ready || enabled("guest_messages")) {
-      base.push({ href: "#wishes", label: "Wishes" });
+      base.push({ href: guestActionPath("/wishes", invite), label: "Wishes" });
     }
     if (!ready || enabled("rsvp")) {
-      base.push({ href: "#rsvp", label: "RSVP" });
+      base.push({ href: guestActionPath("/rsvp", invite), label: "RSVP" });
     }
     if (!ready || enabled("guest_photos")) {
-      base.push({ href: "#share-photos", label: "Upload" });
+      base.push({ href: guestActionPath("/upload", invite), label: "Upload" });
     }
     if (ready && enabled("face_find")) {
       base.push({ href: "/my-photos", label: "Find mine" });
@@ -57,13 +58,18 @@ export function Navigation() {
   const resolveHref = (href: string) => {
     if (href.startsWith("/")) return href;
     if (invite) return `${invite.basePath}${href}`;
-    return onHome ? href : `/${href}`;
+    return onMainHome ? href : `/${href}`;
   };
 
   const brandHref = useMemo(() => {
     if (invite) return `${invite.basePath}#hero`;
-    return onHome ? "#hero" : "/";
-  }, [invite, onHome]);
+    return onMainHome ? "#hero" : "/";
+  }, [invite, onMainHome]);
+
+  const isActive = (href: string) => {
+    if (href.startsWith("/")) return pathname === href;
+    return false;
+  };
 
   return (
     <motion.header
@@ -91,7 +97,7 @@ export function Navigation() {
               href={resolveHref(link.href)}
               className={cn(
                 "font-body text-[10px] uppercase tracking-[0.18em] transition hover:text-gold-soft 2xl:text-[11px] 2xl:tracking-[0.2em]",
-                pathname === link.href ? "text-gold-soft" : "text-muted",
+                isActive(link.href) ? "text-gold-soft" : "text-muted",
               )}
             >
               {link.label}

@@ -1,8 +1,11 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { buildDisplayWishPool, SAMPLE_WISHES } from "@/data/sample-wishes";
+import { guestActionPath } from "@/lib/guest-paths";
+import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
 type WishItem = { id: string; body: string; name: string; source?: string };
@@ -161,6 +164,7 @@ export function FloatingWishes({
   variant = "hero",
   className,
 }: WishPoolProps) {
+  const invite = useInvite();
   const pool = useWishPool();
   const [index, setIndex] = useState(0);
 
@@ -182,8 +186,8 @@ export function FloatingWishes({
 
   return (
     <div className={cn("relative z-[1] mx-auto mt-8 w-full max-w-xl px-2", className)}>
-      <a
-        href="#wishes"
+      <Link
+        href={guestActionPath("/wishes", invite)}
         className="group block rounded-sm outline-none transition focus-visible:ring-1 focus-visible:ring-gold/50"
         aria-label="View all guest wishes"
       >
@@ -214,7 +218,7 @@ export function FloatingWishes({
         <p className="mt-4 text-center font-body text-[10px] uppercase tracking-[0.28em] text-gold/45 transition group-hover:text-gold/70">
           Read all wishes
         </p>
-      </a>
+      </Link>
     </div>
   );
 }
