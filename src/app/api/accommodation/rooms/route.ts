@@ -6,6 +6,7 @@ import {
   leaveRoomGroup,
   listRoomOccupancy,
   releaseStayAssignment,
+  swapStayRooms,
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,11 @@ const schema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("release"),
     stayId: z.string().trim().min(1),
+  }),
+  z.object({
+    action: z.literal("swap"),
+    stayIdA: z.string().trim().min(1),
+    stayIdB: z.string().trim().min(1),
   }),
 ]);
 
@@ -46,9 +52,10 @@ export async function GET() {
 
 /**
  * Room assignment actions:
- * - join: add a stay to an existing shared room (releases prior solo assignment)
+ * - join: add / move a stay into a room (leaves prior shared room if needed)
  * - leave: remove from shared room (inventory stays with remaining members)
  * - release: clear assignment entirely (and leave shared room if needed)
+ * - swap: exchange room assignments between two guests
  */
 export async function POST(request: Request) {
   try {
@@ -81,7 +88,8 @@ export async function POST(request: Request) {
         action: "join",
         stays: result.stays,
         inventory: result.inventory,
-        message: "Guest added to the room. Previous solo assignment released if they had one.",
+        message:
+          "Guest added to the room. Previous assignment released if they had one.",
       });
     }
 
@@ -93,6 +101,20 @@ export async function POST(request: Request) {
         stays: result.stays,
         inventory: result.inventory,
         message: "Guest removed from the shared room.",
+      });
+    }
+
+    if (parsed.data.action === "swap") {
+      const result = await swapStayRooms(
+        parsed.data.stayIdA,
+        parsed.data.stayIdB,
+      );
+      return NextResponse.json({
+        ok: true,
+        action: "swap",
+        stays: result.stays,
+        inventory: result.inventory,
+        message: "Guests swapped rooms.",
       });
     }
 
@@ -113,7 +135,9 @@ export async function POST(request: Request) {
       message.includes("not found") ||
       message.includes("declined") ||
       message.includes("Select") ||
-      message.includes("enough")
+      message.includes("enough") ||
+      message.includes("Pick two") ||
+      message.includes("Both guests")
         ? 409
         : 500;
     return NextResponse.json({ error: message }, { status });
