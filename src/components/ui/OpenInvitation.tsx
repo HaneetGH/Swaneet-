@@ -137,19 +137,19 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
 
           <FloatingWishes variant="gate" />
 
-          {/* Center blur — wishes readable when they flow out toward the edges */}
+          {/* Center blur — keep seal primary; side wishes stay readable */}
           <div aria-hidden className="pointer-events-none absolute inset-0 z-[2]">
             <div
-              className="absolute inset-0 backdrop-blur-md sm:backdrop-blur-lg"
+              className="absolute inset-0 backdrop-blur-sm sm:backdrop-blur-md"
               style={{
                 WebkitMaskImage:
-                  "radial-gradient(ellipse 55% 50% at 50% 48%, black 0%, black 36%, transparent 70%)",
+                  "radial-gradient(ellipse 46% 42% at 50% 48%, black 0%, black 26%, transparent 60%)",
                 maskImage:
-                  "radial-gradient(ellipse 55% 50% at 50% 48%, black 0%, black 36%, transparent 70%)",
+                  "radial-gradient(ellipse 46% 42% at 50% 48%, black 0%, black 26%, transparent 60%)",
               }}
             />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.5)_0%,rgba(7,6,10,0.18)_40%,transparent_66%)]" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.5)_65%,rgba(7,6,10,0.95)_100%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.4)_0%,rgba(7,6,10,0.12)_36%,transparent_62%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.4)_70%,rgba(7,6,10,0.92)_100%)]" />
           </div>
 
           <motion.div

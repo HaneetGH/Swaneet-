@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { buildDisplayWishPool } from "@/data/sample-wishes";
+import { buildDisplayWishPool, SAMPLE_WISHES } from "@/data/sample-wishes";
 import { cn } from "@/lib/utils";
 
 type WishItem = { id: string; body: string; name: string; source?: string };
@@ -23,18 +23,28 @@ type FloatingWishesProps = {
   className?: string;
 };
 
-const LEFT_TOPS = ["10%", "28%", "46%", "64%", "80%"];
-const RIGHT_TOPS = ["14%", "32%", "50%", "68%", "84%"];
+const LEFT_TOPS = ["9%", "27%", "45%", "63%", "79%"];
+const RIGHT_TOPS = ["13%", "31%", "49%", "67%", "83%"];
+
+/** Instant public fallback — no login / no API wait required */
+const PUBLIC_FALLBACK: WishItem[] = buildDisplayWishPool(
+  SAMPLE_WISHES.map((wish) => ({
+    id: wish.id,
+    body: wish.body,
+    name: wish.displayName,
+    source: "sample" as const,
+  })),
+);
 
 /**
  * Unique wishes floating on both left and right edges.
- * Never repeats one review across the screen.
+ * Visible to everyone (logged out included) via public samples, then enriched from DB.
  */
 export function FloatingWishes({
   variant = "hero",
   className,
 }: FloatingWishesProps) {
-  const [pool, setPool] = useState<WishItem[]>([]);
+  const [pool, setPool] = useState<WishItem[]>(PUBLIC_FALLBACK);
 
   useEffect(() => {
     let active = true;
@@ -71,8 +81,6 @@ export function FloatingWishes({
     const leftTops = variant === "gate" ? LEFT_TOPS.slice(0, 4) : LEFT_TOPS;
     const rightTops = variant === "gate" ? RIGHT_TOPS.slice(0, 4) : RIGHT_TOPS;
     const maxSlots = leftTops.length + rightTops.length;
-
-    // One unique wish per visible slot — never clone the same review
     const unique = pool.slice(0, maxSlots);
     const result: FloatingSlot[] = [];
 
@@ -87,8 +95,8 @@ export function FloatingWishes({
         side: onLeft ? "left" : "right",
         top,
         style: index % 3 === 1 ? "card" : "line",
-        duration: 7 + (index % 4) * 1.4,
-        delay: index * 0.35,
+        duration: 8 + (index % 4) * 1.2,
+        delay: index * 0.25,
         wish,
       });
     });
@@ -110,16 +118,16 @@ export function FloatingWishes({
         <motion.div
           key={slot.id}
           className={cn(
-            "absolute max-w-[13.5rem] sm:max-w-[16.5rem]",
+            "absolute max-w-[15.5rem] sm:max-w-[19rem] md:max-w-[21rem]",
             slot.side === "left"
-              ? "left-3 text-left sm:left-6 md:left-10"
-              : "right-3 text-right sm:right-6 md:right-10",
+              ? "left-2 text-left sm:left-5 md:left-8"
+              : "right-2 text-right sm:right-5 md:right-8",
           )}
           style={{ top: slot.top }}
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{
-            opacity: [0.4, 0.9, 0.5],
-            y: [0, -14, 0],
+            opacity: [0.82, 1, 0.88],
+            y: [0, -10, 0],
           }}
           transition={{
             duration: slot.duration,
@@ -129,20 +137,20 @@ export function FloatingWishes({
           }}
         >
           {slot.style === "card" ? (
-            <article className="border border-gold/20 bg-[#120e16]/40 px-3.5 py-3 backdrop-blur-[1px]">
-              <p className="font-display text-[13px] leading-snug text-cream/80 sm:text-[14px]">
+            <article className="border border-gold/30 bg-[#120e16]/70 px-4 py-3.5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur-[2px] sm:px-5 sm:py-4">
+              <p className="font-display text-[16px] leading-snug text-cream sm:text-[18px] md:text-[19px]">
                 “{slot.wish.body}”
               </p>
-              <p className="mt-2 font-body text-[9px] uppercase tracking-[0.2em] text-gold/55 sm:text-[10px]">
+              <p className="mt-2.5 font-body text-[11px] uppercase tracking-[0.2em] text-gold-soft sm:text-xs">
                 — {slot.wish.name}
               </p>
             </article>
           ) : (
-            <blockquote>
-              <p className="font-display text-[13px] leading-snug text-cream/75 sm:text-[14px]">
+            <blockquote className="rounded-sm bg-[#07060a]/35 px-1 py-1">
+              <p className="font-display text-[16px] leading-snug text-cream sm:text-[18px] md:text-[19px]">
                 “{slot.wish.body}”
               </p>
-              <footer className="mt-2 font-body text-[9px] uppercase tracking-[0.22em] text-gold/50 sm:text-[10px]">
+              <footer className="mt-2.5 font-body text-[11px] uppercase tracking-[0.2em] text-gold-soft sm:text-xs">
                 — {slot.wish.name}
               </footer>
             </blockquote>
