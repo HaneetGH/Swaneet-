@@ -48,8 +48,7 @@ export function Hero() {
 
       <FloatingWishBackdrop variant="hero" />
 
-      {/* Soft edge vignette only — moon handles the center blur */}
-      <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_0%,transparent_55%,rgba(7,6,10,0.45)_82%,rgba(7,6,10,0.9)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.28)_0%,transparent_42%,rgba(7,6,10,0.5)_72%,rgba(7,6,10,0.92)_100%)]" />
 
       <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center px-6 pb-16 pt-28 text-center">
         <motion.p
