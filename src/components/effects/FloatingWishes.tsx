@@ -1,32 +1,21 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import { buildDisplayWishPool, SAMPLE_WISHES } from "@/data/sample-wishes";
-import { cn } from "@/lib/utils";
 
 type WishItem = { id: string; body: string; name: string; source?: string };
 
-type FloatingSlot = {
-  id: string;
-  side: "left" | "right";
-  top: string;
-  style: "line" | "card";
-  duration: number;
-  delay: number;
-  wish: WishItem;
-};
-
 type FloatingWishesProps = {
-  /** hero = landing page behind couple names; gate = sealed scroll first screen */
+  /**
+   * hero = one rotating blessing under the couple names
+   * gate = unused (kept for call-site compatibility; renders nothing)
+   */
   variant?: "hero" | "gate";
   className?: string;
 };
 
-const LEFT_TOPS = ["9%", "27%", "45%", "63%", "79%"];
-const RIGHT_TOPS = ["13%", "31%", "49%", "67%", "83%"];
-
-/** Instant public fallback — no login / no API wait required */
+/** Instant public fallback — visible without login / API wait */
 const PUBLIC_FALLBACK: WishItem[] = buildDisplayWishPool(
   SAMPLE_WISHES.map((wish) => ({
     id: wish.id,
@@ -37,14 +26,15 @@ const PUBLIC_FALLBACK: WishItem[] = buildDisplayWishPool(
 );
 
 /**
- * Unique wishes floating on both left and right edges.
- * Visible to everyone (logged out included) via public samples, then enriched from DB.
+ * Classy hero treatment: a single rotating guest blessing.
+ * Keeps the invitation / couple names as the focus — no side clutter.
  */
 export function FloatingWishes({
   variant = "hero",
   className,
 }: FloatingWishesProps) {
   const [pool, setPool] = useState<WishItem[]>(PUBLIC_FALLBACK);
+  const [index, setIndex] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -60,13 +50,17 @@ export function FloatingWishes({
           }>;
         } | null) => {
           if (!active || !data?.messages?.length) return;
-          const mapped = data.messages.map((wish) => ({
-            id: wish.id,
-            body: wish.body,
-            name: wish.displayName,
-            source: wish.source,
-          }));
-          setPool(buildDisplayWishPool(mapped));
+          setPool(
+            buildDisplayWishPool(
+              data.messages.map((wish) => ({
+                id: wish.id,
+                body: wish.body,
+                name: wish.displayName,
+                source: wish.source,
+              })),
+            ),
+          );
+          setIndex(0);
         },
       )
       .catch(() => undefined);
@@ -75,88 +69,48 @@ export function FloatingWishes({
     };
   }, []);
 
-  const slots = useMemo<FloatingSlot[]>(() => {
-    if (pool.length === 0) return [];
+  useEffect(() => {
+    if (pool.length <= 1) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return;
+    const timer = window.setInterval(() => {
+      setIndex((current) => (current + 1) % pool.length);
+    }, 5600);
+    return () => window.clearInterval(timer);
+  }, [pool.length]);
 
-    const leftTops = variant === "gate" ? LEFT_TOPS.slice(0, 4) : LEFT_TOPS;
-    const rightTops = variant === "gate" ? RIGHT_TOPS.slice(0, 4) : RIGHT_TOPS;
-    const maxSlots = leftTops.length + rightTops.length;
-    const unique = pool.slice(0, maxSlots);
-    const result: FloatingSlot[] = [];
+  // Seal screen stays clean — blessings live on the hero + wishes wall
+  if (variant === "gate") return null;
+  if (pool.length === 0) return null;
 
-    unique.forEach((wish, index) => {
-      const onLeft = index % 2 === 0;
-      const sideIndex = Math.floor(index / 2);
-      const tops = onLeft ? leftTops : rightTops;
-      const top = tops[sideIndex % tops.length] || "20%";
-
-      result.push({
-        id: `slot-${wish.id}`,
-        side: onLeft ? "left" : "right",
-        top,
-        style: index % 3 === 1 ? "card" : "line",
-        duration: 8 + (index % 4) * 1.2,
-        delay: index * 0.25,
-        wish,
-      });
-    });
-
-    return result;
-  }, [pool, variant]);
-
-  if (slots.length === 0) return null;
+  const wish = pool[index % pool.length];
+  if (!wish) return null;
 
   return (
-    <div
-      aria-hidden
-      className={cn(
-        "pointer-events-none absolute inset-0 z-[1] overflow-hidden",
-        className,
-      )}
-    >
-      {slots.map((slot) => (
-        <motion.div
-          key={slot.id}
-          className={cn(
-            "absolute max-w-[15.5rem] sm:max-w-[19rem] md:max-w-[21rem]",
-            slot.side === "left"
-              ? "left-2 text-left sm:left-5 md:left-8"
-              : "right-2 text-right sm:right-5 md:right-8",
-          )}
-          style={{ top: slot.top }}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{
-            opacity: [0.82, 1, 0.88],
-            y: [0, -10, 0],
-          }}
-          transition={{
-            duration: slot.duration,
-            delay: slot.delay,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
-        >
-          {slot.style === "card" ? (
-            <article className="border border-gold/30 bg-[#120e16]/70 px-4 py-3.5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur-[2px] sm:px-5 sm:py-4">
-              <p className="font-display text-[16px] leading-snug text-cream sm:text-[18px] md:text-[19px]">
-                “{slot.wish.body}”
-              </p>
-              <p className="mt-2.5 font-body text-[11px] uppercase tracking-[0.2em] text-gold-soft sm:text-xs">
-                — {slot.wish.name}
-              </p>
-            </article>
-          ) : (
-            <blockquote className="rounded-sm bg-[#07060a]/35 px-1 py-1">
-              <p className="font-display text-[16px] leading-snug text-cream sm:text-[18px] md:text-[19px]">
-                “{slot.wish.body}”
-              </p>
-              <footer className="mt-2.5 font-body text-[11px] uppercase tracking-[0.2em] text-gold-soft sm:text-xs">
-                — {slot.wish.name}
-              </footer>
-            </blockquote>
-          )}
-        </motion.div>
-      ))}
+    <div className="pointer-events-none relative z-[1] mx-auto mt-8 w-full max-w-xl px-2">
+      <p className="mb-3 text-center font-body text-[10px] uppercase tracking-[0.32em] text-gold/55">
+        A blessing from our guests
+      </p>
+
+      <div className="relative min-h-[5.5rem] sm:min-h-[6rem]">
+        <AnimatePresence mode="wait">
+          <motion.blockquote
+            key={wish.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute inset-x-0 top-0 text-center"
+          >
+            <p className="font-display text-lg leading-relaxed text-cream/90 sm:text-xl md:text-[1.35rem]">
+              “{wish.body}”
+            </p>
+            <footer className="mt-3 font-body text-[11px] uppercase tracking-[0.24em] text-gold-soft sm:text-xs">
+              — {wish.name}
+            </footer>
+          </motion.blockquote>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
