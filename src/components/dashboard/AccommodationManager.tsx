@@ -578,6 +578,37 @@ export function AccommodationManager({
     }
   };
 
+  const resendEmail = async (stayId: string) => {
+    setRoomBusyKey(`email-${stayId}`);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/accommodation/${stayId}/resend`, {
+        method: "POST",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        accommodation?: AccommodationRequest;
+      };
+      if (!res.ok) {
+        setMessage(data.error || "Could not resend email");
+        return;
+      }
+      if (data.accommodation) {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === stayId ? data.accommodation! : item,
+          ),
+        );
+      }
+      setMessage(data.message || "Email resent.");
+    } catch {
+      setMessage("Could not resend email. Please try again.");
+    } finally {
+      setRoomBusyKey(null);
+    }
+  };
+
   const toggleMergeId = (id: string) => {
     setMergeIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
@@ -946,6 +977,21 @@ export function AccommodationManager({
                             Swap
                           </button>
                         )}
+                        <button
+                          type="button"
+                          disabled={roomBusyKey === `email-${guest.id}`}
+                          onClick={() => void resendEmail(guest.id)}
+                          className="rounded-full border border-gold/25 px-2.5 py-1 font-body text-[10px] uppercase tracking-[0.12em] text-gold-soft hover:bg-gold/10 disabled:opacity-50"
+                          title={
+                            guest.email
+                              ? `Resend room email to ${guest.email}`
+                              : "Resend room email"
+                          }
+                        >
+                          {roomBusyKey === `email-${guest.id}`
+                            ? "Sending…"
+                            : "Resend email"}
+                        </button>
                         {unit.roomGroupId ? (
                           <button
                             type="button"
@@ -1689,6 +1735,24 @@ export function AccommodationManager({
                             : `Offer ${offeredNights} nights & email accept link`
                           : "Approve & email hotel details"
                         : "Save & email guest"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={
+                        roomBusyKey === `email-${item.id}` ||
+                        savingId === item.id ||
+                        !(draft.email || item.email || item.authEmail)
+                      }
+                      onClick={() => void resendEmail(item.id)}
+                      title="Send the current room/offer email again without changing assignment"
+                    >
+                      <Mail size={14} />
+                      {roomBusyKey === `email-${item.id}`
+                        ? "Sending…"
+                        : item.offerStatus === "pending"
+                          ? "Resend offer email"
+                          : "Resend email"}
                     </Button>
                   </div>
                 </div>
