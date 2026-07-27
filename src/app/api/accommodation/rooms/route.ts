@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
+import { sendAccommodationEmail } from "@/lib/email";
+import { buildSharedRoomRoommateContacts } from "@/lib/shared-room-email";
 import {
   joinStayToRoomGroup,
   leaveRoomGroup,
+  listAccommodations,
   listRoomOccupancy,
+  listRsvps,
   releaseStayAssignment,
   swapStayRooms,
+  updateAccommodation,
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +60,7 @@ export async function GET() {
  * - join: add / move a stay into a room (leaves prior shared room if needed)
  * - leave: remove from shared room (inventory stays with remaining members)
  * - release: clear assignment entirely (and leave shared room if needed)
- * - swap: exchange room assignments between two guests
+ * - swap: exchange room assignments between two guests (+ email both)
  */
 export async function POST(request: Request) {
   try {
@@ -109,12 +114,70 @@ export async function POST(request: Request) {
         parsed.data.stayIdA,
         parsed.data.stayIdB,
       );
+
+      const [allStays, rsvps] = await Promise.all([
+        listAccommodations(),
+        listRsvps(),
+      ]);
+      const now = new Date().toISOString();
+      const swapped = [parsed.data.stayIdA, parsed.data.stayIdB]
+        .map((id) => allStays.find((item) => item.id === id))
+        .filter(Boolean);
+
+      const emailResults: Array<{
+        stayId: string;
+        name: string;
+        sent: boolean;
+        error?: string;
+      }> = [];
+
+      for (const stay of swapped) {
+        if (!stay) continue;
+        let roommates = undefined;
+        if (stay.roomGroupId) {
+          const group = allStays.filter(
+            (item) => item.roomGroupId === stay.roomGroupId,
+          );
+          roommates = buildSharedRoomRoommateContacts(group, rsvps, stay.id);
+        }
+        const mailed = await sendAccommodationEmail(stay, { roommates });
+        if (mailed.ok) {
+          await updateAccommodation(stay.id, { emailSentAt: now }).catch(
+            () => undefined,
+          );
+          emailResults.push({
+            stayId: stay.id,
+            name: stay.name,
+            sent: true,
+          });
+        } else {
+          emailResults.push({
+            stayId: stay.id,
+            name: stay.name,
+            sent: false,
+            error: mailed.error,
+          });
+        }
+      }
+
+      const sentCount = emailResults.filter((row) => row.sent).length;
+      const failed = emailResults.filter((row) => !row.sent);
+      const message =
+        sentCount === emailResults.length && sentCount > 0
+          ? "Guests swapped rooms — updated details emailed to both."
+          : sentCount > 0
+            ? `Guests swapped rooms — emailed ${sentCount}/${emailResults.length}. ${failed.map((row) => `${row.name}: ${row.error || "failed"}`).join(" · ")}`
+            : failed.length
+              ? `Guests swapped rooms, but emails failed: ${failed.map((row) => `${row.name}: ${row.error || "failed"}`).join(" · ")}`
+              : "Guests swapped rooms.";
+
       return NextResponse.json({
         ok: true,
         action: "swap",
         stays: result.stays,
         inventory: result.inventory,
-        message: "Guests swapped rooms.",
+        email: { results: emailResults, sent: sentCount },
+        message,
       });
     }
 
