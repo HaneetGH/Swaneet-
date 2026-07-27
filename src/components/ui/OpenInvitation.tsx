@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { FloatingWishBackdrop } from "@/components/effects/FloatingWishes";
 import { wedding } from "@/data/wedding";
 
 type OpenInvitationProps = {
@@ -134,6 +135,9 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
             ))}
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,6,10,0.45)_65%,rgba(7,6,10,0.95)_100%)]" />
           </div>
+
+          <FloatingWishBackdrop variant="gate" />
+          <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.35)_0%,transparent_45%,rgba(7,6,10,0.55)_75%,rgba(7,6,10,0.92)_100%)]" />
 
           <motion.div
             className="relative z-10 flex w-full max-w-lg flex-col items-center px-5 md:max-w-3xl md:px-8"
