@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { GuestNavAuth } from "@/components/layout/GuestNavAuth";
 import { wedding } from "@/data/wedding";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import { useGuestAuth } from "@/hooks/useGuestAuth";
 import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +19,9 @@ export function Navigation() {
   const pathname = usePathname();
   const invite = useInvite();
   const { enabled, ready } = useFeatureFlags();
+  const { user, ready: authReady } = useGuestAuth();
   const onHome = pathname === "/";
+  const signedIn = authReady && Boolean(user);
 
   const links = useMemo(() => {
     const base: NavLink[] = invite
@@ -47,8 +50,11 @@ export function Navigation() {
     if (ready && enabled("face_find")) {
       base.push({ href: "/my-photos", label: "Find mine" });
     }
+    if (signedIn) {
+      base.push({ href: "/my-account", label: "My account" });
+    }
     return base;
-  }, [enabled, invite, ready]);
+  }, [enabled, invite, ready, signedIn]);
 
   const resolveHref = (href: string) => {
     if (href.startsWith("/")) return href;
@@ -84,7 +90,14 @@ export function Navigation() {
             <Link
               key={link.href}
               href={resolveHref(link.href)}
-              className="shrink-0 font-body text-[11px] uppercase tracking-[0.22em] text-muted transition hover:text-gold-soft"
+              className={cn(
+                "shrink-0 font-body text-[11px] uppercase tracking-[0.22em] transition hover:text-gold-soft",
+                pathname === link.href ||
+                  (link.href === "/my-account" &&
+                    pathname?.startsWith("/my-account"))
+                  ? "text-gold-soft"
+                  : "text-muted",
+              )}
             >
               {link.label}
             </Link>
