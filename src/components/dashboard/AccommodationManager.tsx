@@ -60,11 +60,13 @@ type StayDraft = {
   roomsAssigned?: number | "";
   checkIn?: string;
   checkOut?: string;
+  useBlockedRooms?: boolean;
 };
 
 const emptyInventory: RoomInventory = {
   total: 0,
   assigned: 0,
+  blocked: 0,
   available: 0,
   hotels: [],
 };
@@ -83,6 +85,7 @@ export function AccommodationManager({
     name: "",
     address: "",
     totalRooms: "",
+    blockedRooms: "",
     notes: "",
   });
   const [editingHotelId, setEditingHotelId] = useState<string | null>(null);
@@ -97,6 +100,7 @@ export function AccommodationManager({
   const [mergeIds, setMergeIds] = useState<string[]>([]);
   const [mergeHotelId, setMergeHotelId] = useState("");
   const [mergeRoomDetails, setMergeRoomDetails] = useState("");
+  const [mergeUseBlocked, setMergeUseBlocked] = useState(false);
   const [joinStayId, setJoinStayId] = useState<Record<string, string>>({});
   const [roomBusyKey, setRoomBusyKey] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
@@ -183,17 +187,33 @@ export function AccommodationManager({
 
   const resetHotelForm = () => {
     setEditingHotelId(null);
-    setHotelForm({ name: "", address: "", totalRooms: "", notes: "" });
+    setHotelForm({
+      name: "",
+      address: "",
+      totalRooms: "",
+      blockedRooms: "",
+      notes: "",
+    });
   };
 
   const saveHotel = async () => {
     const totalRooms = Number(hotelForm.totalRooms);
+    const blockedRooms =
+      hotelForm.blockedRooms === "" ? 0 : Number(hotelForm.blockedRooms);
     if (!hotelForm.name.trim()) {
       setMessage("Enter a hotel name");
       return;
     }
     if (!Number.isFinite(totalRooms) || totalRooms < 0) {
       setMessage("Enter how many rooms this hotel has");
+      return;
+    }
+    if (!Number.isFinite(blockedRooms) || blockedRooms < 0) {
+      setMessage("Blocked rooms must be 0 or more");
+      return;
+    }
+    if (blockedRooms > totalRooms) {
+      setMessage("Blocked rooms cannot exceed total rooms");
       return;
     }
     setSavingHotel(true);
@@ -207,6 +227,7 @@ export function AccommodationManager({
           name: hotelForm.name,
           address: hotelForm.address,
           totalRooms,
+          blockedRooms,
           notes: hotelForm.notes,
         }),
       });
@@ -241,6 +262,7 @@ export function AccommodationManager({
     name: string;
     address?: string;
     totalRooms: number;
+    blocked?: number;
     notes?: string;
   }) => {
     setEditingHotelId(hotel.id);
@@ -248,6 +270,7 @@ export function AccommodationManager({
       name: hotel.name,
       address: hotel.address || "",
       totalRooms: String(hotel.totalRooms),
+      blockedRooms: String(hotel.blocked || 0),
       notes: hotel.notes || "",
     });
   };
@@ -303,6 +326,7 @@ export function AccommodationManager({
         checkIn: draft.checkIn || current.checkIn,
         checkOut: draft.checkOut || current.checkOut,
         sendEmail,
+        useBlockedRooms: Boolean(draft.useBlockedRooms),
       };
 
       const hotelId = (draft.hotelId || current.hotelId || "").trim();
@@ -654,6 +678,7 @@ export function AccommodationManager({
           ids: mergeIds,
           hotelId: mergeHotelId,
           roomDetails: mergeRoomDetails.trim() || undefined,
+          useBlockedRooms: mergeUseBlocked,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -748,7 +773,7 @@ export function AccommodationManager({
         </p>
         <p className="mt-1 font-body text-xs text-muted">
           Overall: {inventory.total} total · {inventory.assigned} assigned ·{" "}
-          {inventory.available} available
+          {inventory.blocked || 0} blocked · {inventory.available} free
         </p>
 
         <div className="mt-4 space-y-2">
@@ -761,6 +786,10 @@ export function AccommodationManager({
                 <p className="font-display text-lg text-cream">{hotel.name}</p>
                 <p className="font-body text-xs text-muted">
                   {hotel.totalRooms} rooms · {hotel.assigned} assigned ·{" "}
+                  <span className="text-amber-200/90">
+                    {hotel.blocked || 0} blocked
+                  </span>{" "}
+                  ·{" "}
                   <span
                     className={
                       hotel.available === 0 ? "text-rose-200" : "text-gold-soft"
@@ -828,6 +857,26 @@ export function AccommodationManager({
             />
           </label>
           <label className="block">
+            <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+              Blocked / held back
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={500}
+              className={fieldClass}
+              value={hotelForm.blockedRooms}
+              onChange={(e) =>
+                setHotelForm((f) => ({ ...f, blockedRooms: e.target.value }))
+              }
+              placeholder="e.g. 2"
+            />
+            <span className="mt-1 block font-body text-[11px] text-muted">
+              Still counted in total, but not free — you can draw from them when
+              approving a guest if needed.
+            </span>
+          </label>
+          <label className="block sm:col-span-2">
             <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
               Address (optional)
             </span>
@@ -1195,7 +1244,9 @@ export function AccommodationManager({
                 <option value="">Select hotel…</option>
                 {(inventory.hotels || []).map((hotel) => (
                   <option key={hotel.id} value={hotel.id}>
-                    {hotel.name} · {hotel.available} free / {hotel.totalRooms}
+                    {hotel.name} · {hotel.available} free
+                    {hotel.blocked ? ` · ${hotel.blocked} blocked` : ""} /{" "}
+                    {hotel.totalRooms}
                   </option>
                 ))}
               </select>
@@ -1217,6 +1268,20 @@ export function AccommodationManager({
                 {mergeSelection.count === 1 ? "" : "s"} ·{" "}
                 {mergeSelection.people} people
               </p>
+              {(inventory.hotels || []).find((h) => h.id === mergeHotelId)
+                ?.blocked ? (
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-[#c4a35a]"
+                    checked={mergeUseBlocked}
+                    onChange={(e) => setMergeUseBlocked(e.target.checked)}
+                  />
+                  <span className="font-body text-[11px] text-muted">
+                    Use blocked room if none free
+                  </span>
+                </label>
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -1235,6 +1300,7 @@ export function AccommodationManager({
                   onClick={() => {
                     setMergeIds([]);
                     setMergeRoomDetails("");
+                    setMergeUseBlocked(false);
                   }}
                 >
                   Clear
@@ -1487,8 +1553,11 @@ export function AccommodationManager({
                         <option value="">Select hotel…</option>
                         {(inventory.hotels || []).map((hotel) => (
                           <option key={hotel.id} value={hotel.id}>
-                            {hotel.name} ({hotel.available} free /{" "}
-                            {hotel.totalRooms})
+                            {hotel.name} ({hotel.available} free
+                            {hotel.blocked
+                              ? ` · ${hotel.blocked} blocked`
+                              : ""}{" "}
+                            / {hotel.totalRooms})
                           </option>
                         ))}
                       </select>
@@ -1525,7 +1594,13 @@ export function AccommodationManager({
                         {(inventory.hotels || []).find(
                           (hotel) => hotel.id === draft.hotelId,
                         )
-                          ? ` · free here: ${(inventory.hotels || []).find((hotel) => hotel.id === draft.hotelId)!.available}`
+                          ? ` · free here: ${(inventory.hotels || []).find((hotel) => hotel.id === draft.hotelId)!.available}${
+                              (inventory.hotels || []).find(
+                                (hotel) => hotel.id === draft.hotelId,
+                              )!.blocked
+                                ? ` · blocked: ${(inventory.hotels || []).find((hotel) => hotel.id === draft.hotelId)!.blocked}`
+                                : ""
+                            }`
                           : ""}
                         {item.status === "confirmed" && item.roomsAssigned
                           ? ` · currently holding: ${item.roomsAssigned}`
@@ -1536,6 +1611,34 @@ export function AccommodationManager({
                         .
                       </span>
                     </label>
+                    {draft.status === "confirmed" &&
+                    (inventory.hotels || []).find(
+                      (hotel) => hotel.id === draft.hotelId,
+                    )?.blocked ? (
+                      <label className="flex items-start gap-2 sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 accent-[#c4a35a]"
+                          checked={Boolean(draft.useBlockedRooms)}
+                          onChange={(e) =>
+                            setDraft(item.id, {
+                              useBlockedRooms: e.target.checked,
+                            })
+                          }
+                        />
+                        <span className="font-body text-xs text-muted">
+                          <span className="text-cream">Use blocked rooms</span>{" "}
+                          if free rooms aren’t enough — draws from the held-back
+                          reserve for this hotel (
+                          {
+                            (inventory.hotels || []).find(
+                              (hotel) => hotel.id === draft.hotelId,
+                            )!.blocked
+                          }{" "}
+                          blocked).
+                        </span>
+                      </label>
+                    ) : null}
                   </div>
 
                   <div className="rounded-2xl border border-gold/20 bg-[#0d0b10]/70 p-4">

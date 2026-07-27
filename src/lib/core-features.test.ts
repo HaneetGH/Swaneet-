@@ -367,6 +367,38 @@ describe("shared room inventory", () => {
     expect(inv.available).toBe(4);
   });
 
+  it("excludes blocked rooms from free inventory", () => {
+    const hotel: StayHotel = {
+      id: "h1",
+      name: "Test Hotel",
+      totalRooms: 10,
+      blockedRooms: 3,
+      createdAt: new Date().toISOString(),
+    };
+    const stays: AccommodationRequest[] = [
+      {
+        id: "1",
+        name: "A",
+        phone: "1",
+        email: "a@b.com",
+        people: 1,
+        rooms: 1,
+        checkIn: "2026-08-12",
+        checkOut: "2026-08-13",
+        createdAt: new Date().toISOString(),
+        status: "confirmed",
+        hotelId: "h1",
+        roomsAssigned: 2,
+      },
+    ];
+    const inv = computeRoomInventory(stays, [hotel]);
+    expect(inv.assigned).toBe(2);
+    expect(inv.blocked).toBe(3);
+    expect(inv.available).toBe(5);
+    expect(inv.hotels[0]?.blocked).toBe(3);
+    expect(inv.hotels[0]?.available).toBe(5);
+  });
+
   it("lists occupancy with shared members under one room unit", () => {
     const hotel: StayHotel = {
       id: "h1",

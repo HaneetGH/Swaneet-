@@ -51,6 +51,7 @@ export default async function DashboardPage() {
           : Promise.resolve({
               total: 0,
               assigned: 0,
+              blocked: 0,
               available: 0,
               hotels: [],
             }),

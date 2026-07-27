@@ -15,6 +15,7 @@ const hotelSchema = z.object({
   name: z.string().trim().min(2, "Hotel name is required"),
   address: z.string().trim().optional().default(""),
   totalRooms: z.coerce.number().int().min(0).max(500),
+  blockedRooms: z.coerce.number().int().min(0).max(500).optional().default(0),
   notes: z.string().trim().optional().default(""),
 });
 
@@ -41,10 +42,17 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    if (parsed.data.blockedRooms > parsed.data.totalRooms) {
+      return NextResponse.json(
+        { error: "Blocked rooms cannot exceed total rooms" },
+        { status: 400 },
+      );
+    }
     const hotel = await upsertHotel({
       name: parsed.data.name,
       address: parsed.data.address || undefined,
       totalRooms: parsed.data.totalRooms,
+      blockedRooms: parsed.data.blockedRooms,
       notes: parsed.data.notes || undefined,
     });
     const inventory = await getRoomInventory();
@@ -71,11 +79,18 @@ export async function PUT(request: Request) {
         { status: 400 },
       );
     }
+    if (parsed.data.blockedRooms > parsed.data.totalRooms) {
+      return NextResponse.json(
+        { error: "Blocked rooms cannot exceed total rooms" },
+        { status: 400 },
+      );
+    }
     const hotel = await upsertHotel({
       id: parsed.data.id,
       name: parsed.data.name,
       address: parsed.data.address || undefined,
       totalRooms: parsed.data.totalRooms,
+      blockedRooms: parsed.data.blockedRooms,
       notes: parsed.data.notes || undefined,
     });
     const inventory = await getRoomInventory();

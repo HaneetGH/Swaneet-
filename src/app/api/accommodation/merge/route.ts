@@ -16,6 +16,7 @@ const schema = z.object({
   hotelId: z.string().trim().min(1, "Select a hotel"),
   roomDetails: z.string().trim().max(500).optional(),
   adminNotes: z.string().trim().max(500).optional(),
+  useBlockedRooms: z.boolean().optional().default(false),
 });
 
 /**

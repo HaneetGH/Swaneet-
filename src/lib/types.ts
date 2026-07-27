@@ -78,6 +78,11 @@ export type StayHotel = {
   name: string;
   address?: string;
   totalRooms: number;
+  /**
+   * Rooms held back from the free pool (still in total inventory).
+   * Can be drawn from at approval time with “use blocked rooms”.
+   */
+  blockedRooms?: number;
   notes?: string;
   createdAt: string;
 };
@@ -435,6 +440,8 @@ export type HotelInventory = {
   address?: string;
   totalRooms: number;
   assigned: number;
+  /** Held back from free — still part of totalRooms */
+  blocked: number;
   available: number;
   notes?: string;
 };
@@ -442,6 +449,7 @@ export type HotelInventory = {
 export type RoomInventory = {
   total: number;
   assigned: number;
+  blocked: number;
   available: number;
   hotels: HotelInventory[];
 };
