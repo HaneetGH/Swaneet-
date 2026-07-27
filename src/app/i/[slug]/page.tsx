@@ -5,10 +5,10 @@ import { Countdown } from "@/components/sections/Countdown";
 import { Events } from "@/components/sections/Events";
 import { Family } from "@/components/sections/Family";
 import { Gallery } from "@/components/sections/Gallery";
+import { GuestEngageBanner } from "@/components/sections/GuestEngageBanner";
 import { Hero } from "@/components/sections/Hero";
 import { DownloadPhotosBanner } from "@/components/sections/DownloadPhotosBanner";
 import { RsvpStayBanner } from "@/components/sections/RsvpStayBanner";
-import { SharePhotosBanner } from "@/components/sections/SharePhotosBanner";
 import { Venue } from "@/components/sections/Venue";
 import { GuestWelcomeGuide } from "@/components/ui/GuestWelcomeGuide";
 import { getBrideInvite } from "@/data/bride-invites";
@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: Params) {
 }
 
 /**
- * Bride invite with top ATL banners.
+ * Bride invite with top ATL banners (including Wish).
  * Full forms live on /i/[slug]/rsvp|wishes|upload.
  */
 export default async function BrideInvitePage({ params }: Params) {
@@ -52,8 +52,8 @@ export default async function BrideInvitePage({ params }: Params) {
       <main className="ambient-bg relative min-h-screen">
         <Navigation />
         <Hero />
+        <GuestEngageBanner />
         <DownloadPhotosBanner />
-        <SharePhotosBanner />
         <RsvpStayBanner />
         <Countdown />
         <Events />
