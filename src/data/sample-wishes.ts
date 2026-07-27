@@ -1,4 +1,5 @@
 import { wedding } from "@/data/wedding";
+import type { GuestMessage } from "@/lib/types";
 
 export type SampleWish = {
   id: string;
@@ -11,10 +12,13 @@ export type SampleWish = {
 const bride = wedding.couple.bride.firstName;
 const groom = wedding.couple.groom.firstName;
 
+/** Stable auth uid for seeded sample wishes in the database. */
+export const SAMPLE_WISH_AUTH_UID = "system:sample";
+
 /**
- * Starter wishes shown on the public wall until enough real guest posts exist.
- * ~80% Sikh / Punjabi voices; a light mix of other communities for warmth.
- * Not stored in the database / not shown in dashboard moderation.
+ * Seed catalog for social-proof wishes.
+ * These are written into `guest_messages` (or local store) as approved rows —
+ * the public page always reads wishes from the DB, never from this array at render time.
  */
 export const SAMPLE_WISHES: SampleWish[] = [
   // —— Sikh / Punjabi (~80%) ——
@@ -111,9 +115,6 @@ export const SAMPLE_WISHES: SampleWish[] = [
   },
 ];
 
-/** Keep the wall looking lively until this many real approved wishes exist. */
-export const MIN_PUBLIC_WISH_COUNT = 10;
-
 export function sampleWishCreatedAt(daysAgo: number, now = Date.now()) {
   return new Date(now - daysAgo * 24 * 60 * 60 * 1000).toISOString();
 }
@@ -123,51 +124,56 @@ export type PublicWish = {
   body: string;
   displayName: string;
   createdAt: string;
+  source?: "guest" | "sample";
 };
 
 export function isSampleWishId(id: string) {
   return id.startsWith("sample-wish-");
 }
 
-/** Keep person-written wishes ahead of generated samples for any public render. */
-export function preferRealWishes<T extends { id: string }>(wishes: T[]): T[] {
-  const real = wishes.filter((wish) => !isSampleWishId(wish.id));
+export function isSampleWish(wish: {
+  id: string;
+  source?: string;
+  authUid?: string;
+}) {
+  return (
+    wish.source === "sample" ||
+    wish.authUid === SAMPLE_WISH_AUTH_UID ||
+    isSampleWishId(wish.id)
+  );
+}
+
+/** Keep person-written wishes ahead of seeded samples for public render. */
+export function preferRealWishes<T extends { id: string; source?: string }>(
+  wishes: T[],
+): T[] {
+  const real = wishes.filter((wish) => !isSampleWish(wish));
   return real.length > 0 ? real : wishes;
 }
 
-/**
- * Merge real approved wishes with sample fillers.
- * Person-written wishes always win: once any real wish exists, samples are omitted.
- * Samples only fill the empty wall before guests start posting.
- */
-export function mergePublicWishes(
-  real: PublicWish[],
-  options?: { minCount?: number; now?: number },
-): PublicWish[] {
-  const minCount = options?.minCount ?? MIN_PUBLIC_WISH_COUNT;
-  const now = options?.now ?? Date.now();
-
-  const realSorted = [...real]
-    .filter((wish) => !isSampleWishId(wish.id))
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-
-  // Real guest wishes always take the page — never mix samples beside them
-  if (realSorted.length > 0) {
-    return realSorted;
-  }
-
-  const samples: PublicWish[] = SAMPLE_WISHES.map((item) => ({
+/** Convert the seed catalog into approved DB-ready guest message rows. */
+export function buildSampleGuestMessages(now = Date.now()): GuestMessage[] {
+  return SAMPLE_WISHES.map((item) => ({
     id: item.id,
     body: item.body,
     displayName: item.displayName,
+    authUid: SAMPLE_WISH_AUTH_UID,
+    status: "approved" as const,
+    source: "sample" as const,
+    inviteSite: "main" as const,
     createdAt: sampleWishCreatedAt(item.daysAgo, now),
-  })).sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+    moderatedAt: sampleWishCreatedAt(item.daysAgo, now),
+    moderatedBy: "system:seed",
+  }));
+}
 
-  return samples.slice(0, Math.max(minCount, 6));
+/** Map DB guest messages to the public API shape (already stored — no hardcoded merge). */
+export function toPublicWishes(messages: GuestMessage[]): PublicWish[] {
+  return messages.map((item) => ({
+    id: item.id,
+    body: item.body,
+    displayName: item.displayName,
+    createdAt: item.createdAt,
+    source: item.source || (isSampleWish(item) ? "sample" : "guest"),
+  }));
 }

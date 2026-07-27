@@ -3,6 +3,7 @@
 import { Check, Heart, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { GuestMessage } from "@/lib/types";
+import { isSampleWish } from "@/data/sample-wishes";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -47,10 +48,13 @@ export function GuestWishesReview() {
     return messages.filter((item) => item.status === filter);
   }, [filter, messages]);
 
-  const pendingCount = messages.filter((item) => item.status === "pending")
-    .length;
-  const approvedCount = messages.filter((item) => item.status === "approved")
-    .length;
+  const pendingCount = messages.filter(
+    (item) => item.status === "pending" && !isSampleWish(item),
+  ).length;
+  const approvedCount = messages.filter(
+    (item) => item.status === "approved" && !isSampleWish(item),
+  ).length;
+  const sampleCount = messages.filter((item) => isSampleWish(item)).length;
 
   const toggle = (id: string) => {
     setSelectedIds((prev) =>
@@ -140,6 +144,11 @@ export function GuestWishesReview() {
             {label}
           </button>
         ))}
+        {sampleCount > 0 ? (
+          <span className="self-center font-body text-[11px] text-muted">
+            {sampleCount} seeded sample{sampleCount === 1 ? "" : "s"} in DB
+          </span>
+        ) : null}
       </div>
 
       {selectedIds.length > 0 ? (
@@ -216,6 +225,11 @@ export function GuestWishesReview() {
                     >
                       {item.status}
                     </span>
+                    {isSampleWish(item) ? (
+                      <span className="rounded-full border border-gold/30 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-gold/80">
+                        sample · DB
+                      </span>
+                    ) : null}
                     <span className="font-body text-sm text-cream">
                       {item.displayName}
                     </span>

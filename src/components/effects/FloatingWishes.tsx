@@ -2,10 +2,10 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { SAMPLE_WISHES, preferRealWishes } from "@/data/sample-wishes";
+import { preferRealWishes } from "@/data/sample-wishes";
 import { cn } from "@/lib/utils";
 
-type WishItem = { id: string; body: string; name: string };
+type WishItem = { id: string; body: string; name: string; source?: string };
 
 type Lane = {
   id: string;
@@ -23,23 +23,15 @@ type FloatingWishesProps = {
   className?: string;
 };
 
-const SAMPLE_POOL: WishItem[] = SAMPLE_WISHES.map((wish) => ({
-  id: wish.id,
-  body: wish.body,
-  name: wish.displayName,
-}));
-
 /**
  * Continuous L↔R flow behind the invitation.
- * Mix of soft text lines and light quote tiles (no heavy card grid).
- * Person-written wishes win; samples only when the wall is still empty.
- * Center blur on the parent screen makes them readable only outside the blur.
+ * Wishes always come from the database via `/api/messages` (including seeded samples).
  */
 export function FloatingWishes({
   variant = "hero",
   className,
 }: FloatingWishesProps) {
-  const [pool, setPool] = useState<WishItem[]>(SAMPLE_POOL);
+  const [pool, setPool] = useState<WishItem[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -47,15 +39,20 @@ export function FloatingWishes({
       .then((res) => (res.ok ? res.json() : null))
       .then(
         (data: {
-          messages?: Array<{ id: string; body: string; displayName: string }>;
+          messages?: Array<{
+            id: string;
+            body: string;
+            displayName: string;
+            source?: string;
+          }>;
         } | null) => {
           if (!active || !data?.messages?.length) return;
           const mapped = data.messages.map((wish) => ({
             id: wish.id,
             body: wish.body,
             name: wish.displayName,
+            source: wish.source,
           }));
-          // Person-written wishes only, once any exist
           setPool(preferRealWishes(mapped));
         },
       )
@@ -89,6 +86,8 @@ export function FloatingWishes({
       };
     });
   }, [pool, variant]);
+
+  if (lanes.length === 0) return null;
 
   return (
     <div
