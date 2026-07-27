@@ -137,7 +137,8 @@ export function OpenInvitation({ open, onOpen }: OpenInvitationProps) {
           </div>
 
           <FloatingWishBackdrop variant="gate" />
-          <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.35)_0%,transparent_45%,rgba(7,6,10,0.55)_75%,rgba(7,6,10,0.92)_100%)]" />
+          {/* Soft edge vignette — moon handles center blur */}
+          <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_0%,transparent_50%,rgba(7,6,10,0.5)_78%,rgba(7,6,10,0.94)_100%)]" />
 
           <motion.div
             className="relative z-10 flex w-full max-w-lg flex-col items-center px-5 md:max-w-3xl md:px-8"
