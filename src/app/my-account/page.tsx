@@ -13,7 +13,7 @@ export default function MyAccountPage() {
   return (
     <main className="ambient-bg relative min-h-screen">
       <Navigation />
-      <div className="mx-auto max-w-5xl px-5 pb-24 pt-28 sm:px-8">
+      <div className="mx-auto max-w-6xl px-5 pb-24 pt-28 sm:px-8">
         <GuestAccountPanel />
       </div>
       <Footer />
