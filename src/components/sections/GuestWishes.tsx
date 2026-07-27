@@ -107,6 +107,7 @@ export function GuestWishes() {
   }, [wishes.length]);
 
   const featured = wishes[featuredIndex] || wishes[0] || null;
+  const topWishes = wishes.slice(0, 3);
   const marqueeItems = useMemo(() => {
     if (wishes.length === 0) return [];
     const base = wishes.length < 4 ? [...wishes, ...wishes, ...wishes] : wishes;
@@ -175,11 +176,39 @@ export function GuestWishes() {
         <SectionHeading
           eyebrow="From our guests"
           title="Wishes"
-          subtitle="Share a message or quote for the bride and groom — love, laughter, and blessings for Swaneet"
+          subtitle="Friends and family are already sending blessings — add yours for Haneet and Swarandeep"
         />
 
-        {featured ? (
+        {topWishes.length > 0 ? (
+          <div className="mt-10">
+            <p className="mb-4 text-center font-body text-[10px] uppercase tracking-[0.28em] text-gold/70">
+              Just shared
+            </p>
+            <div className="grid gap-4 md:grid-cols-3">
+              {topWishes.map((wish, index) => (
+                <motion.div
+                  key={wish.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-40px" }}
+                  transition={{
+                    duration: 0.55,
+                    delay: index * 0.08,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                >
+                  <WishCard wish={wish} featured={index === 0} />
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {featured && wishes.length > 3 ? (
           <div className="mx-auto mt-10 max-w-3xl">
+            <p className="mb-4 text-center font-body text-[10px] uppercase tracking-[0.28em] text-gold/70">
+              Spotlight
+            </p>
             <AnimatePresence mode="wait">
               <motion.div
                 key={featured.id}
@@ -240,9 +269,8 @@ export function GuestWishes() {
             </p>
           </div>
           <p className="mt-2 font-body text-sm text-muted">
-            Guests are already sharing blessings — add yours for Haneet and
-            Swarandeep. Sign in with Google; the family reviews each wish before
-            it appears on this wall.
+            Join the wall above — add your blessing for Haneet and Swarandeep.
+            Sign in with Google; the family reviews each wish before it appears.
           </p>
 
           {!authReady ? (
