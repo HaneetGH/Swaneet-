@@ -76,7 +76,7 @@ function useWishPool() {
 }
 
 /**
- * Soft blurred background wishes — atmospheric only, behind the invitation.
+ * Side background wishes — readable blessings behind the invitation.
  */
 export function FloatingWishBackdrop({
   variant = "hero",
@@ -120,38 +120,35 @@ export function FloatingWishBackdrop({
         className,
       )}
     >
-      {/* Soft blur so background wishes stay atmospheric */}
-      <div className="absolute inset-0 scale-[1.01] blur-[2px] sm:blur-[2.5px]">
-        {slots.map((slot) => (
-          <motion.div
-            key={slot.id}
-            className={cn(
-              "absolute max-w-[12.5rem] sm:max-w-[15rem]",
-              slot.side === "left"
-                ? "left-2 text-left sm:left-5 md:left-8"
-                : "right-2 text-right sm:right-5 md:right-8",
-            )}
-            style={{ top: slot.top }}
-            animate={{
-              opacity: [0.18, 0.38, 0.22],
-              y: [0, -12, 0],
-            }}
-            transition={{
-              duration: slot.duration,
-              delay: slot.delay,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          >
-            <p className="font-display text-[13px] leading-snug text-cream/70 sm:text-[14px]">
-              “{slot.wish.body}”
-            </p>
-            <p className="mt-2 font-body text-[9px] uppercase tracking-[0.2em] text-gold/45 sm:text-[10px]">
-              — {slot.wish.name}
-            </p>
-          </motion.div>
-        ))}
-      </div>
+      {slots.map((slot) => (
+        <motion.div
+          key={slot.id}
+          className={cn(
+            "absolute max-w-[13.5rem] sm:max-w-[16.5rem] md:max-w-[18rem]",
+            slot.side === "left"
+              ? "left-2 text-left sm:left-5 md:left-8"
+              : "right-2 text-right sm:right-5 md:right-8",
+          )}
+          style={{ top: slot.top }}
+          animate={{
+            opacity: [0.55, 0.85, 0.62],
+            y: [0, -10, 0],
+          }}
+          transition={{
+            duration: slot.duration,
+            delay: slot.delay,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        >
+          <p className="font-display text-[14px] leading-snug text-cream/90 sm:text-[15px] md:text-base">
+            “{slot.wish.body}”
+          </p>
+          <p className="mt-2 font-body text-[10px] uppercase tracking-[0.2em] text-gold-soft/80 sm:text-[11px]">
+            — {slot.wish.name}
+          </p>
+        </motion.div>
+      ))}
     </div>
   );
 }
