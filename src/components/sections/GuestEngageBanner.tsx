@@ -1,13 +1,16 @@
 "use client";
 
 import { Camera, MessageCircleHeart } from "lucide-react";
+import Link from "next/link";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import { guestActionPath, wishesWritePath } from "@/lib/guest-paths";
+import { useInvite } from "@/lib/invite-context";
 
 /**
- * Classy post-hero strip: clear guest roles (wish + photo) without crowding
- * the invitation / couple names above.
+ * Guest wish + photo shortcuts (used on dedicated pages / guides — not on invitation home).
  */
 export function GuestEngageBanner() {
+  const invite = useInvite();
   const { enabled, ready } = useFeatureFlags();
 
   const showWishes = !ready || enabled("guest_messages");
@@ -41,8 +44,8 @@ export function GuestEngageBanner() {
           }`}
         >
           {showWishes ? (
-            <a
-              href="#wishes"
+            <Link
+              href={wishesWritePath(invite)}
               className="group flex items-center justify-between gap-4 border border-gold/20 bg-gold/[0.04] px-4 py-3.5 transition hover:border-gold/40 hover:bg-gold/[0.07] sm:px-5"
             >
               <span className="flex min-w-0 items-center gap-3">
@@ -61,12 +64,12 @@ export function GuestEngageBanner() {
               <span className="shrink-0 rounded-full bg-gradient-to-r from-gold-deep via-gold to-gold-soft px-4 py-2 font-body text-[10px] uppercase tracking-[0.18em] text-[#1a1208] sm:text-xs">
                 Wish
               </span>
-            </a>
+            </Link>
           ) : null}
 
           {showPhotos ? (
-            <a
-              href="#share-photos"
+            <Link
+              href={guestActionPath("/upload", invite)}
               className="group flex items-center justify-between gap-4 border border-gold/20 bg-gold/[0.04] px-4 py-3.5 transition hover:border-gold/40 hover:bg-gold/[0.07] sm:px-5"
             >
               <span className="flex min-w-0 items-center gap-3">
@@ -85,7 +88,7 @@ export function GuestEngageBanner() {
               <span className="shrink-0 rounded-full border border-gold/45 px-4 py-2 font-body text-[10px] uppercase tracking-[0.18em] text-gold-soft transition group-hover:border-gold group-hover:text-gold sm:text-xs">
                 Upload
               </span>
-            </a>
+            </Link>
           ) : null}
         </div>
       </div>

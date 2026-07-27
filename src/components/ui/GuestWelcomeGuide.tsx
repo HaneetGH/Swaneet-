@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import { guestActionPath, wishesWritePath } from "@/lib/guest-paths";
 import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
@@ -29,16 +30,21 @@ export function GuestWelcomeGuide() {
   const skipPage =
     pathname?.startsWith("/dashboard") ||
     pathname?.startsWith("/shared-photos") ||
-    pathname?.startsWith("/my-account");
+    pathname?.startsWith("/my-account") ||
+    pathname?.startsWith("/rsvp") ||
+    pathname?.startsWith("/wishes") ||
+    pathname?.startsWith("/upload") ||
+    pathname?.includes("/rsvp") ||
+    pathname?.includes("/wishes") ||
+    pathname?.includes("/upload");
 
   const actions = useMemo(() => {
-    const base = invite?.basePath || "";
     const items: Action[] = [];
 
     if (!ready || enabled("rsvp")) {
       items.push({
         id: "rsvp",
-        href: `${base}#rsvp`,
+        href: guestActionPath("/rsvp", invite),
         eyebrow: "Reply",
         title: "RSVP",
         hint: "Say you’re coming — and if you need a stay",
@@ -49,7 +55,7 @@ export function GuestWelcomeGuide() {
     if (!ready || enabled("guest_messages")) {
       items.push({
         id: "wishes",
-        href: `${base}#wishes`,
+        href: wishesWritePath(invite),
         eyebrow: "Bless",
         title: "Leave a wish",
         hint: "A quote or message for the bride and groom",
@@ -60,7 +66,7 @@ export function GuestWelcomeGuide() {
     if (!ready || enabled("guest_photos")) {
       items.push({
         id: "share",
-        href: `${base}#share-photos`,
+        href: guestActionPath("/upload", invite),
         eyebrow: "Upload",
         title: "Share a photo you took",
         hint: "Family reviews it before it appears in the gallery",
@@ -80,7 +86,7 @@ export function GuestWelcomeGuide() {
     }
 
     return items;
-  }, [enabled, invite?.basePath, ready]);
+  }, [enabled, invite, ready]);
 
   useEffect(() => {
     if (skipPage || !ready || actions.length === 0) return;
