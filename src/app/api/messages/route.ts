@@ -24,7 +24,7 @@ const postSchema = z.object({
   inviteSide: z.enum(["bride", "groom"]).optional(),
 });
 
-/** Public approved wishes, newest first (plus sample fillers while the wall is new). */
+/** Public approved wishes, newest first — real guest wishes before sample fillers. */
 export async function GET() {
   try {
     const messages = await listGuestMessages();

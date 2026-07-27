@@ -125,7 +125,7 @@ export type PublicWish = {
   createdAt: string;
 };
 
-/** Merge real approved wishes with sample fillers — samples stay near the top. */
+/** Merge real approved wishes with sample fillers — real guest wishes always come first. */
 export function mergePublicWishes(
   real: PublicWish[],
   options?: { minCount?: number; now?: number },
@@ -151,13 +151,13 @@ export function mergePublicWishes(
     return realSorted;
   }
 
-  const needed = Math.max(minCount - realSorted.length, 6);
-  const fillers = samples.slice(0, needed);
+  const needed = Math.max(minCount - realSorted.length, 0);
+  const fillers = samples.slice(0, Math.max(needed, realSorted.length === 0 ? 6 : 0));
 
   if (realSorted.length === 0) {
-    return fillers;
+    return fillers.length > 0 ? fillers : samples.slice(0, 6);
   }
 
-  // Samples first (top of wall), then real guest wishes
-  return [...fillers, ...realSorted];
+  // Real guest wishes first; samples only fill remaining slots for social proof
+  return [...realSorted, ...fillers];
 }

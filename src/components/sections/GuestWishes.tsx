@@ -98,21 +98,39 @@ export function GuestWishes() {
     }
   }, [displayName, user?.displayName]);
 
+  // Real guest wishes first (API order); samples only backfill social proof
+  const realWishes = useMemo(
+    () => wishes.filter((wish) => !wish.id.startsWith("sample-wish-")),
+    [wishes],
+  );
+  const spotlight = realWishes.length > 0 ? realWishes : wishes;
+
   useEffect(() => {
-    if (wishes.length <= 1) return;
+    if (spotlight.length <= 1) return;
     const timer = window.setInterval(() => {
-      setFeaturedIndex((current) => (current + 1) % wishes.length);
+      setFeaturedIndex((current) => (current + 1) % spotlight.length);
     }, 5200);
     return () => window.clearInterval(timer);
-  }, [wishes.length]);
+  }, [spotlight.length]);
 
-  const featured = wishes[featuredIndex] || wishes[0] || null;
-  const topWishes = wishes.slice(0, 3);
+  const featured =
+    spotlight[featuredIndex % Math.max(spotlight.length, 1)] ||
+    wishes[0] ||
+    null;
+  const topWishes = (realWishes.length > 0 ? realWishes : wishes).slice(0, 3);
   const marqueeItems = useMemo(() => {
     if (wishes.length === 0) return [];
-    const base = wishes.length < 4 ? [...wishes, ...wishes, ...wishes] : wishes;
+    // Prefer real wishes in the marquee; samples only when needed for volume
+    const preferred =
+      realWishes.length > 0
+        ? [...realWishes, ...wishes.filter((w) => w.id.startsWith("sample-wish-"))]
+        : wishes;
+    const base =
+      preferred.length < 4
+        ? [...preferred, ...preferred, ...preferred]
+        : preferred;
     return [...base, ...base];
-  }, [wishes]);
+  }, [realWishes, wishes]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
