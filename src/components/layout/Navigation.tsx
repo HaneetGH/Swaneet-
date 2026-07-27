@@ -68,7 +68,7 @@ export function Navigation() {
       transition={{ delay: 0.4, duration: 0.7 }}
       className="fixed inset-x-0 top-0 z-50"
     >
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4 sm:px-8">
         <Link
           href={brandHref}
           className="shrink-0 font-script text-2xl text-gold-soft transition hover:text-gold"
@@ -77,26 +77,26 @@ export function Navigation() {
         </Link>
 
         <nav
-          className="hidden items-center gap-6 xl:gap-7 lg:flex"
+          className="hidden min-w-0 flex-1 items-center justify-end gap-5 xl:gap-7 lg:flex"
           aria-label="Primary"
         >
           {links.map((link) => (
             <Link
               key={link.href}
               href={resolveHref(link.href)}
-              className="font-body text-[11px] uppercase tracking-[0.22em] text-muted transition hover:text-gold-soft"
+              className="shrink-0 font-body text-[11px] uppercase tracking-[0.22em] text-muted transition hover:text-gold-soft"
             >
               {link.label}
             </Link>
           ))}
-          <GuestNavAuth variant="desktop" />
         </nav>
 
-        <div className="flex items-center gap-2 lg:hidden">
-          <GuestNavAuth variant="desktop" />
+        {/* Always-visible account control (desktop + mobile) */}
+        <div className="flex shrink-0 items-center gap-2 border-l border-gold/25 pl-3 sm:pl-4">
+          <GuestNavAuth variant="header" />
           <button
             type="button"
-            className="glass gold-border flex h-10 w-10 items-center justify-center rounded-full text-gold-soft"
+            className="glass gold-border flex h-10 w-10 items-center justify-center rounded-full text-gold-soft lg:hidden"
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
@@ -123,6 +123,7 @@ export function Navigation() {
               {link.label}
             </Link>
           ))}
+          <GuestNavAuth variant="menu" onDone={() => setOpen(false)} />
         </nav>
       </div>
     </motion.header>
