@@ -1155,17 +1155,26 @@ export async function mergeStaysIntoSharedRoom(input: {
         `${row.name}'s request is declined — leave them out of the merge.`,
       );
     }
-    if (typeof row.roomsAssigned === "number" && row.roomsAssigned > 0) {
-      throw new Error(
-        `${row.name} already has ${row.roomsAssigned} room(s) assigned. Do not merge people who already have a room — their assignment is kept as-is.`,
-      );
-    }
     if (row.roomGroupId) {
       throw new Error(
-        `${row.name} is already in a shared room. Leave them out or undo that share first.`,
+        `${row.name} is already in a shared room. Remove them from it first, or add others into that room instead.`,
       );
     }
   }
+
+  // Release any prior solo room holds so inventory can move into this 1 shared room
+  for (const row of selected) {
+    if (typeof row.roomsAssigned === "number" && row.roomsAssigned > 0) {
+      await releaseStayAssignment(row.id);
+    }
+  }
+
+  const refreshed = await listAccommodations();
+  const selectedFresh = uniqueIds.map((id) => {
+    const row = refreshed.find((item) => item.id === id);
+    if (!row) throw new Error(`Stay request not found: ${id}`);
+    return row;
+  });
 
   const inventory = await getRoomInventory();
   const hotelRow = inventory.hotels.find((hotel) => hotel.id === hotelId);
@@ -1183,7 +1192,7 @@ export async function mergeStaysIntoSharedRoom(input: {
   if (!hotel) throw new Error("Selected hotel was not found.");
 
   // Primary = most people requested, then earliest request
-  const ordered = [...selected].sort((a, b) => {
+  const ordered = [...selectedFresh].sort((a, b) => {
     if (b.people !== a.people) return b.people - a.people;
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
