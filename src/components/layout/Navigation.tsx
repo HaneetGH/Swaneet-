@@ -5,6 +5,7 @@ import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
+import { GuestNavAuth } from "@/components/layout/GuestNavAuth";
 import { wedding } from "@/data/wedding";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useInvite } from "@/lib/invite-context";
@@ -67,15 +68,18 @@ export function Navigation() {
       transition={{ delay: 0.4, duration: 0.7 }}
       className="fixed inset-x-0 top-0 z-50"
     >
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
         <Link
           href={brandHref}
-          className="font-script text-2xl text-gold-soft transition hover:text-gold"
+          className="shrink-0 font-script text-2xl text-gold-soft transition hover:text-gold"
         >
           {wedding.hashtag}
         </Link>
 
-        <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary">
+        <nav
+          className="hidden items-center gap-6 xl:gap-7 lg:flex"
+          aria-label="Primary"
+        >
           {links.map((link) => (
             <Link
               key={link.href}
@@ -85,17 +89,21 @@ export function Navigation() {
               {link.label}
             </Link>
           ))}
+          <GuestNavAuth variant="desktop" />
         </nav>
 
-        <button
-          type="button"
-          className="glass gold-border flex h-10 w-10 items-center justify-center rounded-full text-gold-soft lg:hidden"
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? <X size={18} /> : <Menu size={18} />}
-        </button>
+        <div className="flex items-center gap-2 lg:hidden">
+          <GuestNavAuth variant="desktop" />
+          <button
+            type="button"
+            className="glass gold-border flex h-10 w-10 items-center justify-center rounded-full text-gold-soft"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? <X size={18} /> : <Menu size={18} />}
+          </button>
+        </div>
       </div>
 
       <div
