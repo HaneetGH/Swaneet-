@@ -12,6 +12,9 @@ const KIND_LABELS: Record<EmailKind, string> = {
   team_invite: "Team invite",
   team_update: "Team update",
   photo_reject: "Photo rejection",
+  wish_received: "Wish received",
+  wish_live: "Wish live",
+  wish_note: "Wish note",
   owner_alert: "Owner alert",
   face_photos: "Face photo link",
 };
