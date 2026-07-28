@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Heart, Trash2, X } from "lucide-react";
+import { Check, Heart, Mail, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { GuestMessage } from "@/lib/types";
 import { isSampleWish } from "@/data/sample-wishes";
@@ -56,6 +56,17 @@ export function GuestWishesReview() {
   ).length;
   const sampleCount = messages.filter((item) => isSampleWish(item)).length;
 
+  const selectedApproved = useMemo(
+    () =>
+      messages.filter(
+        (item) =>
+          selectedIds.includes(item.id) &&
+          item.status === "approved" &&
+          !isSampleWish(item),
+      ),
+    [messages, selectedIds],
+  );
+
   const toggle = (id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
@@ -87,14 +98,65 @@ export function GuestWishesReview() {
       setSelectedIds([]);
       setNote(
         action === "approve"
-          ? "Approved — now visible on the wishes wall."
+          ? "Approved — guests emailed that their wish is live."
           : action === "reject"
-            ? "Rejected."
+            ? "Rejected — guests sent a gentle note."
             : "Deleted.",
       );
       await load();
     } catch {
       setError("Could not update wishes");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const notifyLive = async () => {
+    if (selectedApproved.length === 0) return;
+    if (
+      !confirm(
+        `Email “your wish is live” to ${selectedApproved.length} guest(s)?`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNote("");
+    try {
+      const res = await fetch("/api/messages/moderate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: selectedApproved.map((item) => item.id),
+          action: "notify_live",
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        sent?: number;
+        skipped?: number;
+        failed?: number;
+        ignored?: number;
+        errors?: string[];
+      };
+      if (!res.ok) {
+        setError(data.error || "Could not send emails");
+        return;
+      }
+      setSelectedIds([]);
+      const parts = [
+        `${data.sent || 0} emailed`,
+        data.skipped ? `${data.skipped} skipped (no email)` : "",
+        data.failed ? `${data.failed} failed` : "",
+        data.ignored ? `${data.ignored} ignored (not approved)` : "",
+      ].filter(Boolean);
+      setNote(parts.join(" · "));
+      if (data.errors?.length) {
+        setError(data.errors.join(" · "));
+      }
+    } catch {
+      setError("Could not send emails");
     } finally {
       setBusy(false);
     }
@@ -109,8 +171,8 @@ export function GuestWishesReview() {
             <h2 className="font-display text-2xl text-cream">Guest wishes</h2>
           </div>
           <p className="mt-1 font-body text-sm text-muted">
-            Review messages and quotes before they appear on the public wishes
-            wall.
+            Review messages before they go live. For wishes already approved,
+            select them and send the “wish is live” email.
           </p>
         </div>
         <button
@@ -172,6 +234,18 @@ export function GuestWishesReview() {
             <X size={14} />
             Reject
           </Button>
+          {selectedApproved.length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void notifyLive()}
+              className="!px-4 !py-2 !text-[11px]"
+            >
+              <Mail size={14} />
+              Email “live” ({selectedApproved.length})
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
