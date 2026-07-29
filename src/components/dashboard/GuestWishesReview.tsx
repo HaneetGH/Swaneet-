@@ -17,6 +17,7 @@ export function GuestWishesReview() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -55,17 +56,32 @@ export function GuestWishesReview() {
     (item) => item.status === "approved" && !isSampleWish(item),
   ).length;
   const sampleCount = messages.filter((item) => isSampleWish(item)).length;
+  const missingEmailCount = messages.filter(
+    (item) => !isSampleWish(item) && !item.authEmail?.trim(),
+  ).length;
 
-  const selectedApproved = useMemo(
+  const selectedGuestWishes = useMemo(
     () =>
       messages.filter(
-        (item) =>
-          selectedIds.includes(item.id) &&
-          item.status === "approved" &&
-          !isSampleWish(item),
+        (item) => selectedIds.includes(item.id) && !isSampleWish(item),
       ),
     [messages, selectedIds],
   );
+
+  const selectedWithEmail = selectedGuestWishes.filter((item) =>
+    Boolean(item.authEmail?.trim()),
+  );
+  const selectedMissingEmail = selectedGuestWishes.filter(
+    (item) => !item.authEmail?.trim(),
+  );
+  const singleMissing =
+    selectedGuestWishes.length === 1 && selectedMissingEmail.length === 1
+      ? selectedMissingEmail[0]
+      : null;
+
+  useEffect(() => {
+    setManualEmail("");
+  }, [singleMissing?.id]);
 
   const toggle = (id: string) => {
     setSelectedIds((prev) =>
@@ -111,15 +127,15 @@ export function GuestWishesReview() {
     }
   };
 
-  const notifyLive = async () => {
-    if (selectedApproved.length === 0) return;
-    if (
-      !confirm(
-        `Email “your wish is live” to ${selectedApproved.length} guest(s)?`,
-      )
-    ) {
-      return;
-    }
+  const notify = async (options?: { email?: string; ids?: string[] }) => {
+    const ids = options?.ids || selectedGuestWishes.map((item) => item.id);
+    if (ids.length === 0) return;
+
+    const label = options?.email
+      ? `Save ${options.email} and send status email?`
+      : `Resend status email for ${ids.length} wish(es)? (pending → received, approved → live, rejected → note)`;
+    if (!confirm(label)) return;
+
     setBusy(true);
     setError("");
     setNote("");
@@ -128,8 +144,9 @@ export function GuestWishesReview() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ids: selectedApproved.map((item) => item.id),
-          action: "notify_live",
+          ids,
+          action: "notify",
+          email: options?.email,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -138,6 +155,7 @@ export function GuestWishesReview() {
         skipped?: number;
         failed?: number;
         ignored?: number;
+        kinds?: string[];
         errors?: string[];
       };
       if (!res.ok) {
@@ -145,16 +163,19 @@ export function GuestWishesReview() {
         return;
       }
       setSelectedIds([]);
+      setManualEmail("");
+      const kindSummary = data.kinds?.length
+        ? ` (${[...new Set(data.kinds)].join(", ")})`
+        : "";
       const parts = [
-        `${data.sent || 0} emailed`,
+        `${data.sent || 0} emailed${kindSummary}`,
         data.skipped ? `${data.skipped} skipped (no email)` : "",
         data.failed ? `${data.failed} failed` : "",
-        data.ignored ? `${data.ignored} ignored (not approved)` : "",
+        data.ignored ? `${data.ignored} ignored` : "",
       ].filter(Boolean);
       setNote(parts.join(" · "));
-      if (data.errors?.length) {
-        setError(data.errors.join(" · "));
-      }
+      if (data.errors?.length) setError(data.errors.join(" · "));
+      await load();
     } catch {
       setError("Could not send emails");
     } finally {
@@ -171,8 +192,8 @@ export function GuestWishesReview() {
             <h2 className="font-display text-2xl text-cream">Guest wishes</h2>
           </div>
           <p className="mt-1 font-body text-sm text-muted">
-            Review messages before they go live. For wishes already approved,
-            select them and send the “wish is live” email.
+            Guests auto-get email on submit (in review), approve (live), and
+            reject. Resend anytime — or add an email when one is missing.
           </p>
         </div>
         <button
@@ -211,51 +232,99 @@ export function GuestWishesReview() {
             {sampleCount} seeded sample{sampleCount === 1 ? "" : "s"} in DB
           </span>
         ) : null}
+        {missingEmailCount > 0 ? (
+          <span className="self-center font-body text-[11px] text-amber-100/90">
+            {missingEmailCount} missing email
+          </span>
+        ) : null}
       </div>
 
       {selectedIds.length > 0 ? (
-        <div className="mb-4 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            disabled={busy}
-            onClick={() => void moderate("approve")}
-            className="!px-4 !py-2 !text-[11px]"
-          >
-            <Check size={14} />
-            Approve ({selectedIds.length})
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => void moderate("reject")}
-            className="!px-4 !py-2 !text-[11px]"
-          >
-            <X size={14} />
-            Reject
-          </Button>
-          {selectedApproved.length > 0 ? (
+        <div className="mb-4 space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => void moderate("approve")}
+              className="!px-4 !py-2 !text-[11px]"
+            >
+              <Check size={14} />
+              Approve ({selectedIds.length})
+            </Button>
             <Button
               type="button"
               variant="outline"
               disabled={busy}
-              onClick={() => void notifyLive()}
+              onClick={() => void moderate("reject")}
               className="!px-4 !py-2 !text-[11px]"
             >
-              <Mail size={14} />
-              Email “live” ({selectedApproved.length})
+              <X size={14} />
+              Reject
             </Button>
+            {selectedWithEmail.length > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  void notify({
+                    ids: selectedWithEmail.map((item) => item.id),
+                  })
+                }
+                className="!px-4 !py-2 !text-[11px]"
+              >
+                <Mail size={14} />
+                Resend email ({selectedWithEmail.length})
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => void moderate("delete")}
+              className="!px-4 !py-2 !text-[11px]"
+            >
+              <Trash2 size={14} />
+              Delete
+            </Button>
+          </div>
+
+          {singleMissing ? (
+            <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
+              <p className="font-body text-sm text-amber-50">
+                <span className="font-medium">{singleMissing.displayName}</span>{" "}
+                has no email — add one to send their status note.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  type="email"
+                  value={manualEmail}
+                  onChange={(event) => setManualEmail(event.target.value)}
+                  placeholder="guest@email.com"
+                  className="min-w-[16rem] flex-1 rounded-full border border-gold/25 bg-[#141018] px-4 py-2 font-body text-sm text-cream outline-none placeholder:text-muted/70 focus:border-gold/50"
+                />
+                <Button
+                  type="button"
+                  disabled={busy || !manualEmail.trim()}
+                  onClick={() =>
+                    void notify({
+                      ids: [singleMissing.id],
+                      email: manualEmail.trim(),
+                    })
+                  }
+                  className="!px-4 !py-2 !text-[11px]"
+                >
+                  <Mail size={14} />
+                  Save email &amp; send
+                </Button>
+              </div>
+            </div>
+          ) : selectedMissingEmail.length > 1 ? (
+            <p className="font-body text-xs text-amber-100/90">
+              {selectedMissingEmail.length} selected wishes have no email —
+              select one at a time to add an address and send.
+            </p>
           ) : null}
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => void moderate("delete")}
-            className="!px-4 !py-2 !text-[11px]"
-          >
-            <Trash2 size={14} />
-            Delete
-          </Button>
         </div>
       ) : null}
 
@@ -274,6 +343,7 @@ export function GuestWishesReview() {
         <ul className="space-y-3">
           {filtered.map((item) => {
             const selected = selectedIds.includes(item.id);
+            const missingEmail = !isSampleWish(item) && !item.authEmail?.trim();
             return (
               <li key={item.id}>
                 <button
@@ -302,6 +372,11 @@ export function GuestWishesReview() {
                     {isSampleWish(item) ? (
                       <span className="rounded-full border border-gold/30 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-gold/80">
                         sample · DB
+                      </span>
+                    ) : null}
+                    {missingEmail ? (
+                      <span className="rounded-full border border-amber-400/35 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.14em] text-amber-100">
+                        no email
                       </span>
                     ) : null}
                     <span className="font-body text-sm text-cream">

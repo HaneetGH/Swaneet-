@@ -737,6 +737,29 @@ async function findGuestMessageById(id: string): Promise<GuestMessage | null> {
   return messages.find((item) => item.id === id) || null;
 }
 
+/** Admin: attach / update contact email on a guest wish (for missing-email notify). */
+export async function setGuestMessageContactEmail(
+  id: string,
+  email: string,
+): Promise<GuestMessage | null> {
+  const current = await findGuestMessageById(id);
+  if (!current || isSampleWish(current)) return null;
+  const next: GuestMessage = {
+    ...current,
+    authEmail: email.trim().toLowerCase(),
+  };
+  if (hasDatabase()) {
+    await upsertGuestMessageToDb(next);
+    return next;
+  }
+  const store = await readStore();
+  store.guestMessages = (store.guestMessages || []).map((item) =>
+    item.id === next.id ? next : item,
+  );
+  await writeStore(store);
+  return next;
+}
+
 /** Guest edits their own wish — returns to pending for family review. */
 export async function updateGuestMessageForGuest(input: {
   id: string;

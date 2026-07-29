@@ -5,19 +5,48 @@ import { isSampleWish } from "@/data/sample-wishes";
 import {
   sendGuestWishLiveEmail,
   sendGuestWishNoteEmail,
+  sendGuestWishReceivedEmail,
 } from "@/lib/email";
 import {
   deleteGuestMessage,
   listGuestMessages,
   moderateGuestMessages,
+  setGuestMessageContactEmail,
 } from "@/lib/store";
+import type { GuestMessage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const moderateSchema = z.object({
   ids: z.array(z.string().trim().min(1)).min(1).max(40),
-  action: z.enum(["approve", "reject", "delete", "notify_live"]),
+  action: z.enum([
+    "approve",
+    "reject",
+    "delete",
+    "notify",
+    /** @deprecated use notify */
+    "notify_live",
+  ]),
+  /** Override / attach email when notifying a single wish that has none */
+  email: z.string().trim().email().optional(),
 });
+
+async function sendStatusEmail(message: GuestMessage) {
+  if (message.status === "approved") {
+    return sendGuestWishLiveEmail(message);
+  }
+  if (message.status === "rejected") {
+    return sendGuestWishNoteEmail(message);
+  }
+  // pending (and any other) → received / in review
+  return sendGuestWishReceivedEmail(message);
+}
+
+function statusEmailLabel(status: GuestMessage["status"]) {
+  if (status === "approved") return "live";
+  if (status === "rejected") return "note";
+  return "received";
+}
 
 /** Admin list of all wishes (including pending). */
 export async function GET() {
@@ -38,7 +67,7 @@ export async function GET() {
   }
 }
 
-/** Approve, reject, delete, or re-notify live wishes. */
+/** Approve, reject, delete, or (re)send guest status emails. */
 export async function POST(request: Request) {
   try {
     const session = await requirePermission("messages");
@@ -64,29 +93,57 @@ export async function POST(request: Request) {
       return NextResponse.json({ deleted });
     }
 
-    if (parsed.data.action === "notify_live") {
+    if (
+      parsed.data.action === "notify" ||
+      parsed.data.action === "notify_live"
+    ) {
       const all = await listGuestMessages({ includePending: true });
       const idSet = new Set(parsed.data.ids);
-      const targets = all.filter(
-        (item) =>
-          idSet.has(item.id) &&
-          item.status === "approved" &&
-          !isSampleWish(item),
+      let targets = all.filter(
+        (item) => idSet.has(item.id) && !isSampleWish(item),
       );
+
+      // Legacy notify_live: only approved
+      if (parsed.data.action === "notify_live") {
+        targets = targets.filter((item) => item.status === "approved");
+      }
+
+      if (parsed.data.email) {
+        if (parsed.data.ids.length !== 1) {
+          return NextResponse.json(
+            { error: "Attach an email for one wish at a time" },
+            { status: 400 },
+          );
+        }
+        const updated = await setGuestMessageContactEmail(
+          parsed.data.ids[0]!,
+          parsed.data.email,
+        );
+        if (!updated) {
+          return NextResponse.json(
+            { error: "Wish not found or is a sample" },
+            { status: 404 },
+          );
+        }
+        targets = [updated];
+      }
 
       let sent = 0;
       let skipped = 0;
       let failed = 0;
       const errors: string[] = [];
+      const kinds: string[] = [];
 
       for (const message of targets) {
         if (!message.authEmail?.trim()) {
           skipped += 1;
           continue;
         }
-        const result = await sendGuestWishLiveEmail(message);
-        if (result.ok) sent += 1;
-        else {
+        const result = await sendStatusEmail(message);
+        if (result.ok) {
+          sent += 1;
+          kinds.push(statusEmailLabel(message.status));
+        } else {
           failed += 1;
           if (result.error) {
             errors.push(`${message.displayName}: ${result.error}`);
@@ -100,6 +157,7 @@ export async function POST(request: Request) {
         skipped,
         failed,
         ignored,
+        kinds,
         errors: errors.slice(0, 5),
       });
     }
