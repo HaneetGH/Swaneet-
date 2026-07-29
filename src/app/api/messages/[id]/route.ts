@@ -5,6 +5,7 @@ import {
   featureSiteFromInviteTier,
   isFeatureEnabled,
 } from "@/lib/feature-flags";
+import { guestWishIdentity } from "@/lib/guest-wish-identity";
 import { isGuestAuthFailure, requireGuestAuth } from "@/lib/require-guest";
 import {
   deleteGuestMessageForGuest,
@@ -16,7 +17,6 @@ export const dynamic = "force-dynamic";
 
 const patchSchema = z.object({
   body: z.string().trim().min(12).max(400),
-  displayName: z.string().trim().min(2).max(60).optional(),
   inviteTier: z.enum(["mehfil", "laavan"]).optional(),
 });
 
@@ -53,6 +53,11 @@ export async function PATCH(request: Request, context: RouteContext) {
       );
     }
 
+    const identity = guestWishIdentity(guest);
+    if (!identity.ok) {
+      return NextResponse.json({ error: identity.error }, { status: 400 });
+    }
+
     const inviteSite = featureSiteFromInviteTier(parsed.data.inviteTier);
     const flags = await getFeatureFlags();
     if (!isFeatureEnabled(flags, inviteSite, "guest_messages")) {
@@ -62,11 +67,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       );
     }
 
-    const displayName =
-      parsed.data.displayName ||
-      guest.name?.trim() ||
-      guest.email?.split("@")[0] ||
-      "Guest";
+    const { displayName } = identity;
 
     const message = await updateGuestMessageForGuest({
       id: id.trim(),
