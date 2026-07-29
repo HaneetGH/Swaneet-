@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import {
+  sendGuestWishLiveEmail,
+  sendGuestWishNoteEmail,
+} from "@/lib/email";
+import {
   deleteGuestMessage,
   listGuestMessages,
   moderateGuestMessages,
@@ -64,6 +68,20 @@ export async function POST(request: Request) {
       action: parsed.data.action,
       moderatedBy: session.name || session.kind,
     });
+
+    await Promise.all(
+      messages.map(async (message) => {
+        if (parsed.data.action === "approve") {
+          await sendGuestWishLiveEmail(message).catch((error) =>
+            console.error("Wish live email failed", error),
+          );
+          return;
+        }
+        await sendGuestWishNoteEmail(message).catch((error) =>
+          console.error("Wish note email failed", error),
+        );
+      }),
+    );
 
     return NextResponse.json({ messages });
   } catch (error) {

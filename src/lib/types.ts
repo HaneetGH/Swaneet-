@@ -417,6 +417,9 @@ export type EmailKind =
   | "team_invite"
   | "team_update"
   | "photo_reject"
+  | "wish_received"
+  | "wish_live"
+  | "wish_note"
   | "owner_alert"
   | "face_photos";
 

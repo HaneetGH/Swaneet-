@@ -3,6 +3,7 @@ import type {
   AdminPermission,
   EmailKind,
   GalleryImage,
+  GuestMessage,
   ManagedEvent,
 } from "@/lib/types";
 import { PERMISSION_LABELS } from "@/lib/roles";
@@ -350,6 +351,208 @@ export async function sendGuestPhotoRejectionEmail(
 
   return sendResendEmail({
     kind: "photo_reject",
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
+function wishPreview(body: string, max = 160) {
+  const trimmed = body.trim().replace(/\s+/g, " ");
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max - 1)}…`;
+}
+
+/** Guest submitted a wish — family will review before it goes live. */
+export async function sendGuestWishReceivedEmail(
+  message: Pick<GuestMessage, "body" | "displayName" | "authEmail">,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const to = message.authEmail?.trim() || "";
+  const subject = "We received your #Swaneet wish";
+  const name = message.displayName?.trim() || "Guest";
+  const preview = wishPreview(message.body || "");
+  const siteUrl = dashboardSiteUrl().replace(/\/$/, "");
+  const wishesUrl = `${siteUrl}/wishes`;
+
+  if (!to) {
+    const error = "Guest has no email on this wish to notify.";
+    await logEmail({
+      kind: "wish_received",
+      to: "",
+      subject,
+      status: "failed",
+      error,
+    });
+    return { ok: false, error };
+  }
+
+  const text = [
+    `Dear ${name},`,
+    "",
+    "Thank you for your beautiful blessing for #Swaneet.",
+    "",
+    "We’ve received your wish. It’s with the family for a quick, loving review before it appears on the wishes wall.",
+    "",
+    preview ? `Your message: “${preview}”` : "",
+    "",
+    `You can view the wishes wall anytime: ${wishesUrl}`,
+    "",
+    "With love,",
+    "#Swaneet · Haneet & Swarandeep",
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+
+  const html = `
+    <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
+      <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
+      <h1 style="font-weight: 400; font-size: 28px;">We received your wish</h1>
+      <p>Dear ${escapeHtml(name)},</p>
+      <p>Thank you for your beautiful blessing.</p>
+      <p>We’ve received your wish. It’s with the family for a quick, loving review before it appears on the wishes wall.</p>
+      ${
+        preview
+          ? `<p style="margin: 20px 0; padding: 14px 16px; background: #f7f1e6; border-left: 3px solid #b8922a; font-style: italic;">“${escapeHtml(preview)}”</p>`
+          : ""
+      }
+      <p style="margin: 28px 0 12px;">
+        <a href="${escapeHtml(wishesUrl)}"
+           style="display:inline-block;background:#1a1208;color:#f7f1e6;padding:12px 22px;border-radius:999px;text-decoration:none;letter-spacing:0.08em;font-size:13px;text-transform:uppercase;">
+          View wishes wall
+        </a>
+      </p>
+      <p>With love,<br/>Haneet &amp; Swarandeep</p>
+    </div>
+  `;
+
+  return sendResendEmail({
+    kind: "wish_received",
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
+/** Guest wish approved — now live on the wall. */
+export async function sendGuestWishLiveEmail(
+  message: Pick<GuestMessage, "body" | "displayName" | "authEmail">,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const to = message.authEmail?.trim() || "";
+  const subject = "Your #Swaneet wish is live";
+  const name = message.displayName?.trim() || "Guest";
+  const preview = wishPreview(message.body || "");
+  const siteUrl = dashboardSiteUrl().replace(/\/$/, "");
+  const wishesUrl = `${siteUrl}/wishes`;
+
+  if (!to) {
+    const error = "Guest has no email on this wish to notify.";
+    await logEmail({
+      kind: "wish_live",
+      to: "",
+      subject,
+      status: "failed",
+      error,
+    });
+    return { ok: false, error };
+  }
+
+  const text = [
+    `Dear ${name},`,
+    "",
+    "Wonderful news — your wish for #Swaneet is now live on the wishes wall.",
+    "",
+    preview ? `Your blessing: “${preview}”` : "",
+    "",
+    `See it here: ${wishesUrl}`,
+    "",
+    "Thank you for sharing your love with us.",
+    "",
+    "With love,",
+    "#Swaneet · Haneet & Swarandeep",
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+
+  const html = `
+    <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
+      <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
+      <h1 style="font-weight: 400; font-size: 28px;">Your wish is live</h1>
+      <p>Dear ${escapeHtml(name)},</p>
+      <p>Wonderful news — your wish is now on the #Swaneet wishes wall.</p>
+      ${
+        preview
+          ? `<p style="margin: 20px 0; padding: 14px 16px; background: #f7f1e6; border-left: 3px solid #b8922a; font-style: italic;">“${escapeHtml(preview)}”</p>`
+          : ""
+      }
+      <p style="margin: 28px 0 12px;">
+        <a href="${escapeHtml(wishesUrl)}"
+           style="display:inline-block;background:#1a1208;color:#f7f1e6;padding:12px 22px;border-radius:999px;text-decoration:none;letter-spacing:0.08em;font-size:13px;text-transform:uppercase;">
+          See your wish
+        </a>
+      </p>
+      <p>Thank you for sharing your love with us.</p>
+      <p>With love,<br/>Haneet &amp; Swarandeep</p>
+    </div>
+  `;
+
+  return sendResendEmail({
+    kind: "wish_live",
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
+/** Gentle note when a wish isn’t published. */
+export async function sendGuestWishNoteEmail(
+  message: Pick<GuestMessage, "body" | "displayName" | "authEmail">,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const to = message.authEmail?.trim() || "";
+  const subject = "A note about your #Swaneet wish";
+  const name = message.displayName?.trim() || "Guest";
+
+  if (!to) {
+    const error = "Guest has no email on this wish to notify.";
+    await logEmail({
+      kind: "wish_note",
+      to: "",
+      subject,
+      status: "failed",
+      error,
+    });
+    return { ok: false, error };
+  }
+
+  const text = [
+    `Dear ${name},`,
+    "",
+    "Thank you for writing to #Swaneet — your kindness means so much.",
+    "",
+    "We’re keeping the wishes wall intimate for the celebration, so we weren’t able to publish this particular note this time.",
+    "",
+    "Please don’t take it to heart. Your blessings are cherished either way.",
+    "",
+    "With love,",
+    "#Swaneet · Haneet & Swarandeep",
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
+      <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
+      <h1 style="font-weight: 400; font-size: 28px;">A note about your wish</h1>
+      <p>Dear ${escapeHtml(name)},</p>
+      <p>Thank you for writing to us — your kindness means so much.</p>
+      <p>We’re keeping the wishes wall intimate for the celebration, so we weren’t able to publish this particular note this time.</p>
+      <p>Please don’t take it to heart. Your blessings are cherished either way.</p>
+      <p>With love,<br/>Haneet &amp; Swarandeep</p>
+    </div>
+  `;
+
+  return sendResendEmail({
+    kind: "wish_note",
     to,
     subject,
     text,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { notifyOwner } from "@/lib/email";
+import { notifyOwner, sendGuestWishReceivedEmail } from "@/lib/email";
 import {
   featureSiteFromInviteTier,
   isFeatureEnabled,
@@ -85,6 +85,10 @@ export async function PATCH(request: Request, context: RouteContext) {
         message.body,
       ],
     }).catch((error) => console.error("Wish edit notify failed", error));
+
+    await sendGuestWishReceivedEmail(message).catch((error) =>
+      console.error("Wish received email failed", error),
+    );
 
     return NextResponse.json({ message, pending: true });
   } catch (error) {

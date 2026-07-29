@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { buildDisplayWishPool, toPublicWishes } from "@/data/sample-wishes";
-import { notifyOwner } from "@/lib/email";
+import {
+  notifyOwner,
+  sendGuestWishReceivedEmail,
+} from "@/lib/email";
 import {
   featureSiteFromInviteTier,
   isFeatureEnabled,
@@ -97,6 +100,10 @@ export async function POST(request: Request) {
         message.body,
       ],
     }).catch((error) => console.error("Wish owner notify failed", error));
+
+    await sendGuestWishReceivedEmail(message).catch((error) =>
+      console.error("Wish received email failed", error),
+    );
 
     return NextResponse.json({ message, pending: true }, { status: 201 });
   } catch (error) {
