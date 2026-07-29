@@ -262,13 +262,11 @@ export function GuestAccountPanel() {
   const [queryBusy, setQueryBusy] = useState(false);
   const [queryDone, setQueryDone] = useState(false);
   const [queryError, setQueryError] = useState("");
-  const [wishName, setWishName] = useState("");
   const [wishBody, setWishBody] = useState("");
   const [wishBusy, setWishBusy] = useState(false);
   const [wishDone, setWishDone] = useState("");
   const [wishError, setWishError] = useState("");
   const [editingWishId, setEditingWishId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
   const [editBody, setEditBody] = useState("");
   const [editBusy, setEditBusy] = useState(false);
   const [removingWishId, setRemovingWishId] = useState<string | null>(null);
@@ -399,13 +397,14 @@ export function GuestAccountPanel() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (wishName.trim()) return;
-    const fromUser = user?.displayName?.trim();
-    const fromData = data?.guest?.name?.trim();
-    if (fromUser) setWishName(fromUser);
-    else if (fromData) setWishName(fromData);
-  }, [data?.guest?.name, user?.displayName, wishName]);
+  const wishSignedAsName =
+    user?.displayName?.trim() ||
+    data?.guest?.name?.trim() ||
+    user?.email?.split("@")[0]?.trim() ||
+    data?.guest?.email?.split("@")[0]?.trim() ||
+    "Guest";
+  const wishSignedAsEmail =
+    user?.email?.trim() || data?.guest?.email?.trim() || "";
 
   const sendWish = async (event: FormEvent) => {
     event.preventDefault();
@@ -426,7 +425,6 @@ export function GuestAccountPanel() {
         },
         body: JSON.stringify({
           body: wishBody,
-          displayName: wishName || undefined,
           inviteTier: invite?.tier,
           inviteSlug: invite?.slug,
           inviteSide: invite ? "bride" : undefined,
@@ -457,13 +455,11 @@ export function GuestAccountPanel() {
     setWishError("");
     setWishDone("");
     setEditingWishId(wish.id);
-    setEditName(wish.displayName);
     setEditBody(wish.body);
   };
 
   const cancelEditWish = () => {
     setEditingWishId(null);
-    setEditName("");
     setEditBody("");
     setEditBusy(false);
   };
@@ -488,7 +484,6 @@ export function GuestAccountPanel() {
         },
         body: JSON.stringify({
           body: editBody,
-          displayName: editName || undefined,
           inviteTier: invite?.tier,
         }),
       });
@@ -1481,20 +1476,12 @@ export function GuestAccountPanel() {
                                     <p className="font-body text-[11px] uppercase tracking-[0.22em] text-gold-soft">
                                       Edit wish
                                     </p>
-                                    <label className="block">
-                                      <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
-                                        Your name
-                                      </span>
-                                      <input
-                                        className={cn(fieldClass, "mt-2")}
-                                        value={editName}
-                                        onChange={(event) =>
-                                          setEditName(event.target.value)
-                                        }
-                                        maxLength={60}
-                                        required
-                                      />
-                                    </label>
+                                    <p className="font-body text-xs text-muted">
+                                      Signed as {wishSignedAsName}
+                                      {wishSignedAsEmail
+                                        ? ` · ${wishSignedAsEmail}`
+                                        : ""}
+                                    </p>
                                     <label className="block">
                                       <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
                                         Message / quote
@@ -1516,7 +1503,10 @@ export function GuestAccountPanel() {
                                       </span>
                                     </label>
                                     <div className="flex flex-wrap items-center gap-3">
-                                      <Button type="submit" disabled={editBusy}>
+                                      <Button
+                                        type="submit"
+                                        disabled={editBusy || !wishSignedAsEmail}
+                                      >
                                         <Send size={15} />
                                         {editBusy ? "Saving…" : "Save changes"}
                                       </Button>
@@ -1588,22 +1578,16 @@ export function GuestAccountPanel() {
                           </p>
                         </div>
                         <p className="mt-2 font-body text-sm text-muted">
-                          You can send multiple wishes from this account —{" "}
+                          Signed in as {wishSignedAsName}
+                          {wishSignedAsEmail ? ` · ${wishSignedAsEmail}` : ""}.
+                          You can send multiple wishes —{" "}
                           {wishes?.remaining ?? "several"} remaining.
                         </p>
-                        <label className="mt-4 block">
-                          <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
-                            Your name
-                          </span>
-                          <input
-                            className={cn(fieldClass, "mt-2")}
-                            value={wishName}
-                            onChange={(event) => setWishName(event.target.value)}
-                            maxLength={60}
-                            required
-                            placeholder="How should we sign your wish?"
-                          />
-                        </label>
+                        {!wishSignedAsEmail ? (
+                          <p className="mt-3 font-body text-sm text-rose-200">
+                            Your Google account needs an email to share a wish.
+                          </p>
+                        ) : null}
                         <label className="mt-4 block">
                           <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
                             Message / quote
@@ -1621,7 +1605,14 @@ export function GuestAccountPanel() {
                           </span>
                         </label>
                         <div className="mt-5 flex flex-wrap items-center gap-4">
-                          <Button type="submit" disabled={wishBusy || Boolean(editingWishId)}>
+                          <Button
+                            type="submit"
+                            disabled={
+                              wishBusy ||
+                              Boolean(editingWishId) ||
+                              !wishSignedAsEmail
+                            }
+                          >
                             <Send size={15} />
                             {wishBusy ? "Sending…" : "Share wish"}
                           </Button>

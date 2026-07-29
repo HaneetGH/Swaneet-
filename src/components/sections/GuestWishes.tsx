@@ -67,7 +67,6 @@ export function GuestWishes() {
   const [wishes, setWishes] = useState<PublicWish[]>([]);
   const [loading, setLoading] = useState(true);
   const [body, setBody] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -93,14 +92,14 @@ export function GuestWishes() {
     void load();
   }, [load, wishesOn]);
 
-  useEffect(() => {
-    if (user?.displayName && !displayName) {
-      setDisplayName(user.displayName);
-    }
-  }, [displayName, user?.displayName]);
-
   // Unique DB wishes: real first, samples kept so one review never fills the page
   const displayWishes = useMemo(() => buildDisplayWishPool(wishes), [wishes]);
+
+  const signedAsName =
+    user?.displayName?.trim() ||
+    user?.email?.split("@")[0]?.trim() ||
+    "Guest";
+  const signedAsEmail = user?.email?.trim() || "";
 
   useEffect(() => {
     if (displayWishes.length <= 1) return;
@@ -141,7 +140,6 @@ export function GuestWishes() {
         },
         body: JSON.stringify({
           body,
-          displayName: displayName || undefined,
           inviteTier: invite?.tier,
           inviteSlug: invite?.slug,
           inviteSide: invite ? "bride" : undefined,
@@ -279,8 +277,8 @@ export function GuestWishes() {
           </div>
           <p className="mt-2 font-body text-sm text-muted">
             Anyone can read the wishes above. Sign in with Google to add one —
-            you can write multiple wishes. The family reviews each post before it
-            appears on the wall.
+            we use your Google name and email. The family reviews each post
+            before it appears on the wall.
           </p>
 
           {!authReady ? (
@@ -290,25 +288,27 @@ export function GuestWishes() {
               <GuestAuthPanel
                 onAuthed={() => undefined}
                 title="Sign in to share a wish"
-                subtitle="Use the same Google account you use for RSVP and photos."
+                subtitle="Google sign-in provides your name and email — no extra form fields."
                 ctaLabel="Continue with Google"
               />
             </div>
           ) : (
             <form onSubmit={onSubmit} className="mt-5 space-y-4">
-              <label className="block">
-                <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
-                  Your name
-                </span>
-                <input
-                  className={cn(fieldClass, "mt-2")}
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  maxLength={60}
-                  required
-                  placeholder="How should we sign your wish?"
-                />
-              </label>
+              <div className="rounded-xl border border-gold/20 bg-[#141018]/80 px-4 py-3">
+                <p className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
+                  Posting as
+                </p>
+                <p className="mt-1 font-body text-sm text-cream">{signedAsName}</p>
+                {signedAsEmail ? (
+                  <p className="mt-0.5 font-body text-xs text-muted">
+                    {signedAsEmail}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 font-body text-xs text-rose-200">
+                    Your Google account needs an email to share a wish.
+                  </p>
+                )}
+              </div>
               <label className="block">
                 <span className="font-body text-[10px] uppercase tracking-[0.18em] text-gold/70">
                   Message / quote
@@ -326,7 +326,7 @@ export function GuestWishes() {
                 </span>
               </label>
               <div className="flex flex-wrap items-center gap-3">
-                <Button type="submit" disabled={busy}>
+                <Button type="submit" disabled={busy || !signedAsEmail}>
                   <Send size={15} />
                   {busy ? "Sending…" : "Share wish"}
                 </Button>

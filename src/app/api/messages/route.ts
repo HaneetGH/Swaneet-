@@ -10,6 +10,7 @@ import {
   isFeatureEnabled,
 } from "@/lib/feature-flags";
 import { isGuestAuthFailure, requireGuestAuth } from "@/lib/require-guest";
+import { guestWishIdentity } from "@/lib/guest-wish-identity";
 import {
   createGuestMessage,
   getFeatureFlags,
@@ -21,7 +22,6 @@ export const dynamic = "force-dynamic";
 
 const postSchema = z.object({
   body: z.string().trim().min(12).max(400),
-  displayName: z.string().trim().min(2).max(60).optional(),
   inviteTier: z.enum(["mehfil", "laavan"]).optional(),
   inviteSlug: z.string().trim().max(80).optional(),
   inviteSide: z.enum(["bride", "groom"]).optional(),
@@ -58,6 +58,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const identity = guestWishIdentity(guest);
+    if (!identity.ok) {
+      return NextResponse.json({ error: identity.error }, { status: 400 });
+    }
+
     const inviteSite = featureSiteFromInviteTier(parsed.data.inviteTier);
     const flags = await getFeatureFlags();
     if (!isFeatureEnabled(flags, inviteSite, "guest_messages")) {
@@ -67,11 +72,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const displayName =
-      parsed.data.displayName ||
-      guest.name?.trim() ||
-      guest.email?.split("@")[0] ||
-      "Guest";
+    const { displayName } = identity;
 
     const message = await createGuestMessage({
       body: parsed.data.body,
