@@ -26,15 +26,104 @@ With Neon connected, **all wedding content lives in Postgres** — not in a repo
 | --- | --- |
 | Events, gallery metadata, team, room pool | Neon `content_store` |
 | RSVPs & stay requests | Neon `rsvps` / `accommodations` tables |
+| Guest wishes | Neon `guest_messages` (via store) |
 | Email status | Neon `email_logs` |
 | Uploaded images/videos | Vercel Blob |
 
+## Guest site map
+
+Invitation homes stay **invitation-first** (hero, story, events, venue, gallery, family). Forms live on dedicated pages. Top ATL banners + nav deep-link there.
+
+| Surface | Routes |
+| --- | --- |
+| Main home | `/` |
+| Bride invite home | `/i/[slug]` (mehfil / laavan — see `src/data/bride-invites.ts`) |
+| RSVP | `/rsvp`, `/i/[slug]/rsvp` |
+| Wishes wall + write | `/wishes`, `/i/[slug]/wishes` (`#write-wish` for compose) |
+| Photo upload | `/upload`, `/i/[slug]/upload` |
+| My account | `/my-account` |
+| Find my photos | `/my-photos` |
+
+Path helpers: `src/lib/guest-paths.ts` → `guestActionPath` / `wishesWritePath`.
+
+### Top banners (ATL)
+
+Shown under the hero on `/` and `/i/[slug]` (feature-flagged per site: `main` / `mehfil` / `laavan`):
+
+| Banner | Flag | Links to |
+| --- | --- | --- |
+| Wish + Upload (`GuestEngageBanner`) | `guest_messages` / `guest_photos` | `/wishes#write-wish`, `/upload` |
+| Find my photos (`DownloadPhotosBanner`) | `face_find` | `/my-photos` |
+| Need Accommodation? / RSVP (`RsvpStayBanner`) | `stay_banner` + `accommodation` | `/rsvp` |
+
+RSVP banner image: Dashboard → Settings → site banner (`/api/site-banner`).
+
+## Guest wishes
+
+| Piece | Detail |
+| --- | --- |
+| Auth | **Google only** — name + email from the signed-in account (`src/lib/guest-wish-identity.ts`). No manual name/email fields. |
+| Limits | Up to **10** wishes per Google account |
+| Lifecycle | Submit → `pending` → family approve / reject. Guest edit returns to pending. |
+| Public wall | Anyone can read `/wishes`. Write requires Google. |
+| Hero | Soft blurred wish backdrop + rotating blessing that links to the wall |
+| Flag | `guest_messages` |
+| APIs | `GET/POST /api/messages`; guest `PATCH/DELETE /api/messages/[id]` |
+
+UI: `src/components/sections/GuestWishes.tsx`. Account manage: My account → **Your wishes**.
+
+### Wish status emails
+
+Guests get Resend mail automatically (logged in `email_logs`):
+
+| Kind | When |
+| --- | --- |
+| `wish_received` | Submit or guest edit (in review) |
+| `wish_live` | Approved |
+| `wish_note` | Rejected |
+
+Helpers: `sendGuestWishReceivedEmail` / `sendGuestWishLiveEmail` / `sendGuestWishNoteEmail` in `src/lib/email.ts`.
+
+Dashboard can **Resend** status emails, or **Save email & send** when a wish has no address on file (`POST /api/messages/moderate` action `notify`).
+
+## RSVP
+
+| Behavior | Detail |
+| --- | --- |
+| Pages | `/rsvp` (+ invite twin) — not embedded on invitation home |
+| Auth | Google; signed-in guests skip “please sign in” copy |
+| Existing reply | Loads via `/api/rsvp/me` — shows **thanks** on refresh (not a blank form) |
+| Edit | “Edit your reply” on the RSVP page; also under **My account → RSVP** |
+| Stay | Optional accommodation when `accommodation` is on |
+
+UI: `src/components/sections/RSVP.tsx`.
+
+## My account
+
+Guest hub at `/my-account` (`GuestAccountPanel` · `GET /api/account`).
+
+| Tab | What guests can do |
+| --- | --- |
+| Stay booking | View stay / offer status |
+| RSVP | View + edit attendance |
+| Your uploads | Guest photo status (pending / approved / rejected) |
+| Your wishes | List, add (under limit), edit, remove |
+| Find my photos | When `face_find` is on |
+| Ask a question | Message the family |
+
 ## Dashboard
 
-Manage RSVPs, events, and gallery images at `/dashboard`.
+Manage the wedding at `/dashboard`.
 
 Default PIN: `swaneet10`  
 Override with `ADMIN_PIN` in `.env.local`.
+
+| Area | Notes |
+| --- | --- |
+| People → RSVPs / Stays | Attendance + accommodation |
+| People → Wishes | Approve / reject / delete; resend emails; attach missing email (`GuestWishesReview`, permission `messages`) |
+| Gallery / Faces | Photos + face find |
+| Events / Team / Settings | Content, roles, feature flags, site banner |
 
 ## Deploy on Vercel
 
@@ -49,9 +138,9 @@ Override with `ADMIN_PIN` in `.env.local`.
 5. In Firebase Console → Authentication, enable **Google**.
 6. Add your Vercel domain under Authentication → Settings → Authorized domains.
 7. Redeploy after connecting storage / Firebase.
-8. Email (stay confirms, team invites, photo OTP): set `RESEND_API_KEY` (Resend domain `mail.technorapper.com` → From `noreply@mail.technorapper.com`). Optional override: `EMAIL_FROM="Swaneet Wedding <noreply@mail.technorapper.com>"`.
+8. Email (stay confirms, team invites, photo OTP, **wish status**): set `RESEND_API_KEY` (Resend domain `mail.technorapper.com` → From `noreply@mail.technorapper.com`). Optional override: `EMAIL_FROM="Swaneet Wedding <noreply@mail.technorapper.com>"`.
 
-Wedding data (events, RSVPs, gallery, stays) lives in **Neon Postgres** — **deploys never wipe it**. Seed defaults only run when the database is empty.
+Wedding data (events, RSVPs, gallery, stays, wishes) lives in **Neon Postgres** — **deploys never wipe it**. Seed defaults only run when the database is empty.
 
 Without `DATABASE_URL` on Vercel, the dashboard cannot save.
 
