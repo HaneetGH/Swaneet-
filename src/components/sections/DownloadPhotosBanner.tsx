@@ -3,10 +3,14 @@
 import Link from "next/link";
 import { Download, ScanFace } from "lucide-react";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import { guestActionPath } from "@/lib/guest-paths";
+import { useInvite } from "@/lib/invite-context";
 
 /** Homepage strip: find & download your wedding photos via selfie match */
 export function DownloadPhotosBanner() {
   const { enabled, ready } = useFeatureFlags();
+  const invite = useInvite();
+  const photosHref = guestActionPath("/my-photos", invite);
 
   if (ready && !enabled("face_find")) {
     return null;
@@ -19,7 +23,7 @@ export function DownloadPhotosBanner() {
   return (
     <div className="relative z-20 border-y border-gold/25 bg-[#120e16]/95">
       <Link
-        href="/my-photos"
+        href={photosHref}
         className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-gold/5 sm:px-8"
       >
         <span className="flex min-w-0 items-center gap-3">

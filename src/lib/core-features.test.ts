@@ -6,6 +6,11 @@ import {
   normalizeFeatureFlags,
 } from "@/lib/feature-flags";
 import {
+  absoluteGuestUrl,
+  guestActionPath,
+  wishesPublicPath,
+} from "@/lib/guest-paths";
+import {
   eventsForInvite,
   getBrideInvite,
   brideInvites,
@@ -83,6 +88,9 @@ describe("feature flags", () => {
     expect(isFeatureEnabled(flags, "laavan", "rsvp")).toBe(true);
     expect(isFeatureEnabled(flags, "main", "face_find")).toBe(false);
     expect(isFeatureEnabled(flags, "mehfil", "face_find")).toBe(false);
+    expect(isFeatureEnabled(flags, "main", "our_story")).toBe(true);
+    expect(isFeatureEnabled(flags, "mehfil", "our_story")).toBe(false);
+    expect(isFeatureEnabled(flags, "laavan", "our_story")).toBe(false);
   });
 
   it("can disable accommodation for one site only", () => {
@@ -102,6 +110,51 @@ describe("feature flags", () => {
     expect(featureSiteFromInviteTier("mehfil")).toBe("mehfil");
     expect(featureSiteFromInviteTier("laavan")).toBe("laavan");
     expect(featureSiteFromInviteTier(undefined)).toBe("main");
+  });
+
+  it("fills missing our_story from defaults when normalizing", () => {
+    const flags = normalizeFeatureFlags({
+      main: {
+        rsvp: true,
+        accommodation: true,
+        gallery: true,
+        guest_photos: true,
+        stay_banner: true,
+        face_find: false,
+        guest_messages: true,
+      } as never,
+    });
+    expect(flags.main.our_story).toBe(true);
+    expect(flags.mehfil.our_story).toBe(false);
+  });
+});
+
+describe("guest paths", () => {
+  it("scopes action paths to invite basePath", () => {
+    const invite = { basePath: "/i/swnt-chugh-mehfil-k7m2" };
+    expect(guestActionPath("/my-account", invite)).toBe(
+      "/i/swnt-chugh-mehfil-k7m2/my-account",
+    );
+    expect(guestActionPath("/my-photos", invite)).toBe(
+      "/i/swnt-chugh-mehfil-k7m2/my-photos",
+    );
+    expect(guestActionPath("/gallery", invite)).toBe(
+      "/i/swnt-chugh-mehfil-k7m2/gallery",
+    );
+    expect(guestActionPath("/wishes", null)).toBe("/wishes");
+  });
+
+  it("builds wish public / absolute URLs with invite slug", () => {
+    expect(wishesPublicPath("swnt-chugh-laavan-p9x4")).toBe(
+      "/i/swnt-chugh-laavan-p9x4/wishes",
+    );
+    expect(wishesPublicPath(undefined)).toBe("/wishes");
+    expect(
+      absoluteGuestUrl("/wishes", {
+        siteUrl: "https://example.com",
+        inviteSlug: "swnt-chugh-mehfil-k7m2",
+      }),
+    ).toBe("https://example.com/i/swnt-chugh-mehfil-k7m2/wishes");
   });
 });
 

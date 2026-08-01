@@ -9,6 +9,7 @@ import type {
 import { PERMISSION_LABELS } from "@/lib/roles";
 import { resolveEventsForStayEmail } from "@/lib/email-itinerary";
 import { buildStayConfirmationParts } from "@/lib/email-stay-template";
+import { absoluteGuestUrl } from "@/lib/guest-paths";
 import type { SharedRoomRoommateContact } from "@/lib/shared-room-email";
 import { appendEmailLog } from "@/lib/store";
 
@@ -366,14 +367,20 @@ function wishPreview(body: string, max = 160) {
 
 /** Guest submitted a wish — family will review before it goes live. */
 export async function sendGuestWishReceivedEmail(
-  message: Pick<GuestMessage, "body" | "displayName" | "authEmail">,
+  message: Pick<
+    GuestMessage,
+    "body" | "displayName" | "authEmail" | "inviteSlug"
+  >,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const to = message.authEmail?.trim() || "";
   const subject = "We received your #Swaneet wish";
   const name = message.displayName?.trim() || "Guest";
   const preview = wishPreview(message.body || "");
   const siteUrl = dashboardSiteUrl().replace(/\/$/, "");
-  const wishesUrl = `${siteUrl}/wishes`;
+  const wishesUrl = absoluteGuestUrl("/wishes", {
+    siteUrl,
+    inviteSlug: message.inviteSlug,
+  });
 
   if (!to) {
     const error = "Guest has no email on this wish to notify.";
@@ -437,14 +444,20 @@ export async function sendGuestWishReceivedEmail(
 
 /** Guest wish approved — now live on the wall. */
 export async function sendGuestWishLiveEmail(
-  message: Pick<GuestMessage, "body" | "displayName" | "authEmail">,
+  message: Pick<
+    GuestMessage,
+    "body" | "displayName" | "authEmail" | "inviteSlug"
+  >,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const to = message.authEmail?.trim() || "";
   const subject = "Your #Swaneet wish is live";
   const name = message.displayName?.trim() || "Guest";
   const preview = wishPreview(message.body || "");
   const siteUrl = dashboardSiteUrl().replace(/\/$/, "");
-  const wishesUrl = `${siteUrl}/wishes`;
+  const wishesUrl = absoluteGuestUrl("/wishes", {
+    siteUrl,
+    inviteSlug: message.inviteSlug,
+  });
 
   if (!to) {
     const error = "Guest has no email on this wish to notify.";

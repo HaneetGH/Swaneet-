@@ -5,14 +5,18 @@ import { useRef } from "react";
 import { wedding } from "@/data/wedding";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 
 export function OurStory() {
+  const { enabled, ready } = useFeatureFlags();
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({
     target: ref,
     offset: ["start end", "end start"],
   });
   const y = useTransform(scrollYProgress, [0, 1], [40, -40]);
+
+  if (ready && !enabled("our_story")) return null;
 
   return (
     <section id="story" ref={ref} className="section-pad relative overflow-hidden">

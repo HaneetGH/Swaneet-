@@ -32,29 +32,44 @@ With Neon connected, **all wedding content lives in Postgres** — not in a repo
 
 ## Guest site map
 
-Invitation homes stay **invitation-first** (hero, story, events, venue, gallery, family). Forms live on dedicated pages. Top ATL banners + nav deep-link there.
+Invitation homes stay **invitation-first** (hero, events, venue, gallery, family). Forms and hubs live on dedicated pages. Top ATL banners + nav deep-link there. Main and bride invites share the same guest surfaces; invite routes keep `InviteProvider` so flags / RSVP / stay resolve to **mehfil** or **laavan**.
 
-| Surface | Routes |
-| --- | --- |
-| Main home | `/` |
-| Bride invite home | `/i/[slug]` (mehfil / laavan — see `src/data/bride-invites.ts`) |
-| RSVP | `/rsvp`, `/i/[slug]/rsvp` |
-| Wishes wall + write | `/wishes`, `/i/[slug]/wishes` (`#write-wish` for compose) |
-| Photo upload | `/upload`, `/i/[slug]/upload` |
-| My account | `/my-account` |
-| Find my photos | `/my-photos` |
+| Surface | Main | Invite twin |
+| --- | --- | --- |
+| Home | `/` | `/i/[slug]` |
+| RSVP | `/rsvp` | `/i/[slug]/rsvp` |
+| Wishes wall + write | `/wishes` (`#write-wish`) | `/i/[slug]/wishes` |
+| Photo upload | `/upload` | `/i/[slug]/upload` |
+| Gallery | `/gallery` | `/i/[slug]/gallery` |
+| My account | `/my-account` | `/i/[slug]/my-account` |
+| Find my photos | `/my-photos` | `/i/[slug]/my-photos` |
 
-Path helpers: `src/lib/guest-paths.ts` → `guestActionPath` / `wishesWritePath`.
+Path helpers: `src/lib/guest-paths.ts` → `guestActionPath` / `wishesWritePath` / `absoluteGuestUrl`.
+
+### Feature flags (per site)
+
+Dashboard → Settings. Sites: `main` / `mehfil` / `laavan`.
+
+| Flag | Default | Gates |
+| --- | --- | --- |
+| `rsvp` | on | RSVP page, nav, welcome |
+| `accommodation` | on | Stay fields (+ with `stay_banner` → RSVP ATL) |
+| `gallery` | on | Gallery viewing |
+| `guest_photos` | on | Upload + Wish/Upload ATL photo half |
+| `stay_banner` | on | RSVP/stay ATL |
+| `face_find` | **off** | Find-photos ATL, nav, account tab, `/my-photos` |
+| `guest_messages` | on | Wishes wall/write, Wish ATL, account wishes |
+| `our_story` | **main on · invites off** | Our Story section + Story nav link |
 
 ### Top banners (ATL)
 
-Shown under the hero on `/` and `/i/[slug]` (feature-flagged per site: `main` / `mehfil` / `laavan`):
+Shown under the hero on `/` and `/i/[slug]`:
 
 | Banner | Flag | Links to |
 | --- | --- | --- |
-| Wish + Upload (`GuestEngageBanner`) | `guest_messages` / `guest_photos` | `/wishes#write-wish`, `/upload` |
-| Find my photos (`DownloadPhotosBanner`) | `face_find` | `/my-photos` |
-| Need Accommodation? / RSVP (`RsvpStayBanner`) | `stay_banner` + `accommodation` | `/rsvp` |
+| Wish + Upload (`GuestEngageBanner`) | `guest_messages` / `guest_photos` | invite-aware `/wishes#write-wish`, `/upload` |
+| Find my photos (`DownloadPhotosBanner`) | `face_find` | invite-aware `/my-photos` |
+| Need Accommodation? / RSVP (`RsvpStayBanner`) | `stay_banner` + `accommodation` | invite-aware `/rsvp` |
 
 RSVP banner image: Dashboard → Settings → site banner (`/api/site-banner`).
 
@@ -65,7 +80,7 @@ RSVP banner image: Dashboard → Settings → site banner (`/api/site-banner`).
 | Auth | **Google only** — name + email from the signed-in account (`src/lib/guest-wish-identity.ts`). No manual name/email fields. |
 | Limits | Up to **10** wishes per Google account |
 | Lifecycle | Submit → `pending` → family approve / reject. Guest edit returns to pending. |
-| Public wall | Anyone can read `/wishes`. Write requires Google. |
+| Public wall | Anyone can read `/wishes` (+ invite twin). Write requires Google. |
 | Hero | Soft blurred wish backdrop + rotating blessing that links to the wall |
 | Flag | `guest_messages` |
 | APIs | `GET/POST /api/messages`; guest `PATCH/DELETE /api/messages/[id]` |
@@ -84,6 +99,8 @@ Guests get Resend mail automatically (logged in `email_logs`):
 
 Helpers: `sendGuestWishReceivedEmail` / `sendGuestWishLiveEmail` / `sendGuestWishNoteEmail` in `src/lib/email.ts`.
 
+Wish email “view wall” links use `/i/{inviteSlug}/wishes` when the wish was posted from an invite; otherwise `/wishes`.
+
 Dashboard can **Resend** status emails, or **Save email & send** when a wish has no address on file (`POST /api/messages/moderate` action `notify`).
 
 ## RSVP
@@ -100,7 +117,7 @@ UI: `src/components/sections/RSVP.tsx`.
 
 ## My account
 
-Guest hub at `/my-account` (`GuestAccountPanel` · `GET /api/account`).
+Guest hub at `/my-account` and `/i/[slug]/my-account` (`GuestAccountPanel` · `GET /api/account?site=…`). Invite twin keeps mehfil/laavan RSVP + flags.
 
 | Tab | What guests can do |
 | --- | --- |
@@ -108,7 +125,7 @@ Guest hub at `/my-account` (`GuestAccountPanel` · `GET /api/account`).
 | RSVP | View + edit attendance |
 | Your uploads | Guest photo status (pending / approved / rejected) |
 | Your wishes | List, add (under limit), edit, remove |
-| Find my photos | When `face_find` is on |
+| Find my photos | When `face_find` is on for that site |
 | Ask a question | Message the family |
 
 ## Dashboard

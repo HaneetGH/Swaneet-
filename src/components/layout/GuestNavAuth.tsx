@@ -3,6 +3,8 @@
 import { LogIn, LogOut, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
+import { guestActionPath } from "@/lib/guest-paths";
+import { useInvite } from "@/lib/invite-context";
 import { cn } from "@/lib/utils";
 
 type GuestNavAuthProps = {
@@ -17,6 +19,8 @@ export function GuestNavAuth({
 }: GuestNavAuthProps) {
   const { configured, ready, user, busy, error, signIn, signOut } =
     useGuestAuth();
+  const invite = useInvite();
+  const accountHref = guestActionPath("/my-account", invite);
   const isMenu = variant === "menu";
 
   if (!ready) {
@@ -48,7 +52,7 @@ export function GuestNavAuth({
         )}
       >
         <Link
-          href="/my-account"
+          href={accountHref}
           onClick={() => onDone?.()}
           className={cn(
             "group flex min-w-0 items-center gap-2 rounded-full border border-gold/35 bg-gold/10 transition hover:border-gold/55 hover:bg-gold/20",

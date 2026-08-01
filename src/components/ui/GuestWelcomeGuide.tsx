@@ -31,12 +31,21 @@ export function GuestWelcomeGuide() {
     pathname?.startsWith("/dashboard") ||
     pathname?.startsWith("/shared-photos") ||
     pathname?.startsWith("/my-account") ||
+    pathname?.startsWith("/my-photos") ||
+    pathname?.startsWith("/gallery") ||
     pathname?.startsWith("/rsvp") ||
     pathname?.startsWith("/wishes") ||
     pathname?.startsWith("/upload") ||
+    pathname?.includes("/my-account") ||
+    pathname?.includes("/my-photos") ||
+    pathname?.includes("/gallery") ||
     pathname?.includes("/rsvp") ||
     pathname?.includes("/wishes") ||
     pathname?.includes("/upload");
+
+  const storageKey = invite?.slug
+    ? `${STORAGE_KEY}-${invite.slug}`
+    : STORAGE_KEY;
 
   const actions = useMemo(() => {
     const items: Action[] = [];
@@ -77,7 +86,7 @@ export function GuestWelcomeGuide() {
     if (ready && enabled("face_find")) {
       items.push({
         id: "find",
-        href: "/my-photos",
+        href: guestActionPath("/my-photos", invite),
         eyebrow: "Your album",
         title: "Find photos of you",
         hint: "Sign in, upload a selfie — we’ll match pictures of you",
@@ -91,18 +100,18 @@ export function GuestWelcomeGuide() {
   useEffect(() => {
     if (skipPage || !ready || actions.length === 0) return;
     try {
-      if (window.localStorage.getItem(STORAGE_KEY) === "1") return;
+      if (window.localStorage.getItem(storageKey) === "1") return;
     } catch {
       // private mode — still show once this session
     }
     const timer = window.setTimeout(() => setVisible(true), 700);
     return () => window.clearTimeout(timer);
-  }, [actions.length, ready, skipPage]);
+  }, [actions.length, ready, skipPage, storageKey]);
 
   const dismiss = () => {
     setVisible(false);
     try {
-      window.localStorage.setItem(STORAGE_KEY, "1");
+      window.localStorage.setItem(storageKey, "1");
     } catch {
       // ignore
     }

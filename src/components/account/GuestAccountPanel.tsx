@@ -249,6 +249,9 @@ export function GuestAccountPanel() {
   const invite = useInvite();
   const rsvpHref = guestActionPath("/rsvp", invite);
   const uploadHref = guestActionPath("/upload", invite);
+  const galleryHref = guestActionPath("/gallery", invite);
+  const photosHref = guestActionPath("/my-photos", invite);
+  const homeHref = invite?.basePath || "/";
   const [data, setData] = useState<AccountResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -796,7 +799,7 @@ export function GuestAccountPanel() {
       </nav>
       <div className="space-y-1 border-t border-gold/15 px-2 py-3">
         <Link
-          href="/gallery"
+          href={galleryHref}
           className="flex items-center gap-3 rounded-xl px-3 py-2.5 font-body text-sm text-muted transition hover:bg-white/5 hover:text-cream"
         >
           <Images size={16} />
@@ -804,7 +807,7 @@ export function GuestAccountPanel() {
         </Link>
         {flagsReady && enabled("face_find") ? (
           <Link
-            href="/my-photos"
+            href={photosHref}
             className="flex items-center gap-3 rounded-xl px-3 py-2.5 font-body text-sm text-muted transition hover:bg-white/5 hover:text-cream"
           >
             <ScanFace size={16} />
@@ -812,7 +815,7 @@ export function GuestAccountPanel() {
           </Link>
         ) : null}
         <Link
-          href="/"
+          href={homeHref}
           className="flex items-center gap-3 rounded-xl px-3 py-2.5 font-body text-sm text-muted transition hover:bg-white/5 hover:text-cream"
         >
           Back to site
@@ -1634,7 +1637,7 @@ export function GuestAccountPanel() {
                   subtitle="Selfie match status for your private wedding album."
                   action={
                     <Link
-                      href="/my-photos"
+                      href={photosHref}
                       className="font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft transition hover:text-gold"
                     >
                       Open album
