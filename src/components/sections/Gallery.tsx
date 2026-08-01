@@ -347,6 +347,8 @@ function GalleryLoginGate({
 /** Compact homepage preview: up to 3 photos per event + View more */
 export function Gallery() {
   const { enabled, ready: flagsReady, site } = useFeatureFlags();
+  const invite = useInvite();
+  const galleryHref = guestActionPath("/gallery", invite);
   const galleryOn = flagsReady && enabled("gallery");
   const { user, onAuthed } = useGuestUser();
   const { gallery, events, loading } = useGalleryData(user, galleryOn, site);
@@ -419,7 +421,7 @@ export function Gallery() {
           <>
             <div className="mb-10 flex justify-center">
               <Link
-                href="/gallery"
+                href={galleryHref}
                 className="rounded-full border border-gold/30 bg-gold/10 px-6 py-2.5 font-body text-[10px] uppercase tracking-[0.22em] text-gold-soft transition hover:bg-gold/20"
               >
                 View all photos
@@ -427,7 +429,12 @@ export function Gallery() {
             </div>
 
             <div className="space-y-14">
-              {groups.map((group) => (
+              {groups.map((group) => {
+                const groupHref =
+                  group.key === "unassigned"
+                    ? galleryHref
+                    : `${galleryHref}?event=${group.key}`;
+                return (
                 <div key={group.key}>
                   <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
                     <div>
@@ -440,11 +447,7 @@ export function Gallery() {
                     </div>
                     {group.total > PREVIEW_PER_EVENT ? (
                       <Link
-                        href={
-                          group.key === "unassigned"
-                            ? "/gallery"
-                            : `/gallery?event=${group.key}`
-                        }
+                        href={groupHref}
                         className="font-body text-[10px] uppercase tracking-[0.2em] text-gold-soft underline-offset-4 hover:underline"
                       >
                         View more ({group.total})
@@ -458,17 +461,14 @@ export function Gallery() {
                         key={photo.id}
                         photo={photo}
                         index={i}
-                        href={
-                          group.key === "unassigned"
-                            ? "/gallery"
-                            : `/gallery?event=${group.key}`
-                        }
+                        href={groupHref}
                         sizes="(max-width: 640px) 33vw, 280px"
                       />
                     ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}

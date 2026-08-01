@@ -14,6 +14,8 @@ const siteSchema = z.object({
   stay_banner: z.boolean(),
   face_find: z.boolean(),
   guest_messages: z.boolean(),
+  /** Optional for older dashboard clients; normalize fills defaults. */
+  our_story: z.boolean().optional(),
 });
 
 const flagsSchema = z.object({

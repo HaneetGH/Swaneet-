@@ -172,7 +172,8 @@ export type FeatureKey =
   | "guest_photos"
   | "stay_banner"
   | "face_find"
-  | "guest_messages";
+  | "guest_messages"
+  | "our_story";
 
 export type SiteFeatureFlags = Record<FeatureKey, boolean>;
 

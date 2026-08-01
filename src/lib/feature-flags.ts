@@ -48,10 +48,15 @@ export const FEATURE_KEYS: Array<{ id: FeatureKey; label: string; hint: string }
       label: "Wishes & quotes",
       hint: "Guests post messages for the bride and groom",
     },
+    {
+      id: "our_story",
+      label: "Our Story section",
+      hint: "Show the Our Story timeline on this site (main on by default; invites opt-in)",
+    },
   ];
 
-/** Most features on; face find stays off until you enable it. */
-const ALL_ON: SiteFeatureFlags = {
+/** Most features on; face find + invite Our Story stay off until enabled. */
+const BASE_ON: SiteFeatureFlags = {
   rsvp: true,
   accommodation: true,
   gallery: true,
@@ -59,18 +64,21 @@ const ALL_ON: SiteFeatureFlags = {
   stay_banner: true,
   face_find: false,
   guest_messages: true,
+  our_story: true,
 };
 
 export function defaultFeatureFlags(): FeatureFlags {
   return {
-    main: { ...ALL_ON },
-    mehfil: { ...ALL_ON },
-    laavan: { ...ALL_ON },
+    main: { ...BASE_ON, our_story: true },
+    mehfil: { ...BASE_ON, our_story: false },
+    laavan: { ...BASE_ON, our_story: false },
   };
 }
 
 export function normalizeFeatureFlags(
-  raw: Partial<FeatureFlags> | undefined,
+  raw:
+    | Partial<Record<FeatureSite, Partial<SiteFeatureFlags>>>
+    | undefined,
 ): FeatureFlags {
   const defaults = defaultFeatureFlags();
   const sites: FeatureSite[] = ["main", "mehfil", "laavan"];
@@ -82,6 +90,7 @@ export function normalizeFeatureFlags(
     "stay_banner",
     "face_find",
     "guest_messages",
+    "our_story",
   ];
 
   const next = { ...defaults };

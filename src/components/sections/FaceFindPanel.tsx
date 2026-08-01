@@ -15,6 +15,8 @@ import {
   getFirebaseAuth,
   isFirebaseClientConfigured,
 } from "@/lib/firebase/client";
+import { guestActionPath } from "@/lib/guest-paths";
+import { useInvite } from "@/lib/invite-context";
 import type { GalleryImage, GuestFaceProfile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +33,8 @@ function safeFilename(name: string) {
 
 export function FaceFindPanel({ className }: { className?: string }) {
   const { enabled, ready: flagsReady, site } = useFeatureFlags();
+  const invite = useInvite();
+  const photosHref = guestActionPath("/my-photos", invite);
   const faceOn = flagsReady && enabled("face_find");
 
   const [user, setUser] = useState<User | null>(null);
@@ -308,7 +312,7 @@ export function FaceFindPanel({ className }: { className?: string }) {
               </button>
             ) : null}
             <Link
-              href="/my-photos"
+              href={photosHref}
               className="inline-flex items-center gap-2 rounded-full border border-cream/15 px-4 py-2.5 font-body text-sm text-muted transition hover:text-cream"
             >
               <Images size={14} />

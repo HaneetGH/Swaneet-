@@ -8,6 +8,7 @@ import { Gallery } from "@/components/sections/Gallery";
 import { GuestEngageBanner } from "@/components/sections/GuestEngageBanner";
 import { Hero } from "@/components/sections/Hero";
 import { DownloadPhotosBanner } from "@/components/sections/DownloadPhotosBanner";
+import { OurStory } from "@/components/sections/OurStory";
 import { RsvpStayBanner } from "@/components/sections/RsvpStayBanner";
 import { Venue } from "@/components/sections/Venue";
 import { GuestWelcomeGuide } from "@/components/ui/GuestWelcomeGuide";
@@ -40,7 +41,8 @@ export async function generateMetadata({ params }: Params) {
 
 /**
  * Bride invite with top ATL banners (including Wish).
- * Full forms live on /i/[slug]/rsvp|wishes|upload.
+ * Full forms live on /i/[slug]/rsvp|wishes|upload|my-account|my-photos|gallery.
+ * Our Story is behind the per-site `our_story` feature flag.
  */
 export default async function BrideInvitePage({ params }: Params) {
   const { slug } = await params;
@@ -56,6 +58,7 @@ export default async function BrideInvitePage({ params }: Params) {
         <DownloadPhotosBanner />
         <RsvpStayBanner />
         <Countdown />
+        <OurStory />
         <Events />
         <Venue />
         <Gallery />

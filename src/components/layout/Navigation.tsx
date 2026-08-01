@@ -22,22 +22,20 @@ export function Navigation() {
   const onMainHome = pathname === "/";
 
   const links = useMemo(() => {
-    const base: NavLink[] = invite
-      ? [
-          { href: "#countdown", label: "Countdown" },
-          { href: "#events", label: "Events" },
-          { href: "#venue", label: "Venue" },
-          { href: "/gallery", label: "Gallery" },
-          { href: "#family", label: "Family" },
-        ]
-      : [
-          { href: "#countdown", label: "Countdown" },
-          { href: "#story", label: "Story" },
-          { href: "#events", label: "Events" },
-          { href: "#venue", label: "Venue" },
-          { href: "/gallery", label: "Gallery" },
-          { href: "#family", label: "Family" },
-        ];
+    const base: NavLink[] = [
+      { href: "#countdown", label: "Countdown" },
+    ];
+
+    if (!ready || enabled("our_story")) {
+      base.push({ href: "#story", label: "Story" });
+    }
+
+    base.push(
+      { href: "#events", label: "Events" },
+      { href: "#venue", label: "Venue" },
+      { href: guestActionPath("/gallery", invite), label: "Gallery" },
+      { href: "#family", label: "Family" },
+    );
 
     if (!ready || enabled("guest_messages")) {
       base.push({ href: guestActionPath("/wishes", invite), label: "Wishes" });
@@ -49,7 +47,10 @@ export function Navigation() {
       base.push({ href: guestActionPath("/upload", invite), label: "Upload" });
     }
     if (ready && enabled("face_find")) {
-      base.push({ href: "/my-photos", label: "Find mine" });
+      base.push({
+        href: guestActionPath("/my-photos", invite),
+        label: "Find mine",
+      });
     }
     // My account lives in the header auth chip — avoid a duplicate nav link
     return base;
