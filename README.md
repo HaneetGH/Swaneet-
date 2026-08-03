@@ -142,6 +142,20 @@ Override with `ADMIN_PIN` in `.env.local`.
 | Gallery / Faces | Photos + face find |
 | Events / Team / Settings | Content, roles, feature flags, site banner |
 
+## Photographer bulk upload
+
+Hired photographers get a focused desk at **`/photographer`** (not the full dashboard).
+
+| Piece | Detail |
+| --- | --- |
+| Auth | Same team PIN system — first-name username + PIN |
+| Permission | `gallery_upload` only (Team → **Photographer preset**) |
+| Batch | Up to **50** images/videos per upload (parallel Blob upload) |
+| Approval | Auto-approved (`source: photographer`) — goes live immediately |
+| Invite email | Upload-only members get the `/photographer` link in their access email |
+
+Create the account: Dashboard → Team → Photographer preset → name, email, PIN → Create & email access.
+
 ## Deploy on Vercel
 
 1. Push this repo to GitHub (already at `HaneetGH/Swaneet-`).

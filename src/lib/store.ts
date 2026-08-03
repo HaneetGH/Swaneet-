@@ -157,7 +157,12 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
       image.status === "pending" || image.status === "rejected"
         ? image.status
         : ("approved" as const),
-    source: image.source === "guest" ? ("guest" as const) : ("admin" as const),
+    source:
+      image.source === "guest"
+        ? ("guest" as const)
+        : image.source === "photographer"
+          ? ("photographer" as const)
+          : ("admin" as const),
   }));
 
   // Never replace a saved store's events with invitation defaults

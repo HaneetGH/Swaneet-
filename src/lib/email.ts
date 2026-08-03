@@ -579,18 +579,28 @@ export async function sendTeamInviteEmail(input: {
   pin: string;
   permissions: AdminPermission[];
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const dashboardUrl = `${dashboardSiteUrl().replace(/\/$/, "")}/dashboard`;
+  const siteUrl = dashboardSiteUrl().replace(/\/$/, "");
+  const dashboardUrl = `${siteUrl}/dashboard`;
+  const photographerUrl = `${siteUrl}/photographer`;
   const accessList = input.permissions
     .map((p) => PERMISSION_LABELS[p] || p)
     .join(", ");
   const username = input.name.trim().split(/\s+/)[0] || input.name;
+  const uploadOnly =
+    input.permissions.length === 1 &&
+    input.permissions[0] === "gallery_upload";
+  const portalUrl = uploadOnly ? photographerUrl : dashboardUrl;
+  const portalLabel = uploadOnly ? "Photographer upload" : "Dashboard";
 
   const text = [
     `Dear ${input.name},`,
     "",
-    "You’ve been added to the #Swaneet wedding dashboard team.",
+    uploadOnly
+      ? "You’ve been added as the #Swaneet wedding photographer (bulk photo upload)."
+      : "You’ve been added to the #Swaneet wedding dashboard team.",
     "",
-    `Dashboard: ${dashboardUrl}`,
+    `${portalLabel}: ${portalUrl}`,
+    uploadOnly ? `Full dashboard (if needed): ${dashboardUrl}` : "",
     `Username (first name): ${username}`,
     `Your PIN: ${input.pin}`,
     `Access: ${accessList}`,
@@ -599,15 +609,26 @@ export async function sendTeamInviteEmail(input: {
     "",
     "With love,",
     "#Swaneet · Haneet & Swarandeep",
-  ].join("\n");
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
 
   const html = `
     <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
       <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
-      <h1 style="font-weight: 400; font-size: 28px;">Dashboard access</h1>
+      <h1 style="font-weight: 400; font-size: 28px;">${uploadOnly ? "Photographer access" : "Dashboard access"}</h1>
       <p>Dear ${escapeHtml(input.name)},</p>
-      <p>You’ve been added to the wedding dashboard team.</p>
-      <p><strong>Dashboard:</strong> <a href="${escapeHtml(dashboardUrl)}">${escapeHtml(dashboardUrl)}</a></p>
+      <p>${
+        uploadOnly
+          ? "You’ve been added as the wedding photographer for bulk photo upload."
+          : "You’ve been added to the wedding dashboard team."
+      }</p>
+      <p><strong>${escapeHtml(portalLabel)}:</strong> <a href="${escapeHtml(portalUrl)}">${escapeHtml(portalUrl)}</a></p>
+      ${
+        uploadOnly
+          ? `<p><strong>Full dashboard:</strong> <a href="${escapeHtml(dashboardUrl)}">${escapeHtml(dashboardUrl)}</a></p>`
+          : ""
+      }
       <p><strong>Username (first name):</strong> ${escapeHtml(username)}</p>
       <p><strong>Your PIN:</strong> ${escapeHtml(input.pin)}</p>
       <p><strong>Access:</strong> ${escapeHtml(accessList)}</p>
@@ -619,7 +640,9 @@ export async function sendTeamInviteEmail(input: {
   return sendResendEmail({
     kind: "team_invite",
     to: input.email,
-    subject: "Your #Swaneet dashboard access",
+    subject: uploadOnly
+      ? "Your #Swaneet photographer upload access"
+      : "Your #Swaneet dashboard access",
     text,
     html,
   });
