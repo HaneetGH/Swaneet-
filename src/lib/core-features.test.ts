@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultFeatureFlags,
   featureSiteFromInviteTier,
+  featureSiteFromPathname,
   isFeatureEnabled,
   normalizeFeatureFlags,
 } from "@/lib/feature-flags";
@@ -128,6 +129,8 @@ describe("feature flags", () => {
     expect(isFeatureEnabled(flags, "main", "our_story")).toBe(true);
     expect(isFeatureEnabled(flags, "mehfil", "our_story")).toBe(false);
     expect(isFeatureEnabled(flags, "laavan", "our_story")).toBe(false);
+    expect(isFeatureEnabled(flags, "main", "landing")).toBe(true);
+    expect(isFeatureEnabled(flags, "mehfil", "landing")).toBe(true);
   });
 
   it("can disable accommodation for one site only", () => {
@@ -147,6 +150,11 @@ describe("feature flags", () => {
     expect(featureSiteFromInviteTier("mehfil")).toBe("mehfil");
     expect(featureSiteFromInviteTier("laavan")).toBe("laavan");
     expect(featureSiteFromInviteTier(undefined)).toBe("main");
+    expect(featureSiteFromPathname("/")).toBe("main");
+    expect(featureSiteFromPathname("/i/swnt-chugh-mehfil-k7m2")).toBe("mehfil");
+    expect(featureSiteFromPathname("/i/swnt-chugh-laavan-p9x4/rsvp")).toBe(
+      "laavan",
+    );
   });
 
   it("fills missing our_story from defaults when normalizing", () => {
@@ -163,6 +171,19 @@ describe("feature flags", () => {
     });
     expect(flags.main.our_story).toBe(true);
     expect(flags.mehfil.our_story).toBe(false);
+    expect(flags.main.landing).toBe(true);
+  });
+
+  it("can turn off landing scroll so guests skip the sealed invite", () => {
+    const flags = normalizeFeatureFlags({
+      ...defaultFeatureFlags(),
+      main: {
+        ...defaultFeatureFlags().main,
+        landing: false,
+      },
+    });
+    expect(isFeatureEnabled(flags, "main", "landing")).toBe(false);
+    expect(isFeatureEnabled(flags, "mehfil", "landing")).toBe(true);
   });
 });
 

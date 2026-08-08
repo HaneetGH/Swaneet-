@@ -1,3 +1,4 @@
+import { getBrideInvite } from "@/data/bride-invites";
 import type {
   FeatureFlags,
   FeatureKey,
@@ -53,6 +54,11 @@ export const FEATURE_KEYS: Array<{ id: FeatureKey; label: string; hint: string }
       label: "Our Story section",
       hint: "Show the Our Story timeline on this site (main on by default; invites opt-in)",
     },
+    {
+      id: "landing",
+      label: "Landing scroll",
+      hint: "Loading screen + sealed invitation before the home page. Off = guests land on the site directly",
+    },
   ];
 
 /** Most features on; face find + invite Our Story stay off until enabled. */
@@ -65,6 +71,7 @@ const BASE_ON: SiteFeatureFlags = {
   face_find: false,
   guest_messages: true,
   our_story: true,
+  landing: true,
 };
 
 export function defaultFeatureFlags(): FeatureFlags {
@@ -91,6 +98,7 @@ export function normalizeFeatureFlags(
     "face_find",
     "guest_messages",
     "our_story",
+    "landing",
   ];
 
   const next = { ...defaults };
@@ -121,4 +129,14 @@ export function featureSiteFromInviteTier(
   if (tier === "mehfil") return "mehfil";
   if (tier === "laavan") return "laavan";
   return "main";
+}
+
+/** Resolve feature site from URL (for Providers, outside InviteProvider). */
+export function featureSiteFromPathname(
+  pathname: string | null | undefined,
+): FeatureSite {
+  const match = pathname?.match(/^\/i\/([^/]+)/);
+  if (!match?.[1]) return "main";
+  const invite = getBrideInvite(match[1]);
+  return featureSiteFromInviteTier(invite?.tier);
 }

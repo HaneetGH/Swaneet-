@@ -16,6 +16,8 @@ const siteSchema = z.object({
   guest_messages: z.boolean(),
   /** Optional for older dashboard clients; normalize fills defaults. */
   our_story: z.boolean().optional(),
+  /** Optional for older dashboard clients; normalize fills defaults. */
+  landing: z.boolean().optional(),
 });
 
 const flagsSchema = z.object({
