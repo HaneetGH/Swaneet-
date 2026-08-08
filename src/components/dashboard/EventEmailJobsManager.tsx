@@ -17,7 +17,8 @@ type JobCard = {
   timeIst: string;
   next: {
     asOfDateKey: string;
-    targetDateKey: string;
+    todayDateKey: string;
+    tomorrowDateKey: string;
     atIso: string;
     label: string;
     cancelled: boolean;
@@ -50,7 +51,6 @@ type RunResult = {
     dayLabel: string;
     eventNames: string[];
     recipientCount: number;
-    recipients: Array<{ email: string; name: string; skipped?: string }>;
   }>;
 };
 
@@ -67,20 +67,16 @@ export function EventEmailJobsManager() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
-  const [previewTime, setPreviewTime] = useState("20:00");
-  const [thanksTime, setThanksTime] = useState("22:30");
-  const [previewEnabled, setPreviewEnabled] = useState(true);
-  const [thanksEnabled, setThanksEnabled] = useState(true);
+  const [timeIst, setTimeIst] = useState("21:00");
+  const [enabled, setEnabled] = useState(true);
   const [asOf, setAsOf] = useState("");
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [message, setMessage] = useState("");
 
   const applyDashboard = useCallback((data: Dashboard) => {
     setDashboard(data);
-    setPreviewTime(data.config.previewTimeIst);
-    setThanksTime(data.config.thanksTimeIst);
-    setPreviewEnabled(data.config.previewEnabled);
-    setThanksEnabled(data.config.thanksEnabled);
+    setTimeIst(data.config.timeIst);
+    setEnabled(data.config.enabled);
   }, []);
 
   const load = useCallback(async () => {
@@ -140,22 +136,19 @@ export function EventEmailJobsManager() {
 
   const saveSchedule = async () => {
     const data = await post(
-      {
-        action: "update",
-        previewEnabled,
-        thanksEnabled,
-        previewTimeIst: previewTime,
-        thanksTimeIst: thanksTime,
-      },
+      { action: "update", enabled, timeIst },
       "save",
     );
-    if (data) setMessage("Schedule saved. Hourly cron uses these IST times.");
+    if (data) setMessage("Schedule saved. One evening digest email per day.");
   };
 
-  const cancelJob = async (job: JobCard) => {
+  const job = dashboard?.jobs[0];
+
+  const cancelJob = async () => {
+    if (!job) return;
     if (
       !confirm(
-        `Cancel ${job.label} for ${job.next.label}? Guests will not get that email unless you uncancel or send manually.`,
+        `Cancel tonight’s digest for ${job.next.label}? Guests will not get that email unless you uncancel or send manually.`,
       )
     ) {
       return;
@@ -163,47 +156,38 @@ export function EventEmailJobsManager() {
     const data = await post(
       {
         action: "cancel",
-        phase: job.phase,
         asOfDateKey: job.next.asOfDateKey,
         reason: "Cancelled from dashboard",
       },
-      `cancel-${job.phase}`,
+      "cancel",
     );
-    if (data) setMessage(`${job.label} cancelled for ${job.next.asOfDateKey}`);
+    if (data) setMessage(`Digest cancelled for ${job.next.asOfDateKey}`);
   };
 
-  const uncancelJob = async (job: JobCard) => {
+  const uncancelJob = async () => {
+    if (!job) return;
     const data = await post(
       {
         action: "uncancel",
-        phase: job.phase,
         asOfDateKey: job.next.asOfDateKey,
       },
-      `uncancel-${job.phase}`,
+      "uncancel",
     );
-    if (data) setMessage(`${job.label} re-enabled for ${job.next.asOfDateKey}`);
+    if (data) setMessage(`Digest re-enabled for ${job.next.asOfDateKey}`);
   };
 
-  const runJob = async (phase: EventEmailPhase, dryRun: boolean) => {
-    if (
-      !dryRun &&
-      !confirm(
-        phase === "preview"
-          ? "Send tomorrow’s event emails now?"
-          : "Send today’s thank-you emails now?",
-      )
-    ) {
+  const runJob = async (dryRun: boolean) => {
+    if (!dryRun && !confirm("Send the evening digest email to guests now?")) {
       return;
     }
     setRunResult(null);
     const data = await post(
       {
         action: "run",
-        phase,
         dryRun,
         asOfDateKey: asOf.trim() || undefined,
       },
-      `${phase}-${dryRun ? "dry" : "send"}`,
+      dryRun ? "dry" : "send",
     );
     if (data?.result) {
       setRunResult(data.result);
@@ -230,15 +214,11 @@ export function EventEmailJobsManager() {
           <div>
             <div className="flex items-center gap-2">
               <CalendarClock size={18} className="text-gold" />
-              <h3 className="font-display text-xl text-cream">
-                Guest updates
-              </h3>
+              <h3 className="font-display text-xl text-cream">Guest updates</h3>
             </div>
             <p className="mt-1 font-body text-sm text-muted">
-              Scheduled outreach for celebration days (email today; more
-              channels can land here later). Night-before preview + day-end
-              thank-you. Times are IST; hourly cron checks a ~55 min window.
-              Now:{" "}
+              One evening email with today’s thank-you, tomorrow’s schedule, and
+              links (upload, gallery, wishes). Times are IST. Now:{" "}
               <span className="text-cream">{dashboard?.nowIst || "—"}</span>
             </p>
           </div>
@@ -251,62 +231,38 @@ export function EventEmailJobsManager() {
           </button>
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
           <label className="rounded-xl border border-gold/15 p-4">
             <div className="flex items-center justify-between gap-3">
               <span className="font-display text-lg text-cream">
-                Tomorrow preview
+                Evening digest
               </span>
               <input
                 type="checkbox"
-                checked={previewEnabled}
-                onChange={(e) => setPreviewEnabled(e.target.checked)}
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
                 className="h-4 w-4 accent-[#d4af37]"
               />
             </div>
             <p className="mt-1 font-body text-xs text-muted">
-              Email about next day’s events
+              Today + tomorrow in a single email
             </p>
             <input
               type="time"
-              value={previewTime}
-              onChange={(e) => setPreviewTime(e.target.value)}
+              value={timeIst}
+              onChange={(e) => setTimeIst(e.target.value)}
               className="mt-3 w-full rounded-lg border border-gold/25 bg-[#0d0b10] px-3 py-2 font-body text-sm text-cream"
             />
           </label>
-
-          <label className="rounded-xl border border-gold/15 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-display text-lg text-cream">
-                Day-end thank you
-              </span>
-              <input
-                type="checkbox"
-                checked={thanksEnabled}
-                onChange={(e) => setThanksEnabled(e.target.checked)}
-                className="h-4 w-4 accent-[#d4af37]"
-              />
-            </div>
-            <p className="mt-1 font-body text-xs text-muted">
-              Gist of today + upload / gallery / wishes links
-            </p>
-            <input
-              type="time"
-              value={thanksTime}
-              onChange={(e) => setThanksTime(e.target.value)}
-              className="mt-3 w-full rounded-lg border border-gold/25 bg-[#0d0b10] px-3 py-2 font-body text-sm text-cream"
-            />
-          </label>
+          <button
+            type="button"
+            disabled={busy === "save"}
+            onClick={() => void saveSchedule()}
+            className="rounded-full bg-gradient-to-r from-gold-deep via-gold to-gold-soft px-5 py-2.5 font-body text-[10px] uppercase tracking-[0.18em] text-[#1a1208] disabled:opacity-50"
+          >
+            {busy === "save" ? "Saving…" : "Save schedule"}
+          </button>
         </div>
-
-        <button
-          type="button"
-          disabled={busy === "save"}
-          onClick={() => void saveSchedule()}
-          className="mt-4 rounded-full bg-gradient-to-r from-gold-deep via-gold to-gold-soft px-5 py-2.5 font-body text-[10px] uppercase tracking-[0.18em] text-[#1a1208] disabled:opacity-50"
-        >
-          {busy === "save" ? "Saving…" : "Save schedule"}
-        </button>
 
         {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
         {message ? (
@@ -314,131 +270,120 @@ export function EventEmailJobsManager() {
         ) : null}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {(dashboard?.jobs || []).map((job) => (
-          <div
-            key={job.phase}
-            className="rounded-2xl border border-gold/20 bg-[#141018] p-5"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-body text-[10px] uppercase tracking-[0.22em] text-gold/70">
-                  Next run
-                </p>
-                <h4 className="mt-1 font-display text-2xl text-cream">
-                  {job.label}
-                </h4>
-              </div>
-              <span
-                className={cn(
-                  "rounded-full px-2.5 py-1 font-body text-[10px] uppercase tracking-[0.16em]",
-                  job.enabled
-                    ? "bg-emerald-500/15 text-emerald-200"
-                    : "bg-red-500/15 text-red-200",
-                )}
-              >
-                {job.enabled ? "On" : "Off"}
-              </span>
+      {job ? (
+        <div className="rounded-2xl border border-gold/20 bg-[#141018] p-5">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="font-body text-[10px] uppercase tracking-[0.22em] text-gold/70">
+                Next run
+              </p>
+              <h4 className="mt-1 font-display text-2xl text-cream">
+                {job.label}
+              </h4>
             </div>
-
-            <p className="mt-3 font-body text-sm text-cream">{job.next.label}</p>
-            <p className="mt-1 font-body text-xs text-muted">
-              About {job.next.targetDateKey}
-              {job.next.eventNames.length
-                ? ` · ${job.next.eventNames.join(" · ")}`
-                : " · no events planned"}
-              {` · ~${job.next.estimatedRecipients} guest${
-                job.next.estimatedRecipients === 1 ? "" : "s"
-              }`}
-            </p>
-
-            {job.next.cancelled ? (
-              <p className="mt-2 text-sm text-amber-200">
-                Cancelled
-                {job.next.cancelReason ? ` — ${job.next.cancelReason}` : ""}
-              </p>
-            ) : null}
-            {job.next.alreadyDone ? (
-              <p className="mt-2 text-sm text-muted">
-                Already completed for that IST day
-              </p>
-            ) : null}
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {job.next.cancelled ? (
-                <button
-                  type="button"
-                  disabled={Boolean(busy)}
-                  onClick={() => void uncancelJob(job)}
-                  className="rounded-full border border-emerald-400/30 px-3 py-2 font-body text-[10px] uppercase tracking-[0.16em] text-emerald-200 hover:bg-emerald-400/10 disabled:opacity-50"
-                >
-                  Uncancel
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={Boolean(busy) || job.next.alreadyDone}
-                  onClick={() => void cancelJob(job)}
-                  className="rounded-full border border-amber-400/30 px-3 py-2 font-body text-[10px] uppercase tracking-[0.16em] text-amber-200 hover:bg-amber-400/10 disabled:opacity-50"
-                >
-                  Cancel next
-                </button>
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-1 font-body text-[10px] uppercase tracking-[0.16em]",
+                job.enabled
+                  ? "bg-emerald-500/15 text-emerald-200"
+                  : "bg-red-500/15 text-red-200",
               )}
+            >
+              {job.enabled ? "On" : "Off"}
+            </span>
+          </div>
+
+          <p className="mt-3 font-body text-sm text-cream">{job.next.label}</p>
+          <p className="mt-1 font-body text-xs text-muted">
+            Today {job.next.todayDateKey} · Tomorrow {job.next.tomorrowDateKey}
+            {job.next.eventNames.length
+              ? ` · ${job.next.eventNames.join(" · ")}`
+              : " · no events planned"}
+            {` · ~${job.next.estimatedRecipients} guest${
+              job.next.estimatedRecipients === 1 ? "" : "s"
+            }`}
+          </p>
+
+          {job.next.cancelled ? (
+            <p className="mt-2 text-sm text-amber-200">
+              Cancelled
+              {job.next.cancelReason ? ` — ${job.next.cancelReason}` : ""}
+            </p>
+          ) : null}
+          {job.next.alreadyDone ? (
+            <p className="mt-2 text-sm text-muted">
+              Already completed for that IST day
+            </p>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap items-end gap-2">
+            <label className="mr-2">
+              <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+                As-of date (optional)
+              </span>
+              <input
+                type="date"
+                value={asOf}
+                onChange={(e) => setAsOf(e.target.value)}
+                className="rounded-lg border border-gold/25 bg-[#0d0b10] px-3 py-2 font-body text-sm text-cream"
+              />
+            </label>
+            {job.next.cancelled ? (
               <button
                 type="button"
                 disabled={Boolean(busy)}
-                onClick={() => void runJob(job.phase, true)}
-                className="rounded-full border border-gold/25 px-3 py-2 font-body text-[10px] uppercase tracking-[0.16em] text-gold-soft hover:bg-gold/10 disabled:opacity-50"
-              >
-                Dry run
-              </button>
-              <button
-                type="button"
-                disabled={Boolean(busy)}
-                onClick={() => void runJob(job.phase, false)}
+                onClick={() => void uncancelJob()}
                 className="rounded-full border border-emerald-400/30 px-3 py-2 font-body text-[10px] uppercase tracking-[0.16em] text-emerald-200 hover:bg-emerald-400/10 disabled:opacity-50"
               >
-                Send now
+                Uncancel
               </button>
-            </div>
+            ) : (
+              <button
+                type="button"
+                disabled={Boolean(busy) || job.next.alreadyDone}
+                onClick={() => void cancelJob()}
+                className="rounded-full border border-amber-400/30 px-3 py-2 font-body text-[10px] uppercase tracking-[0.16em] text-amber-200 hover:bg-amber-400/10 disabled:opacity-50"
+              >
+                Cancel next
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={Boolean(busy)}
+              onClick={() => void runJob(true)}
+              className="rounded-full border border-gold/25 px-3 py-2 font-body text-[10px] uppercase tracking-[0.16em] text-gold-soft hover:bg-gold/10 disabled:opacity-50"
+            >
+              Dry run
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(busy)}
+              onClick={() => void runJob(false)}
+              className="rounded-full border border-emerald-400/30 px-3 py-2 font-body text-[10px] uppercase tracking-[0.16em] text-emerald-200 hover:bg-emerald-400/10 disabled:opacity-50"
+            >
+              Send now
+            </button>
           </div>
-        ))}
-      </div>
 
-      <div className="rounded-2xl border border-gold/20 bg-[#141018] p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h4 className="font-display text-xl text-cream">Manual run</h4>
-            <p className="mt-1 font-body text-xs text-muted">
-              Optional as-of IST date for testing a wedding day early
-            </p>
-          </div>
-          <input
-            type="date"
-            value={asOf}
-            onChange={(e) => setAsOf(e.target.value)}
-            className="rounded-lg border border-gold/25 bg-[#0d0b10] px-3 py-2 font-body text-sm text-cream"
-          />
-        </div>
-
-        {runResult ? (
-          <div className="mt-4 space-y-2 font-body text-sm text-muted">
-            <p className="text-cream">
-              {runResult.dryRun ? "Dry run" : "Sent"} · {runResult.phase} ·
-              target {runResult.targetDateKey} · {runResult.sent} sent ·{" "}
-              {runResult.skipped} skipped · {runResult.failed} failed
-            </p>
-            {runResult.plans.map((plan) => (
-              <p key={`${plan.site}-${plan.dayLabel}`}>
-                {plan.site}: {plan.eventNames.join(", ") || "—"} (
-                {plan.recipientCount})
+          {runResult ? (
+            <div className="mt-4 space-y-2 font-body text-sm text-muted">
+              <p className="text-cream">
+                {runResult.dryRun ? "Dry run" : "Sent"} ·{" "}
+                {runResult.asOfDateKey} · {runResult.sent} sent ·{" "}
+                {runResult.skipped} skipped · {runResult.failed} failed
               </p>
-            ))}
-          </div>
-        ) : null}
-      </div>
+              {runResult.plans.map((plan) => (
+                <p key={`${plan.site}-${plan.dayLabel}`}>
+                  {plan.site}: {plan.eventNames.join(", ") || "—"} (
+                  {plan.recipientCount})
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
-      <div className="rounded-2xl border border-gold/20 overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-gold/20">
         <div className="border-b border-gold/15 bg-[#141018] px-5 py-4">
           <h4 className="font-display text-xl text-cream">Job history</h4>
           <p className="mt-1 font-body text-xs text-muted">
@@ -464,13 +409,17 @@ export function EventEmailJobsManager() {
                 {(dashboard?.runs || []).map((run) => (
                   <tr
                     key={run.id}
-                    className="border-t border-gold/10 font-body text-sm text-cream align-top"
+                    className="border-t border-gold/10 align-top font-body text-sm text-cream"
                   >
-                    <td className="px-4 py-3 whitespace-nowrap text-muted">
+                    <td className="whitespace-nowrap px-4 py-3 text-muted">
                       {new Date(run.finishedAt).toLocaleString("en-IN")}
                     </td>
                     <td className="px-4 py-3 text-gold-soft">
-                      {run.phase === "preview" ? "Tomorrow" : "Day-end"}
+                      {run.phase === "digest"
+                        ? "Digest"
+                        : run.phase === "preview"
+                          ? "Tomorrow (legacy)"
+                          : "Day-end (legacy)"}
                     </td>
                     <td className="px-4 py-3">
                       {run.targetDateKey}

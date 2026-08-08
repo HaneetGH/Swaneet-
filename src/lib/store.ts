@@ -298,7 +298,9 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
         typeof entry.id === "string" &&
         typeof entry.email === "string" &&
         typeof entry.dateKey === "string" &&
-        (entry.kind === "preview" || entry.kind === "thanks"),
+        (entry.kind === "digest" ||
+          entry.kind === "preview" ||
+          entry.kind === "thanks"),
     )
     .slice(0, MAX_EVENT_EMAIL_SENDS);
 
@@ -306,7 +308,9 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     .filter(
       (entry) =>
         entry &&
-        (entry.phase === "preview" || entry.phase === "thanks") &&
+        (entry.phase === "digest" ||
+          entry.phase === "preview" ||
+          entry.phase === "thanks") &&
         typeof entry.asOfDateKey === "string" &&
         typeof entry.cancelledAt === "string",
     )
@@ -317,23 +321,30 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
       (entry) =>
         entry &&
         typeof entry.id === "string" &&
-        (entry.phase === "preview" || entry.phase === "thanks") &&
+        (entry.phase === "digest" ||
+          entry.phase === "preview" ||
+          entry.phase === "thanks") &&
         typeof entry.asOfDateKey === "string",
     )
     .slice(0, MAX_EVENT_EMAIL_JOB_RUNS);
 
   const eventEmailJobConfig = raw.eventEmailJobConfig
     ? {
-        previewEnabled: raw.eventEmailJobConfig.previewEnabled !== false,
-        thanksEnabled: raw.eventEmailJobConfig.thanksEnabled !== false,
-        previewTimeIst:
-          typeof raw.eventEmailJobConfig.previewTimeIst === "string"
-            ? raw.eventEmailJobConfig.previewTimeIst
-            : "20:00",
-        thanksTimeIst:
-          typeof raw.eventEmailJobConfig.thanksTimeIst === "string"
-            ? raw.eventEmailJobConfig.thanksTimeIst
-            : "22:30",
+        enabled:
+          typeof raw.eventEmailJobConfig.enabled === "boolean"
+            ? raw.eventEmailJobConfig.enabled
+            : !(
+                raw.eventEmailJobConfig.previewEnabled === false &&
+                raw.eventEmailJobConfig.thanksEnabled === false
+              ),
+        timeIst:
+          typeof raw.eventEmailJobConfig.timeIst === "string"
+            ? raw.eventEmailJobConfig.timeIst
+            : typeof raw.eventEmailJobConfig.previewTimeIst === "string"
+              ? raw.eventEmailJobConfig.previewTimeIst
+              : typeof raw.eventEmailJobConfig.thanksTimeIst === "string"
+                ? raw.eventEmailJobConfig.thanksTimeIst
+                : "21:00",
         updatedAt: raw.eventEmailJobConfig.updatedAt,
       }
     : undefined;

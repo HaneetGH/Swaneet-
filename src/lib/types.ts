@@ -423,32 +423,40 @@ export type EmailKind =
   | "wish_note"
   | "owner_alert"
   | "face_photos"
-  /** Night-before: tomorrow’s events */
+  /** @deprecated Use event_digest */
   | "event_preview"
-  /** Day-end: thank-you + today’s gist */
-  | "event_thanks";
+  /** @deprecated Use event_digest */
+  | "event_thanks"
+  /** Evening digest: today + tomorrow in one email */
+  | "event_digest";
 
-export type EventEmailPhase = "preview" | "thanks";
+/** Active phase is `digest`. Legacy preview/thanks kept for stored history. */
+export type EventEmailPhase = "digest" | "preview" | "thanks";
 
 /** Idempotency: one successful send per guest / day / phase */
 export type EventEmailSend = {
   id: string;
   kind: EventEmailPhase;
-  /** YYYY-MM-DD in IST for the day the email is about */
+  /** YYYY-MM-DD in IST (as-of evening for digest) */
   dateKey: string;
   email: string;
   site: FeatureSite;
   sentAt: string;
 };
 
-/** Admin-editable schedule for night-before / day-end guest emails (IST). */
+/** Admin-editable schedule for the single evening guest digest (IST). */
 export type EventEmailJobConfig = {
-  previewEnabled: boolean;
-  thanksEnabled: boolean;
-  /** HH:mm in Asia/Kolkata — night-before “tomorrow” email */
-  previewTimeIst: string;
-  /** HH:mm in Asia/Kolkata — day-end thank-you email */
-  thanksTimeIst: string;
+  enabled: boolean;
+  /** HH:mm in Asia/Kolkata */
+  timeIst: string;
+  /** @deprecated Migrated into enabled */
+  previewEnabled?: boolean;
+  /** @deprecated Migrated into enabled */
+  thanksEnabled?: boolean;
+  /** @deprecated Migrated into timeIst */
+  previewTimeIst?: string;
+  /** @deprecated Migrated into timeIst */
+  thanksTimeIst?: string;
   updatedAt?: string;
 };
 

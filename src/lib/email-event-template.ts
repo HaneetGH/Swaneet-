@@ -1,6 +1,6 @@
 import { googleCalendarUrl } from "@/lib/calendar";
 import { eventMapsUrl } from "@/lib/email-itinerary";
-import type { EventEmailPhase, ManagedEvent } from "@/lib/types";
+import type { ManagedEvent } from "@/lib/types";
 
 function escapeHtml(value: string) {
   return value
@@ -17,11 +17,11 @@ export type EventEmailLink = {
 };
 
 export type EventEmailPartsInput = {
-  phase: EventEmailPhase;
   guestName: string;
-  /** Display label for the day, e.g. 12th August 2026 */
-  dayLabel: string;
-  events: ManagedEvent[];
+  todayLabel: string;
+  tomorrowLabel: string;
+  todayEvents: ManagedEvent[];
+  tomorrowEvents: ManagedEvent[];
   links: EventEmailLink[];
 };
 
@@ -82,28 +82,68 @@ function formatEventHtml(event: ManagedEvent): string {
     </div>`;
 }
 
+function sectionCard(title: string, events: ManagedEvent[]): string {
+  return `
+    <div style="margin: 22px 0; border: 1px solid #e8dcc4; border-radius: 16px; overflow: hidden; background: #fffdf8;">
+      <div style="padding: 12px 18px; background: linear-gradient(90deg, #f3e6c8 0%, #faf4e6 100%); border-bottom: 1px solid #e8dcc4;">
+        <p style="margin: 0; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #8a6d24; font-weight: 600;">
+          ${escapeHtml(title)}
+        </p>
+      </div>
+      <div style="padding: 16px 18px;">
+        ${
+          events.length
+            ? events.map(formatEventHtml).join("")
+            : "<p style='margin:0;color:#6b5c4a;'>No events listed</p>"
+        }
+      </div>
+    </div>`;
+}
+
+/** Evening digest: thank-you for today + tomorrow’s schedule + links. */
 export function buildEventEmailParts(input: EventEmailPartsInput): {
   subject: string;
   text: string;
   html: string;
 } {
   const greet = input.guestName.trim() || "Friend";
-  const eventNames = input.events.map((e) => e.name).join(", ");
+  const hasToday = input.todayEvents.length > 0;
+  const hasTomorrow = input.tomorrowEvents.length > 0;
 
-  const isPreview = input.phase === "preview";
-  const subject = isPreview
-    ? `Tomorrow at #Swaneet — ${eventNames || input.dayLabel}`
-    : `Thank you for today · #Swaneet (${input.dayLabel})`;
+  const subjectBits = [
+    hasToday ? "Thank you for today" : null,
+    hasTomorrow
+      ? `Tomorrow: ${input.tomorrowEvents.map((e) => e.name).join(", ")}`
+      : null,
+  ].filter(Boolean);
+  const subject = `${subjectBits.join(" · ") || "Your #Swaneet update"} · #Swaneet`;
 
-  const intro = isPreview
-    ? `Here’s what’s happening tomorrow (${input.dayLabel}). We can’t wait to celebrate with you.`
-    : `Thank you for being part of today’s celebrations (${input.dayLabel}). Your presence made #Swaneet brighter.`;
+  const introParts = [
+    hasToday
+      ? `Thank you for being part of today’s celebrations (${input.todayLabel}). Your presence made #Swaneet brighter.`
+      : null,
+    hasTomorrow
+      ? `Here’s what’s coming tomorrow (${input.tomorrowLabel}).`
+      : null,
+    !hasToday && !hasTomorrow
+      ? "A quick update from #Swaneet — with love from the families."
+      : null,
+  ].filter((part): part is string => Boolean(part));
 
-  const outro = isPreview
-    ? "See you tomorrow — with love from Haneet & Swarandeep."
-    : "Share a photo, browse today’s gallery, or leave a wish for the couple whenever you’re ready.";
+  const todayText = hasToday
+    ? [
+        `Today’s events (${input.todayLabel}):`,
+        input.todayEvents.map(formatEventBlock).join("\n\n"),
+      ].join("\n")
+    : "";
 
-  const eventText = input.events.map(formatEventBlock).join("\n\n");
+  const tomorrowText = hasTomorrow
+    ? [
+        `Tomorrow’s events (${input.tomorrowLabel}):`,
+        input.tomorrowEvents.map(formatEventBlock).join("\n\n"),
+      ].join("\n")
+    : "";
+
   const linksText = input.links
     .map((link) =>
       link.hint
@@ -115,18 +155,21 @@ export function buildEventEmailParts(input: EventEmailPartsInput): {
   const text = [
     `Dear ${greet},`,
     "",
-    intro,
+    ...introParts,
     "",
-    isPreview ? "Tomorrow’s events:" : "Today’s events:",
-    eventText || "(No events listed)",
+    todayText,
+    todayText && tomorrowText ? "" : null,
+    tomorrowText,
     "",
     "Quick links:",
     linksText || "• Open the wedding site",
     "",
-    outro,
+    "Share a photo, browse the gallery, or leave a wish for the couple whenever you’re ready.",
     "",
     "#Swaneet · Haneet & Swarandeep",
-  ].join("\n");
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
 
   const linkButtons = input.links
     .map(
@@ -149,25 +192,25 @@ export function buildEventEmailParts(input: EventEmailPartsInput): {
     <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.6; max-width: 560px;">
       <p style="letter-spacing: 0.2em; text-transform: uppercase; font-size: 11px; color: #b8922a;">#Swaneet</p>
       <h1 style="font-weight: 400; font-size: 28px; margin: 8px 0 16px;">
-        ${escapeHtml(isPreview ? "Tomorrow’s celebrations" : "Thank you for today")}
+        Your evening update
       </h1>
       <p>Dear ${escapeHtml(greet)},</p>
-      <p>${escapeHtml(intro)}</p>
-      <div style="margin: 22px 0; border: 1px solid #e8dcc4; border-radius: 16px; overflow: hidden; background: #fffdf8;">
-        <div style="padding: 12px 18px; background: linear-gradient(90deg, #f3e6c8 0%, #faf4e6 100%); border-bottom: 1px solid #e8dcc4;">
-          <p style="margin: 0; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #8a6d24; font-weight: 600;">
-            ${escapeHtml(isPreview ? "Tomorrow" : "Today")} · ${escapeHtml(input.dayLabel)}
-          </p>
-        </div>
-        <div style="padding: 16px 18px;">
-          ${input.events.map(formatEventHtml).join("") || "<p style='margin:0;color:#6b5c4a;'>No events listed</p>"}
-        </div>
-      </div>
+      ${introParts.map((p) => `<p>${escapeHtml(p)}</p>`).join("")}
+      ${
+        hasToday
+          ? sectionCard(`Today · ${input.todayLabel}`, input.todayEvents)
+          : ""
+      }
+      ${
+        hasTomorrow
+          ? sectionCard(`Tomorrow · ${input.tomorrowLabel}`, input.tomorrowEvents)
+          : ""
+      }
       <p style="font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #8a6d24; margin: 0 0 12px;">
         Quick links
       </p>
       ${linkButtons}
-      <p style="margin-top: 22px;">${escapeHtml(outro)}</p>
+      <p style="margin-top: 22px;">Share a photo, browse the gallery, or leave a wish for the couple whenever you’re ready.</p>
       <p>With love,<br/>Haneet &amp; Swarandeep</p>
     </div>
   `;
