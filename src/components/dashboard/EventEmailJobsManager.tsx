@@ -218,7 +218,9 @@ export function EventEmailJobsManager() {
             </div>
             <p className="mt-1 font-body text-sm text-muted">
               One evening email with today’s thank-you, tomorrow’s schedule, and
-              links (upload, gallery, wishes). Times are IST. Now:{" "}
+              links (upload, gallery, wishes). Auto-send is once daily via
+              Vercel Hobby cron (~9:00 PM IST). Keep the time below aligned.
+              Now:{" "}
               <span className="text-cream">{dashboard?.nowIst || "—"}</span>
             </p>
           </div>
@@ -245,7 +247,10 @@ export function EventEmailJobsManager() {
               />
             </div>
             <p className="mt-1 font-body text-xs text-muted">
-              Today + tomorrow in a single email
+              Today + tomorrow in a single email. Changing this time only
+              updates the dashboard “next run” label — deploy a matching{" "}
+              <code className="text-cream/80">vercel.json</code> cron (UTC) to
+              change when Hobby actually fires.
             </p>
             <input
               type="time"

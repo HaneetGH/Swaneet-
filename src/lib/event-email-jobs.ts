@@ -367,7 +367,11 @@ export async function executeEventEmailJob(input: {
   return { ok: true, result, run };
 }
 
-/** Hourly tick — runs the single evening digest when due. */
+/**
+ * Daily tick (Vercel Hobby: one cron/day).
+ * Invocation itself means the digest is due — schedule lives in vercel.json
+ * (`30 15 * * *` ≈ 21:00 IST). Dashboard timeIst should match that slot.
+ */
 export async function tickEventEmailJobs(now = new Date()): Promise<{
   checkedAt: string;
   actions: Array<{
@@ -377,20 +381,7 @@ export async function tickEventEmailJobs(now = new Date()): Promise<{
     result?: EventEmailRunResult;
   }>;
 }> {
-  const config = normalizeEventEmailJobConfig(await getEventEmailJobConfig());
   const clock = istClock(now);
-  const due = isWithinScheduleWindow(
-    clock.minutesFromMidnight,
-    config.timeIst,
-    55,
-  );
-
-  if (!due) {
-    return {
-      checkedAt: `${clock.dateKey} ${String(clock.hour).padStart(2, "0")}:${String(clock.minute).padStart(2, "0")} IST`,
-      actions: [{ phase: "digest", due: false }],
-    };
-  }
 
   const executed = await executeEventEmailJob({
     trigger: "cron",
