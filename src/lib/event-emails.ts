@@ -39,17 +39,22 @@ export type EventEmailRecipient = {
 
 export type EventEmailPlan = {
   phase: EventEmailPhase;
-  /** Day the email is about (IST YYYY-MM-DD) */
+  /** As-of IST day the digest fires */
   dateKey: string;
-  dayLabel: string;
+  todayDateKey: string;
+  tomorrowDateKey: string;
+  todayLabel: string;
+  tomorrowLabel: string;
   site: FeatureSite;
-  events: ManagedEvent[];
+  todayEvents: ManagedEvent[];
+  tomorrowEvents: ManagedEvent[];
   recipients: EventEmailRecipient[];
   links: EventEmailLink[];
 };
 
 export type EventEmailRunOptions = {
-  phase: EventEmailPhase;
+  /** Always digest for the consolidated evening email */
+  phase?: EventEmailPhase;
   /** Override “today” in IST (YYYY-MM-DD) for testing */
   asOfDateKey?: string;
   dryRun?: boolean;
@@ -61,6 +66,8 @@ export type EventEmailRunResult = {
   phase: EventEmailPhase;
   asOfDateKey: string;
   targetDateKey: string;
+  todayDateKey: string;
+  tomorrowDateKey: string;
   dryRun: boolean;
   plans: Array<{
     site: FeatureSite;
@@ -163,9 +170,8 @@ function isAttendingDay(rsvp: RsvpEntry, dateKey: string): boolean {
 }
 
 function buildLinks(input: {
-  phase: EventEmailPhase;
   site: FeatureSite;
-  events: ManagedEvent[];
+  todayEvents: ManagedEvent[];
   flags: FeatureFlags;
 }): EventEmailLink[] {
   const base = siteBaseUrl();
@@ -174,7 +180,7 @@ function buildLinks(input: {
   const links: EventEmailLink[] = [];
 
   links.push({
-    label: input.phase === "preview" ? "Full schedule" : "Wedding site",
+    label: "Wedding schedule",
     url: `${base}${path || "/"}#events`,
     hint: "Times, venues, and directions",
   });
@@ -183,7 +189,7 @@ function buildLinks(input: {
     links.push({
       label: "Upload photos",
       url: absoluteGuestUrl("/upload", { siteUrl: base, inviteSlug: slug }),
-      hint: "Share moments from today — family reviews before the gallery",
+      hint: "Share moments — family reviews before the gallery",
     });
   }
 
@@ -192,9 +198,9 @@ function buildLinks(input: {
       siteUrl: base,
       inviteSlug: slug,
     });
-    const firstEvent = input.events[0];
+    const firstEvent = input.todayEvents[0];
     links.push({
-      label: input.phase === "thanks" ? "Today’s photos" : "Photo gallery",
+      label: "Today’s photos",
       url: firstEvent
         ? `${galleryBase}?event=${encodeURIComponent(firstEvent.id)}`
         : galleryBase,
@@ -231,14 +237,13 @@ export async function planEventEmails(
   options: EventEmailRunOptions,
 ): Promise<{
   asOfDateKey: string;
-  targetDateKey: string;
+  todayDateKey: string;
+  tomorrowDateKey: string;
   plans: EventEmailPlan[];
 }> {
   const asOfDateKey = options.asOfDateKey || istDateKey();
-  const targetDateKey =
-    options.phase === "preview"
-      ? shiftDateKey(asOfDateKey, 1)
-      : asOfDateKey;
+  const todayDateKey = asOfDateKey;
+  const tomorrowDateKey = shiftDateKey(asOfDateKey, 1);
 
   const flags = await getFeatureFlags();
   const rsvps = await listRsvps();
@@ -247,18 +252,21 @@ export async function planEventEmails(
 
   for (const site of sites) {
     const all = await eventsForSite(site);
-    const events = eventsOnDate(all, targetDateKey);
-    if (!events.length) continue;
+    const todayEvents = eventsOnDate(all, todayDateKey);
+    const tomorrowEvents = eventsOnDate(all, tomorrowDateKey);
+    if (!todayEvents.length && !tomorrowEvents.length) continue;
 
-    const dayLabel = displayDayLabel(events, targetDateKey);
+    const todayLabel = displayDayLabel(todayEvents, todayDateKey);
+    const tomorrowLabel = displayDayLabel(tomorrowEvents, tomorrowDateKey);
     const recipients: EventEmailRecipient[] = [];
     const seen = new Set<string>();
 
     for (const rsvp of rsvps) {
       const rsvpSite = resolveEntryInviteSite(rsvp);
-      // Match invite surface exactly so mehfil/laavan guests aren’t emailed twice
       if (rsvpSite !== site) continue;
-      if (!isAttendingDay(rsvp, targetDateKey)) continue;
+      const attendingToday = isAttendingDay(rsvp, todayDateKey);
+      const attendingTomorrow = isAttendingDay(rsvp, tomorrowDateKey);
+      if (!attendingToday && !attendingTomorrow) continue;
 
       const email = guestEmail(rsvp);
       if (!email || seen.has(email)) continue;
@@ -273,28 +281,32 @@ export async function planEventEmails(
     }
 
     plans.push({
-      phase: options.phase,
-      dateKey: targetDateKey,
-      dayLabel,
+      phase: "digest",
+      dateKey: asOfDateKey,
+      todayDateKey,
+      tomorrowDateKey,
+      todayLabel,
+      tomorrowLabel,
       site,
-      events,
+      todayEvents,
+      tomorrowEvents,
       recipients,
       links: buildLinks({
-        phase: options.phase,
         site,
-        events,
+        todayEvents,
         flags,
       }),
     });
   }
 
-  return { asOfDateKey, targetDateKey, plans };
+  return { asOfDateKey, todayDateKey, tomorrowDateKey, plans };
 }
 
 export async function runEventEmails(
   options: EventEmailRunOptions,
 ): Promise<EventEmailRunResult> {
-  const { asOfDateKey, targetDateKey, plans } = await planEventEmails(options);
+  const { asOfDateKey, todayDateKey, tomorrowDateKey, plans } =
+    await planEventEmails(options);
   const dryRun = Boolean(options.dryRun);
   const force = Boolean(options.force);
 
@@ -302,7 +314,6 @@ export async function runEventEmails(
   let skipped = 0;
   let failed = 0;
   const errors: string[] = [];
-
   const planSummaries: EventEmailRunResult["plans"] = [];
 
   for (const plan of plans) {
@@ -310,7 +321,10 @@ export async function runEventEmails(
       [];
 
     for (const guest of plan.recipients) {
-      if (!force && (await hasEventEmailSend(plan.phase, plan.dateKey, guest.email))) {
+      if (
+        !force &&
+        (await hasEventEmailSend("digest", plan.dateKey, guest.email))
+      ) {
         skipped += 1;
         recipientRows.push({
           email: guest.email,
@@ -326,15 +340,16 @@ export async function runEventEmails(
       }
 
       const parts = buildEventEmailParts({
-        phase: plan.phase,
         guestName: guest.name,
-        dayLabel: plan.dayLabel,
-        events: plan.events,
+        todayLabel: plan.todayLabel,
+        tomorrowLabel: plan.tomorrowLabel,
+        todayEvents: plan.todayEvents,
+        tomorrowEvents: plan.tomorrowEvents,
         links: plan.links,
       });
 
       const result = await sendResendEmail({
-        kind: plan.phase === "preview" ? "event_preview" : "event_thanks",
+        kind: "event_digest",
         to: guest.email,
         subject: parts.subject,
         text: parts.text,
@@ -344,7 +359,7 @@ export async function runEventEmails(
       if (result.ok) {
         sent += 1;
         await recordEventEmailSend({
-          kind: plan.phase,
+          kind: "digest",
           dateKey: plan.dateKey,
           email: guest.email,
           site: plan.site,
@@ -361,20 +376,27 @@ export async function runEventEmails(
       }
     }
 
+    const eventNames = [
+      ...plan.todayEvents.map((e) => e.name),
+      ...plan.tomorrowEvents.map((e) => e.name),
+    ];
+
     planSummaries.push({
       site: plan.site,
       dateKey: plan.dateKey,
-      dayLabel: plan.dayLabel,
-      eventNames: plan.events.map((e) => e.name),
+      dayLabel: [plan.todayLabel, plan.tomorrowLabel].filter(Boolean).join(" → "),
+      eventNames,
       recipientCount: plan.recipients.length,
       recipients: recipientRows,
     });
   }
 
   return {
-    phase: options.phase,
+    phase: "digest",
     asOfDateKey,
-    targetDateKey,
+    targetDateKey: tomorrowDateKey,
+    todayDateKey,
+    tomorrowDateKey,
     dryRun,
     plans: planSummaries,
     sent: dryRun ? 0 : sent,

@@ -12,8 +12,8 @@ function authorized(request: NextRequest) {
 }
 
 /**
- * Hourly tick — runs preview / thanks when the IST clock is inside the
- * admin-configured schedule window (and the job isn’t cancelled/disabled).
+ * Hourly tick — sends one evening digest (today + tomorrow + links)
+ * when the IST clock is inside the admin-configured schedule window.
  */
 export async function GET(request: NextRequest) {
   if (!authorized(request)) {

@@ -22,10 +22,8 @@ import type {
 } from "@/lib/types";
 
 export const DEFAULT_EVENT_EMAIL_JOB_CONFIG: EventEmailJobConfig = {
-  previewEnabled: true,
-  thanksEnabled: true,
-  previewTimeIst: "20:00",
-  thanksTimeIst: "22:30",
+  enabled: true,
+  timeIst: "21:00",
 };
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -38,16 +36,25 @@ export function normalizeTimeIst(value: string | undefined, fallback: string) {
 export function normalizeEventEmailJobConfig(
   raw?: Partial<EventEmailJobConfig> | null,
 ): EventEmailJobConfig {
+  const legacyEnabled =
+    raw?.previewEnabled === false && raw?.thanksEnabled === false
+      ? false
+      : undefined;
+  const legacyTime =
+    normalizeTimeIst(raw?.previewTimeIst, "") ||
+    normalizeTimeIst(raw?.thanksTimeIst, "") ||
+    "";
+
   return {
-    previewEnabled: raw?.previewEnabled !== false,
-    thanksEnabled: raw?.thanksEnabled !== false,
-    previewTimeIst: normalizeTimeIst(
-      raw?.previewTimeIst,
-      DEFAULT_EVENT_EMAIL_JOB_CONFIG.previewTimeIst,
-    ),
-    thanksTimeIst: normalizeTimeIst(
-      raw?.thanksTimeIst,
-      DEFAULT_EVENT_EMAIL_JOB_CONFIG.thanksTimeIst,
+    enabled:
+      typeof raw?.enabled === "boolean"
+        ? raw.enabled
+        : legacyEnabled === undefined
+          ? true
+          : legacyEnabled,
+    timeIst: normalizeTimeIst(
+      raw?.timeIst || legacyTime || undefined,
+      DEFAULT_EVENT_EMAIL_JOB_CONFIG.timeIst,
     ),
     updatedAt: raw?.updatedAt,
   };
@@ -95,14 +102,8 @@ export function isWithinScheduleWindow(
 }
 
 export function phaseLabel(phase: EventEmailPhase) {
-  return phase === "preview" ? "Tomorrow preview" : "Day-end thank you";
-}
-
-export function targetDateForPhase(
-  phase: EventEmailPhase,
-  asOfDateKey: string,
-): string {
-  return phase === "preview" ? shiftDateKey(asOfDateKey, 1) : asOfDateKey;
+  if (phase === "digest") return "Evening digest";
+  return phase === "preview" ? "Tomorrow preview (legacy)" : "Day-end (legacy)";
 }
 
 function cancelKey(phase: EventEmailPhase, asOfDateKey: string) {
@@ -150,7 +151,6 @@ export function nextFiringIso(
 
   const [y, m, d] = asOfDateKey.split("-").map(Number);
   const [hh, mm] = normalizeTimeIst(timeIst, "00:00").split(":").map(Number);
-  // Build an absolute instant for that IST wall time
   const atIso = new Date(
     Date.parse(
       `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00+05:30`,
@@ -176,7 +176,8 @@ export type EventEmailJobCard = {
   timeIst: string;
   next: {
     asOfDateKey: string;
-    targetDateKey: string;
+    todayDateKey: string;
+    tomorrowDateKey: string;
     atIso: string;
     label: string;
     cancelled: boolean;
@@ -203,58 +204,57 @@ export async function getEventEmailJobsDashboard(
   const runs = await listEventEmailJobRuns();
   const clock = istClock(now);
 
-  const phases: EventEmailPhase[] = ["preview", "thanks"];
-  const jobs: EventEmailJobCard[] = [];
+  const next = nextFiringIso(config.timeIst, now);
+  const todayDateKey = next.asOfDateKey;
+  const tomorrowDateKey = shiftDateKey(next.asOfDateKey, 1);
+  const cancel = findCancel(cancels, "digest", next.asOfDateKey);
+  const alreadyDone = hasCompletedJobRun(runs, "digest", next.asOfDateKey);
 
-  for (const phase of phases) {
-    const enabled =
-      phase === "preview" ? config.previewEnabled : config.thanksEnabled;
-    const timeIst =
-      phase === "preview" ? config.previewTimeIst : config.thanksTimeIst;
-    const next = nextFiringIso(timeIst, now);
-    const targetDateKey = targetDateForPhase(phase, next.asOfDateKey);
-    const cancel = findCancel(cancels, phase, next.asOfDateKey);
-    const alreadyDone = hasCompletedJobRun(runs, phase, next.asOfDateKey);
-
-    let estimatedRecipients = 0;
-    let eventNames: string[] = [];
-    try {
-      const plan = await planEventEmails({
-        phase,
-        asOfDateKey: next.asOfDateKey,
-        dryRun: true,
-      });
-      estimatedRecipients = plan.plans.reduce(
-        (sum, row) => sum + row.recipients.length,
-        0,
-      );
-      eventNames = [...new Set(plan.plans.flatMap((row) => row.events.map((e) => e.name)))];
-    } catch {
-      // planning can fail without DB in some envs — still show schedule
-    }
-
-    jobs.push({
-      phase,
-      label: phaseLabel(phase),
-      enabled,
-      timeIst,
-      next: {
-        asOfDateKey: next.asOfDateKey,
-        targetDateKey,
-        atIso: next.atIso,
-        label: next.label,
-        cancelled: Boolean(cancel),
-        cancelReason: cancel?.reason,
-        alreadyDone,
-        estimatedRecipients,
-        eventNames,
-      },
+  let estimatedRecipients = 0;
+  let eventNames: string[] = [];
+  try {
+    const plan = await planEventEmails({
+      asOfDateKey: next.asOfDateKey,
+      dryRun: true,
     });
+    estimatedRecipients = plan.plans.reduce(
+      (sum, row) => sum + row.recipients.length,
+      0,
+    );
+    eventNames = [
+      ...new Set(
+        plan.plans.flatMap((row) => [
+          ...row.todayEvents.map((e) => e.name),
+          ...row.tomorrowEvents.map((e) => e.name),
+        ]),
+      ),
+    ];
+  } catch {
+    // planning can fail without DB — still show schedule
   }
 
   return {
     config,
-    jobs,
+    jobs: [
+      {
+        phase: "digest",
+        label: phaseLabel("digest"),
+        enabled: config.enabled,
+        timeIst: config.timeIst,
+        next: {
+          asOfDateKey: next.asOfDateKey,
+          todayDateKey,
+          tomorrowDateKey,
+          atIso: next.atIso,
+          label: next.label,
+          cancelled: Boolean(cancel),
+          cancelReason: cancel?.reason,
+          alreadyDone,
+          estimatedRecipients,
+          eventNames,
+        },
+      },
+    ],
     cancels,
     runs,
     nowIst: `${clock.dateKey} ${String(clock.hour).padStart(2, "0")}:${String(clock.minute).padStart(2, "0")} IST`,
@@ -279,7 +279,7 @@ async function persistRunFromResult(input: {
       ? "dry_run"
       : result.failed > 0 && result.sent === 0
         ? "failed"
-        : result.sent === 0 && result.skipped >= 0 && recipientCount === 0
+        : result.sent === 0 && recipientCount === 0
           ? "skipped"
           : "ran");
 
@@ -288,7 +288,7 @@ async function persistRunFromResult(input: {
   }
 
   return recordEventEmailJobRun({
-    phase: result.phase,
+    phase: "digest",
     asOfDateKey: result.asOfDateKey,
     targetDateKey: result.targetDateKey,
     status,
@@ -304,12 +304,11 @@ async function persistRunFromResult(input: {
 }
 
 export async function executeEventEmailJob(input: {
-  phase: EventEmailPhase;
+  phase?: EventEmailPhase;
   dryRun?: boolean;
   force?: boolean;
   asOfDateKey?: string;
   trigger: "cron" | "manual";
-  /** When true, respect cancel + enabled flags (cron). Manual can bypass. */
   respectGuards?: boolean;
 }): Promise<{
   ok: boolean;
@@ -323,22 +322,17 @@ export async function executeEventEmailJob(input: {
   const respect = input.respectGuards !== false && input.trigger === "cron";
 
   if (respect) {
-    const enabled =
-      input.phase === "preview"
-        ? config.previewEnabled
-        : config.thanksEnabled;
-    if (!enabled) {
+    if (!config.enabled) {
       return { ok: false, blocked: "Job disabled in dashboard" };
     }
 
     const cancels = await getEventEmailJobCancels();
-    const cancel = findCancel(cancels, input.phase, asOfDateKey);
+    const cancel = findCancel(cancels, "digest", asOfDateKey);
     if (cancel) {
-      const targetDateKey = targetDateForPhase(input.phase, asOfDateKey);
       const run = await recordEventEmailJobRun({
-        phase: input.phase,
+        phase: "digest",
         asOfDateKey,
-        targetDateKey,
+        targetDateKey: shiftDateKey(asOfDateKey, 1),
         status: "cancelled",
         trigger: input.trigger,
         sent: 0,
@@ -353,13 +347,12 @@ export async function executeEventEmailJob(input: {
     }
 
     const runs = await listEventEmailJobRuns();
-    if (hasCompletedJobRun(runs, input.phase, asOfDateKey)) {
+    if (hasCompletedJobRun(runs, "digest", asOfDateKey)) {
       return { ok: false, blocked: "Already ran for this IST day" };
     }
   }
 
   const result = await runEventEmails({
-    phase: input.phase,
     dryRun: Boolean(input.dryRun),
     force: Boolean(input.force),
     asOfDateKey,
@@ -374,7 +367,7 @@ export async function executeEventEmailJob(input: {
   return { ok: true, result, run };
 }
 
-/** Hourly/tick cron: run any phase that is due now. */
+/** Hourly tick — runs the single evening digest when due. */
 export async function tickEventEmailJobs(now = new Date()): Promise<{
   checkedAt: string;
   actions: Array<{
@@ -386,65 +379,47 @@ export async function tickEventEmailJobs(now = new Date()): Promise<{
 }> {
   const config = normalizeEventEmailJobConfig(await getEventEmailJobConfig());
   const clock = istClock(now);
-  const phases: EventEmailPhase[] = ["preview", "thanks"];
-  const actions: Array<{
-    phase: EventEmailPhase;
-    due: boolean;
-    blocked?: string;
-    result?: EventEmailRunResult;
-  }> = [];
+  const due = isWithinScheduleWindow(
+    clock.minutesFromMidnight,
+    config.timeIst,
+    55,
+  );
 
-  for (const phase of phases) {
-    const timeIst =
-      phase === "preview" ? config.previewTimeIst : config.thanksTimeIst;
-    const due = isWithinScheduleWindow(
-      clock.minutesFromMidnight,
-      timeIst,
-      55,
-    );
-    if (!due) {
-      actions.push({ phase, due: false });
-      continue;
-    }
-
-    const executed = await executeEventEmailJob({
-      phase,
-      trigger: "cron",
-      asOfDateKey: clock.dateKey,
-      respectGuards: true,
-    });
-    actions.push({
-      phase,
-      due: true,
-      blocked: executed.blocked,
-      result: executed.result,
-    });
+  if (!due) {
+    return {
+      checkedAt: `${clock.dateKey} ${String(clock.hour).padStart(2, "0")}:${String(clock.minute).padStart(2, "0")} IST`,
+      actions: [{ phase: "digest", due: false }],
+    };
   }
+
+  const executed = await executeEventEmailJob({
+    trigger: "cron",
+    asOfDateKey: clock.dateKey,
+    respectGuards: true,
+  });
 
   return {
     checkedAt: `${clock.dateKey} ${String(clock.hour).padStart(2, "0")}:${String(clock.minute).padStart(2, "0")} IST`,
-    actions,
+    actions: [
+      {
+        phase: "digest",
+        due: true,
+        blocked: executed.blocked,
+        result: executed.result,
+      },
+    ],
   };
 }
 
 export async function saveEventEmailJobSchedule(input: {
-  previewEnabled?: boolean;
-  thanksEnabled?: boolean;
-  previewTimeIst?: string;
-  thanksTimeIst?: string;
+  enabled?: boolean;
+  timeIst?: string;
 }) {
   const current = normalizeEventEmailJobConfig(await getEventEmailJobConfig());
   const next = normalizeEventEmailJobConfig({
-    previewEnabled:
-      input.previewEnabled === undefined
-        ? current.previewEnabled
-        : Boolean(input.previewEnabled),
-    thanksEnabled:
-      input.thanksEnabled === undefined
-        ? current.thanksEnabled
-        : Boolean(input.thanksEnabled),
-    previewTimeIst: input.previewTimeIst ?? current.previewTimeIst,
-    thanksTimeIst: input.thanksTimeIst ?? current.thanksTimeIst,
+    enabled:
+      input.enabled === undefined ? current.enabled : Boolean(input.enabled),
+    timeIst: input.timeIst ?? current.timeIst,
     updatedAt: new Date().toISOString(),
   });
   await updateEventEmailJobConfig(next);
@@ -452,25 +427,23 @@ export async function saveEventEmailJobSchedule(input: {
 }
 
 export async function cancelNextEventEmailJob(input: {
-  phase: EventEmailPhase;
+  phase?: EventEmailPhase;
   asOfDateKey?: string;
   reason?: string;
 }) {
   const config = normalizeEventEmailJobConfig(await getEventEmailJobConfig());
-  const timeIst =
-    input.phase === "preview" ? config.previewTimeIst : config.thanksTimeIst;
   const asOfDateKey =
-    input.asOfDateKey || nextFiringIso(timeIst).asOfDateKey;
+    input.asOfDateKey || nextFiringIso(config.timeIst).asOfDateKey;
   return setEventEmailJobCancel({
-    phase: input.phase,
+    phase: "digest",
     asOfDateKey,
     reason: input.reason?.trim() || undefined,
   });
 }
 
 export async function uncancelEventEmailJob(input: {
-  phase: EventEmailPhase;
+  phase?: EventEmailPhase;
   asOfDateKey: string;
 }) {
-  return removeEventEmailJobCancel(input.phase, input.asOfDateKey);
+  return removeEventEmailJobCancel("digest", input.asOfDateKey);
 }

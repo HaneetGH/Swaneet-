@@ -1067,30 +1067,49 @@ describe("event guest emails", () => {
 
   it("normalizes job schedule and schedule windows", () => {
     const config = normalizeEventEmailJobConfig({
-      previewTimeIst: "25:99",
-      thanksEnabled: false,
+      timeIst: "25:99",
+      enabled: false,
     });
-    expect(config.previewTimeIst).toBe("20:00");
-    expect(config.thanksEnabled).toBe(false);
-    expect(timeIstToMinutes("20:00")).toBe(20 * 60);
-    expect(isWithinScheduleWindow(20 * 60 + 10, "20:00")).toBe(true);
-    expect(isWithinScheduleWindow(20 * 60 + 56, "20:00")).toBe(false);
-    expect(isWithinScheduleWindow(19 * 60 + 59, "20:00")).toBe(false);
+    expect(config.timeIst).toBe("21:00");
+    expect(config.enabled).toBe(false);
+    expect(
+      normalizeEventEmailJobConfig({
+        previewTimeIst: "20:00",
+        thanksEnabled: false,
+        previewEnabled: false,
+      }).enabled,
+    ).toBe(false);
+    expect(timeIstToMinutes("21:00")).toBe(21 * 60);
+    expect(isWithinScheduleWindow(21 * 60 + 10, "21:00")).toBe(true);
+    expect(isWithinScheduleWindow(21 * 60 + 56, "21:00")).toBe(false);
+    expect(isWithinScheduleWindow(20 * 60 + 59, "21:00")).toBe(false);
 
     const next = nextFiringIso(
-      "20:00",
+      "21:00",
       new Date("2026-08-08T10:00:00+05:30"),
     );
     expect(next.asOfDateKey).toBe("2026-08-08");
     const later = nextFiringIso(
-      "20:00",
-      new Date("2026-08-08T20:30:00+05:30"),
+      "21:00",
+      new Date("2026-08-08T21:30:00+05:30"),
     );
     expect(later.asOfDateKey).toBe("2026-08-09");
   });
 
-  it("builds tomorrow preview and day-end thank-you copy", () => {
-    const event: ManagedEvent = {
+  it("builds one evening digest with today and tomorrow", () => {
+    const today: ManagedEvent = {
+      id: "sangeet",
+      name: "Sangeet",
+      date: "9th August 2026",
+      day: "Sunday Night",
+      time: "8:00 PM",
+      venue: "Panipat",
+      venueDetail: "",
+      address: "Panipat, Haryana",
+      description: "Sangeet",
+      icon: "sun",
+    };
+    const tomorrow: ManagedEvent = {
       id: "haldi",
       name: "Haldi",
       date: "12th August 2026",
@@ -1103,28 +1122,12 @@ describe("event guest emails", () => {
       icon: "sun",
     };
 
-    const preview = buildEventEmailParts({
-      phase: "preview",
+    const digest = buildEventEmailParts({
       guestName: "Auntie",
-      dayLabel: "12th August 2026",
-      events: [event],
-      links: [
-        {
-          label: "Upload photos",
-          url: "https://swaneet.wedding/#share-photos",
-          hint: "Share moments",
-        },
-      ],
-    });
-    expect(preview.subject).toContain("Tomorrow");
-    expect(preview.text).toContain("Haldi");
-    expect(preview.html).toContain("Tomorrow’s celebrations");
-
-    const thanks = buildEventEmailParts({
-      phase: "thanks",
-      guestName: "Auntie",
-      dayLabel: "12th August 2026",
-      events: [event],
+      todayLabel: "9th August 2026",
+      tomorrowLabel: "12th August 2026",
+      todayEvents: [today],
+      tomorrowEvents: [tomorrow],
       links: [
         {
           label: "Wish for the groom & bride",
@@ -1132,8 +1135,13 @@ describe("event guest emails", () => {
         },
       ],
     });
-    expect(thanks.subject).toContain("Thank you");
-    expect(thanks.text).toContain("Wish for the groom & bride");
-    expect(thanks.html).toContain("Thank you for today");
+    expect(digest.subject).toContain("Thank you");
+    expect(digest.subject).toContain("Haldi");
+    expect(digest.text).toContain("Sangeet");
+    expect(digest.text).toContain("Haldi");
+    expect(digest.text).toContain("Wish for the groom & bride");
+    expect(digest.html).toContain("Your evening update");
+    expect(digest.html).toContain("Today");
+    expect(digest.html).toContain("Tomorrow");
   });
 });

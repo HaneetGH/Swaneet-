@@ -17,8 +17,9 @@ const KIND_LABELS: Record<EmailKind, string> = {
   wish_note: "Wish note",
   owner_alert: "Owner alert",
   face_photos: "Face photo link",
-  event_preview: "Tomorrow’s events",
-  event_thanks: "Day-end thank you",
+  event_preview: "Tomorrow’s events (legacy)",
+  event_thanks: "Day-end thank you (legacy)",
+  event_digest: "Evening digest",
 };
 
 export function EmailLogManager() {

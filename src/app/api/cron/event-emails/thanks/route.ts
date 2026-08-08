@@ -11,13 +11,12 @@ function authorized(request: NextRequest) {
   return header === `Bearer ${secret}`;
 }
 
-/** Legacy path — still respects enable/cancel/already-ran guards. */
+/** Legacy path — now runs the single evening digest. */
 export async function GET(request: NextRequest) {
   if (!authorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const executed = await executeEventEmailJob({
-    phase: "thanks",
     trigger: "cron",
     respectGuards: true,
   });
