@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import { Pencil, Shield, Trash2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { PERMISSION_LABELS, memberUsername } from "@/lib/roles";
+import {
+  PERMISSION_LABELS,
+  PHOTOGRAPHER_PERMISSIONS,
+  memberUsername,
+} from "@/lib/roles";
 import type { AdminMember, AdminPermission } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +21,7 @@ const ASSIGNABLE: AdminPermission[] = [
   "faces",
   "events",
   "guests",
+  "messages",
 ];
 
 const fieldClass =
@@ -276,8 +281,24 @@ export function TeamManager() {
           />
         </label>
 
-        <p className="mb-2 font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-          Permissions / role
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <p className="font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+            Permissions / role
+          </p>
+          {!isEditing ? (
+            <button
+              type="button"
+              onClick={() => setPermissions([...PHOTOGRAPHER_PERMISSIONS])}
+              className="rounded-full border border-gold/30 px-3 py-1 font-body text-[10px] uppercase tracking-[0.16em] text-gold-soft transition hover:bg-gold/10"
+            >
+              Photographer preset
+            </button>
+          ) : null}
+        </div>
+        <p className="mb-3 font-body text-xs text-muted">
+          Photographer preset = Photos Upload only. They sign in at{" "}
+          <span className="text-gold-soft">/photographer</span> for bulk upload
+          (up to 50 files).
         </p>
         <div className="space-y-2">
           {ASSIGNABLE.map((perm) => (

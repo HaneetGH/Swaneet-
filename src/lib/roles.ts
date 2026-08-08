@@ -20,7 +20,7 @@ export const ALL_PERMISSIONS: AdminPermission[] = [
 export const PERMISSION_LABELS: Record<AdminPermission, string> = {
   rsvp: "RSVPs",
   stay: "Accommodation / stay",
-  gallery_upload: "Photos Upload",
+  gallery_upload: "Photos Upload (dashboard + /photographer)",
   gallery_review: "Photos (approve & reject)",
   faces: "Faces (index, merge, email photo links)",
   events: "Events",
@@ -28,6 +28,16 @@ export const PERMISSION_LABELS: Record<AdminPermission, string> = {
   messages: "Wishes (approve & reject)",
   team: "Manage team (master tools)",
 };
+
+/** Upload-only photographer accounts — no RSVP/stay/team access */
+export const PHOTOGRAPHER_PERMISSIONS: AdminPermission[] = ["gallery_upload"];
+
+export function isPhotographerOnly(
+  permissions: AdminPermission[] | undefined,
+) {
+  const set = new Set(permissions || []);
+  return set.size === 1 && set.has("gallery_upload");
+}
 
 /** Expand legacy `gallery` into upload + review; drop unknown keys */
 export function normalizePermissions(

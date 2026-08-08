@@ -24,6 +24,8 @@ import { verifyBearerToken } from "@/lib/firebase/admin";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_FILES = 10;
+/** Photographer portal batch size (Blob client uploads first). */
+const PHOTOGRAPHER_MAX_FILES = 50;
 const ALLOWED_IMAGES = new Set([
   "image/jpeg",
   "image/png",
@@ -33,6 +35,8 @@ const ALLOWED_IMAGES = new Set([
 
 const registerSchema = z.object({
   eventId: z.string().trim().min(1, "Select an event for these photos"),
+  /** photographer = bulk portal; defaults to admin dashboard upload */
+  channel: z.enum(["admin", "photographer"]).optional().default("admin"),
   media: z
     .array(
       z.object({
@@ -43,7 +47,7 @@ const registerSchema = z.object({
       }),
     )
     .min(1)
-    .max(MAX_FILES),
+    .max(PHOTOGRAPHER_MAX_FILES),
 });
 
 function collectFiles(form: FormData): File[] {
@@ -121,10 +125,20 @@ async function registerFromJson(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const session = await getAdminSession();
   const parsed = registerSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message || "Invalid media payload" },
+      { status: 400 },
+    );
+  }
+
+  const isPhotographer = parsed.data.channel === "photographer";
+  const maxFiles = isPhotographer ? PHOTOGRAPHER_MAX_FILES : MAX_FILES;
+  if (parsed.data.media.length > maxFiles) {
+    return NextResponse.json(
+      { error: `You can upload a maximum of ${maxFiles} files at once` },
       { status: 400 },
     );
   }
@@ -138,6 +152,9 @@ async function registerFromJson(request: Request) {
     );
   }
 
+  const source = isPhotographer ? ("photographer" as const) : ("admin" as const);
+  const uploaderName = session?.name?.trim() || undefined;
+
   const images: GalleryImage[] = parsed.data.media.map((item, index) => ({
     id: randomUUID(),
     eventId: parsed.data.eventId,
@@ -145,7 +162,8 @@ async function registerFromJson(request: Request) {
     aspect: item.aspect,
     kind: item.kind,
     status: "approved" as const,
-    source: "admin" as const,
+    source,
+    uploadedByName: uploaderName,
     alt:
       item.alt ||
       `${event.name} ${item.kind === "video" ? "video" : "photo"}${

@@ -28,9 +28,9 @@ export type GalleryImage = {
   src: string;
   aspect: "portrait" | "landscape" | "square";
   kind: "image" | "video";
-  /** Admin uploads are approved; guest shares start pending */
+  /** Admin / photographer uploads are approved; guest shares start pending */
   status: GalleryStatus;
-  source?: "admin" | "guest";
+  source?: "admin" | "guest" | "photographer";
   uploadedByUid?: string;
   uploadedByEmail?: string;
   uploadedByName?: string;

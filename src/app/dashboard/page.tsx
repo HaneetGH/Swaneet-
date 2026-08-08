@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/dashboard/LoginForm";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { getAdminSession, sessionHasPermission } from "@/lib/auth";
+import { isPhotographerOnly } from "@/lib/roles";
 import {
   defaultStore,
   getRoomInventory,
@@ -21,6 +23,11 @@ export default async function DashboardPage() {
         <LoginForm />
       </main>
     );
+  }
+
+  // Upload-only photographers use the focused bulk desk
+  if (session.kind === "member" && isPhotographerOnly(session.permissions)) {
+    redirect("/photographer");
   }
 
   const publicSession = {
