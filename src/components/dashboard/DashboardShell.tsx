@@ -45,6 +45,7 @@ import { GuestWishesReview } from "@/components/dashboard/GuestWishesReview";
 import { RsvpManager } from "@/components/dashboard/RsvpManager";
 import { StorageBanner } from "@/components/dashboard/StorageBanner";
 import { TeamManager } from "@/components/dashboard/TeamManager";
+import { isPhotographerRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
 export type DashboardSession = {
@@ -507,6 +508,18 @@ export function DashboardShell({
               </div>
             ) : null}
             {session.kind === "master" ? <StorageBanner /> : null}
+            {session.kind === "member" &&
+            isPhotographerRole(session.permissions) ? (
+              <div className="mb-6 rounded-2xl border border-gold/25 bg-gold/5 px-4 py-3 font-body text-sm text-cream">
+                <p className="font-body text-[10px] uppercase tracking-[0.22em] text-gold/70">
+                  Photographer access
+                </p>
+                <p className="mt-1 text-muted">
+                  You can upload wedding photos and review guest shares. RSVP,
+                  stay, and master settings stay with the family.
+                </p>
+              </div>
+            ) : null}
 
             {activeTab === "rsvp" ? (
               <RsvpManager initialRsvps={rsvps} />

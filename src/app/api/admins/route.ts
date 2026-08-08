@@ -15,6 +15,7 @@ const permissionEnum = z.enum([
   "faces",
   "events",
   "guests",
+  "messages",
   "team",
 ]);
 
