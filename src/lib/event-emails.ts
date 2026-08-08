@@ -23,12 +23,15 @@ import {
   recordEventEmailSend,
 } from "@/lib/store";
 import type {
+  EventEmailAudienceScope,
   EventEmailPhase,
   FeatureFlags,
   FeatureSite,
   ManagedEvent,
   RsvpEntry,
 } from "@/lib/types";
+
+export type { EventEmailAudienceScope };
 
 export type EventEmailRecipient = {
   email: string;
@@ -60,7 +63,21 @@ export type EventEmailRunOptions = {
   dryRun?: boolean;
   /** Re-send even if already recorded */
   force?: boolean;
+  /**
+   * Limit planning to main (groom site), bride invites, or all.
+   * Defaults to all sites.
+   */
+  scope?: EventEmailAudienceScope;
 };
+
+/** Feature sites covered by a digest audience scope. */
+export function sitesForAudienceScope(
+  scope: EventEmailAudienceScope = "all",
+): FeatureSite[] {
+  if (scope === "main") return ["main"];
+  if (scope === "bride") return ["mehfil", "laavan"];
+  return ["main", "mehfil", "laavan"];
+}
 
 export type EventEmailRunResult = {
   phase: EventEmailPhase;
@@ -247,7 +264,7 @@ export async function planEventEmails(
 
   const flags = await getFeatureFlags();
   const rsvps = await listRsvps();
-  const sites: FeatureSite[] = ["main", "mehfil", "laavan"];
+  const sites = sitesForAudienceScope(options.scope || "all");
   const plans: EventEmailPlan[] = [];
 
   for (const site of sites) {

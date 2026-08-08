@@ -444,11 +444,21 @@ export type EventEmailSend = {
   sentAt: string;
 };
 
+/**
+ * Which guest sites the evening digest covers.
+ * - all: main + bride (mehfil + laavan)
+ * - main: groom / main wedding site only
+ * - bride: Mehfil + Laavan invite sites only
+ */
+export type EventEmailAudienceScope = "all" | "main" | "bride";
+
 /** Admin-editable schedule for the single evening guest digest (IST). */
 export type EventEmailJobConfig = {
   enabled: boolean;
   /** HH:mm in Asia/Kolkata */
   timeIst: string;
+  /** Which sites/events get tonight’s digest */
+  scope: EventEmailAudienceScope;
   /** @deprecated Migrated into enabled */
   previewEnabled?: boolean;
   /** @deprecated Migrated into enabled */
