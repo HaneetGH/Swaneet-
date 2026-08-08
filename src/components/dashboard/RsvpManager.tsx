@@ -200,7 +200,7 @@ export function RsvpManager({ initialRsvps }: RsvpManagerProps) {
                   </p>
                   {rsvp.notes ? (
                     <p className="mt-2 font-body text-sm leading-relaxed text-muted">
-                      “{rsvp.notes}”
+                      Wish: “{rsvp.notes}”
                     </p>
                   ) : null}
                   {rsvp.dayResponses && rsvp.dayResponses.length > 0 ? (

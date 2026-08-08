@@ -37,6 +37,8 @@ import type {
   ContentStore,
   EmailKind,
   EmailLogEntry,
+  EventEmailPhase,
+  EventEmailSend,
   FeatureFlags,
   FeatureSite,
   GalleryImage,
@@ -105,8 +107,11 @@ export function defaultStore(): ContentStore {
     facePeople: [],
     faceDetections: [],
     emailLogs: [],
+    eventEmailSends: [],
   };
 }
+
+const MAX_EVENT_EMAIL_SENDS = 2000;
 
 const MAX_EMAIL_LOGS = 150;
 
@@ -278,6 +283,17 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     )
     .slice(0, MAX_EMAIL_LOGS);
 
+  const eventEmailSends = (raw.eventEmailSends ?? [])
+    .filter(
+      (entry) =>
+        entry &&
+        typeof entry.id === "string" &&
+        typeof entry.email === "string" &&
+        typeof entry.dateKey === "string" &&
+        (entry.kind === "preview" || entry.kind === "thanks"),
+    )
+    .slice(0, MAX_EVENT_EMAIL_SENDS);
+
   return {
     events,
     gallery,
@@ -293,6 +309,7 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     admins,
     guestLogins,
     emailLogs,
+    eventEmailSends,
     adminPinHash: raw.adminPinHash,
   };
 }
@@ -337,6 +354,55 @@ export async function appendEmailLog(input: {
     entry,
     ...existing.filter((item) => item.id !== entry.id),
   ].slice(0, MAX_EMAIL_LOGS);
+  await writeStore(store);
+  return entry;
+}
+
+function eventEmailSendKey(
+  kind: EventEmailPhase,
+  dateKey: string,
+  email: string,
+) {
+  return `${kind}:${dateKey}:${email.trim().toLowerCase()}`;
+}
+
+export async function hasEventEmailSend(
+  kind: EventEmailPhase,
+  dateKey: string,
+  email: string,
+): Promise<boolean> {
+  const store = await readStore();
+  const key = eventEmailSendKey(kind, dateKey, email);
+  return (store.eventEmailSends || []).some(
+    (entry) => eventEmailSendKey(entry.kind, entry.dateKey, entry.email) === key,
+  );
+}
+
+export async function recordEventEmailSend(input: {
+  kind: EventEmailPhase;
+  dateKey: string;
+  email: string;
+  site: FeatureSite;
+}): Promise<EventEmailSend> {
+  const entry: EventEmailSend = {
+    id: `evmail-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    kind: input.kind,
+    dateKey: input.dateKey,
+    email: input.email.trim().toLowerCase(),
+    site: input.site,
+    sentAt: new Date().toISOString(),
+  };
+
+  const store = await readStore();
+  const key = eventEmailSendKey(entry.kind, entry.dateKey, entry.email);
+  const existing = store.eventEmailSends || [];
+  store.eventEmailSends = [
+    entry,
+    ...existing.filter(
+      (item) =>
+        eventEmailSendKey(item.kind, item.dateKey, item.email) !== key,
+    ),
+  ].slice(0, MAX_EVENT_EMAIL_SENDS);
   await writeStore(store);
   return entry;
 }

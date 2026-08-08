@@ -264,7 +264,7 @@ export async function POST(request: Request) {
           ? `Stay: ${accommodation.people} people, ${accommodation.rooms} room(s), ${accommodation.checkIn} → ${accommodation.checkOut}${stayUpdated ? " (updated)" : ""}`
           : "",
         accommodation?.phone ? `Phone: ${accommodation.phone}` : "",
-        rsvp.notes ? `Notes: ${rsvp.notes}` : "",
+        rsvp.notes ? `Wish: ${rsvp.notes}` : "",
         rsvp.contactFamily ? `Contact: ${rsvp.contactFamily}` : "",
         rsvp.inviteTier
           ? `Invite: bride / ${rsvp.inviteTier}${rsvp.inviteSlug ? ` (${rsvp.inviteSlug})` : ""}`

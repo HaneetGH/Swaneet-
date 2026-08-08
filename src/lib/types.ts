@@ -422,7 +422,24 @@ export type EmailKind =
   | "wish_live"
   | "wish_note"
   | "owner_alert"
-  | "face_photos";
+  | "face_photos"
+  /** Night-before: tomorrow’s events */
+  | "event_preview"
+  /** Day-end: thank-you + today’s gist */
+  | "event_thanks";
+
+export type EventEmailPhase = "preview" | "thanks";
+
+/** Idempotency: one successful send per guest / day / phase */
+export type EventEmailSend = {
+  id: string;
+  kind: EventEmailPhase;
+  /** YYYY-MM-DD in IST for the day the email is about */
+  dateKey: string;
+  email: string;
+  site: FeatureSite;
+  sentAt: string;
+};
 
 export type EmailLogEntry = {
   id: string;
@@ -471,6 +488,8 @@ export type ContentStore = {
   guestMessages?: GuestMessage[];
   /** Outbound email attempts (newest first, capped) */
   emailLogs?: EmailLogEntry[];
+  /** Scheduled event-email deliveries (dedupe) */
+  eventEmailSends?: EventEmailSend[];
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */
   adminPinHash?: string;
 };

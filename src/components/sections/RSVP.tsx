@@ -1008,13 +1008,13 @@ export function RSVP() {
                     htmlFor="notes"
                     className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-muted"
                   >
-                    Message for the couple (optional)
+                    Wish for the groom & bride (optional)
                   </label>
                   <textarea
                     id="notes"
                     rows={3}
                     className={cn(fieldClass, "resize-none")}
-                    placeholder="Blessings or a short note — not meal or stay details"
+                    placeholder="Your blessings or a short wish for Swaneet"
                     {...register("notes")}
                   />
                 </div>

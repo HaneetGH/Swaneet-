@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Mail } from "lucide-react";
-import type { EmailKind, EmailLogEntry } from "@/lib/types";
+import type { EmailKind, EmailLogEntry, EventEmailPhase } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const KIND_LABELS: Record<EmailKind, string> = {
@@ -17,6 +17,26 @@ const KIND_LABELS: Record<EmailKind, string> = {
   wish_note: "Wish note",
   owner_alert: "Owner alert",
   face_photos: "Face photo link",
+  event_preview: "Tomorrow’s events",
+  event_thanks: "Day-end thank you",
+};
+
+type RunSummary = {
+  phase: EventEmailPhase;
+  asOfDateKey: string;
+  targetDateKey: string;
+  dryRun: boolean;
+  sent: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
+  plans: Array<{
+    site: string;
+    dayLabel: string;
+    eventNames: string[];
+    recipientCount: number;
+    recipients: Array<{ email: string; name: string; skipped?: string }>;
+  }>;
 };
 
 export function EmailLogManager() {
@@ -24,6 +44,10 @@ export function EmailLogManager() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<"all" | "sent" | "failed">("all");
   const [loading, setLoading] = useState(true);
+  const [asOf, setAsOf] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [runResult, setRunResult] = useState<RunSummary | null>(null);
+  const [runError, setRunError] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -58,8 +82,154 @@ export function EmailLogManager() {
   const sentCount = emails.filter((e) => e.status === "sent").length;
   const failedCount = emails.filter((e) => e.status === "failed").length;
 
+  const runEventMail = async (
+    phase: EventEmailPhase,
+    dryRun: boolean,
+  ) => {
+    const key = `${phase}-${dryRun ? "dry" : "send"}`;
+    setBusy(key);
+    setRunError("");
+    setRunResult(null);
+    try {
+      if (
+        !dryRun &&
+        !confirm(
+          phase === "preview"
+            ? "Send tomorrow’s event emails to attending guests now?"
+            : "Send today’s thank-you / gist emails to attending guests now?",
+        )
+      ) {
+        return;
+      }
+      const res = await fetch("/api/event-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phase,
+          dryRun,
+          asOf: asOf.trim() || undefined,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as RunSummary & {
+        error?: string;
+      };
+      if (!res.ok) {
+        setRunError(data.error || "Could not run event emails");
+        return;
+      }
+      setRunResult(data);
+      if (!dryRun) void load();
+    } catch {
+      setRunError("Could not run event emails");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div>
+      <div className="mb-8 rounded-2xl border border-gold/20 bg-[#141018] p-5">
+        <h3 className="font-display text-xl text-cream">Event guest emails</h3>
+        <p className="mt-1 font-body text-sm text-muted">
+          Night-before: tomorrow’s schedule. Day-end: thank-you + today’s gist
+          (upload, gallery, wishes). Cron runs ~8:00 PM and ~10:30 PM IST.
+          Preview first — sends only go to guests marked yes for that day.
+        </p>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="block">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              As-of date (IST, optional)
+            </span>
+            <input
+              type="date"
+              value={asOf}
+              onChange={(e) => setAsOf(e.target.value)}
+              className="rounded-lg border border-gold/25 bg-[#0d0b10] px-3 py-2 font-body text-sm text-cream"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={() => void runEventMail("preview", true)}
+            className="rounded-full border border-gold/25 px-4 py-2 font-body text-[10px] uppercase tracking-[0.18em] text-gold-soft hover:bg-gold/10 disabled:opacity-50"
+          >
+            {busy === "preview-dry" ? "Working…" : "Preview tomorrow"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={() => void runEventMail("thanks", true)}
+            className="rounded-full border border-gold/25 px-4 py-2 font-body text-[10px] uppercase tracking-[0.18em] text-gold-soft hover:bg-gold/10 disabled:opacity-50"
+          >
+            {busy === "thanks-dry" ? "Working…" : "Preview day-end"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={() => void runEventMail("preview", false)}
+            className="rounded-full border border-emerald-400/30 px-4 py-2 font-body text-[10px] uppercase tracking-[0.18em] text-emerald-200 hover:bg-emerald-400/10 disabled:opacity-50"
+          >
+            {busy === "preview-send" ? "Sending…" : "Send tomorrow now"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={() => void runEventMail("thanks", false)}
+            className="rounded-full border border-emerald-400/30 px-4 py-2 font-body text-[10px] uppercase tracking-[0.18em] text-emerald-200 hover:bg-emerald-400/10 disabled:opacity-50"
+          >
+            {busy === "thanks-send" ? "Sending…" : "Send day-end now"}
+          </button>
+        </div>
+        {runError ? (
+          <p className="mt-3 text-sm text-red-300">{runError}</p>
+        ) : null}
+        {runResult ? (
+          <div className="mt-4 space-y-3 font-body text-sm text-muted">
+            <p className="text-cream">
+              {runResult.dryRun ? "Dry run" : "Send complete"} ·{" "}
+              {runResult.phase === "preview" ? "tomorrow" : "today"}{" "}
+              {runResult.targetDateKey} (as-of {runResult.asOfDateKey}) · sent{" "}
+              {runResult.sent} · skipped {runResult.skipped} · failed{" "}
+              {runResult.failed}
+            </p>
+            {runResult.plans.length === 0 ? (
+              <p>No events (or no yes RSVPs) for that day.</p>
+            ) : (
+              runResult.plans.map((plan) => (
+                <div
+                  key={`${plan.site}-${plan.dayLabel}`}
+                  className="rounded-xl border border-gold/15 px-3 py-3"
+                >
+                  <p className="text-gold-soft">
+                    {plan.site} · {plan.dayLabel} · {plan.recipientCount} guest
+                    {plan.recipientCount === 1 ? "" : "s"}
+                  </p>
+                  <p className="mt-1 text-cream">
+                    {plan.eventNames.join(" · ") || "No events"}
+                  </p>
+                  {plan.recipients.length ? (
+                    <ul className="mt-2 space-y-0.5 text-xs">
+                      {plan.recipients.slice(0, 12).map((guest) => (
+                        <li key={guest.email}>
+                          {guest.name} · {guest.email}
+                          {guest.skipped ? ` (${guest.skipped})` : ""}
+                        </li>
+                      ))}
+                      {plan.recipients.length > 12 ? (
+                        <li>…and {plan.recipients.length - 12} more</li>
+                      ) : null}
+                    </ul>
+                  ) : null}
+                </div>
+              ))
+            )}
+            {runResult.errors.length ? (
+              <p className="text-red-300">{runResult.errors.join(" · ")}</p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="mb-2 flex items-center gap-2">
@@ -113,7 +283,7 @@ export function EmailLogManager() {
             ? "No failed emails recorded."
             : filter === "sent"
               ? "No successful sends recorded yet."
-              : "No emails logged yet. Sends appear here after stay, team, OTP, or photo emails go out."}
+              : "No emails logged yet. Sends appear here after stay, team, OTP, event, or photo emails go out."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-gold/20">

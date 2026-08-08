@@ -43,7 +43,9 @@ import {
   parseEventTimeBounds,
 } from "@/lib/calendar";
 import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinerary";
+import { buildEventEmailParts } from "@/lib/email-event-template";
 import { buildStayConfirmationParts } from "@/lib/email-stay-template";
+import { shiftDateKey } from "@/lib/event-emails";
 import { computeRoomInventory } from "@/lib/store";
 import { buildRoomOccupancy, occupancyRoomsHeld } from "@/lib/room-occupancy";
 import { isShorterStayOffer, stayNights } from "@/lib/stay-dates";
@@ -1019,5 +1021,61 @@ describe("public wishes social proof", () => {
     );
     expect(filled.every((item) => item.source === "guest")).toBe(true);
     expect(filled).toHaveLength(10);
+  });
+});
+
+describe("event guest emails", () => {
+  it("shifts IST date keys across month boundaries", () => {
+    expect(shiftDateKey("2026-08-08", 1)).toBe("2026-08-09");
+    expect(shiftDateKey("2026-08-31", 1)).toBe("2026-09-01");
+    expect(shiftDateKey("2026-08-09", -1)).toBe("2026-08-08");
+  });
+
+  it("builds tomorrow preview and day-end thank-you copy", () => {
+    const event: ManagedEvent = {
+      id: "haldi",
+      name: "Haldi",
+      date: "12th August 2026",
+      day: "Wednesday Morning",
+      time: "9:00 AM",
+      venue: "Maple Garden",
+      venueDetail: "Sukhmani Resort",
+      address: "Buria Road, Jagadhri",
+      description: "Haldi",
+      icon: "sun",
+    };
+
+    const preview = buildEventEmailParts({
+      phase: "preview",
+      guestName: "Auntie",
+      dayLabel: "12th August 2026",
+      events: [event],
+      links: [
+        {
+          label: "Upload photos",
+          url: "https://swaneet.wedding/#share-photos",
+          hint: "Share moments",
+        },
+      ],
+    });
+    expect(preview.subject).toContain("Tomorrow");
+    expect(preview.text).toContain("Haldi");
+    expect(preview.html).toContain("Tomorrow’s celebrations");
+
+    const thanks = buildEventEmailParts({
+      phase: "thanks",
+      guestName: "Auntie",
+      dayLabel: "12th August 2026",
+      events: [event],
+      links: [
+        {
+          label: "Wish for the groom & bride",
+          url: "https://swaneet.wedding/wishes",
+        },
+      ],
+    });
+    expect(thanks.subject).toContain("Thank you");
+    expect(thanks.text).toContain("Wish for the groom & bride");
+    expect(thanks.html).toContain("Thank you for today");
   });
 });
