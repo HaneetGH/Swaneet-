@@ -173,7 +173,8 @@ export type FeatureKey =
   | "stay_banner"
   | "face_find"
   | "guest_messages"
-  | "our_story";
+  | "our_story"
+  | "landing";
 
 export type SiteFeatureFlags = Record<FeatureKey, boolean>;
 
