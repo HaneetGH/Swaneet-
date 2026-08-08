@@ -1,0 +1,16 @@
+---
+description: Always ship work through a pull request, never direct to main
+alwaysApply: true
+---
+
+# Always create a PR
+
+- Do **not** commit or push directly to `main` / `master`.
+- For any change set that should be shared:
+  1. Create or use a feature branch
+  2. Commit on that branch
+  3. Push the branch (`-u` when needed)
+  4. Open a pull request with `gh pr create` and return the PR URL
+- If the user asks to “commit and push”, still use a branch + PR unless they explicitly say to push to `main`.
+- Follow the existing creating-pull-requests workflow (status/diff/log, HEREDOC body, Summary + Test plan).
+- Base PRs on `main` unless the user names another base.
