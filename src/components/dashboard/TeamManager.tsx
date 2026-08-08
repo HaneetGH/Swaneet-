@@ -1,23 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Pencil, Shield, Trash2, UserPlus, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Camera, Pencil, Shield, Trash2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { PERMISSION_LABELS, memberUsername } from "@/lib/roles";
+import {
+  ASSIGNABLE_PERMISSIONS,
+  PERMISSION_LABELS,
+  PHOTOGRAPHER_PERMISSIONS,
+  TEAM_ROLE_PRESETS,
+  isPhotographerRole,
+  matchTeamRolePreset,
+  memberUsername,
+  type TeamRolePresetId,
+} from "@/lib/roles";
 import type { AdminMember, AdminPermission } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type SafeAdmin = Omit<AdminMember, "pinHash">;
-
-const ASSIGNABLE: AdminPermission[] = [
-  "rsvp",
-  "stay",
-  "gallery_upload",
-  "gallery_review",
-  "faces",
-  "events",
-  "guests",
-];
 
 const fieldClass =
   "w-full rounded-xl border border-gold/25 bg-[#0d0b10] px-3 py-2.5 font-body text-sm text-cream outline-none focus:border-gold/60";
@@ -28,14 +27,21 @@ export function TeamManager() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
+  const [rolePreset, setRolePreset] =
+    useState<TeamRolePresetId>("photographer");
   const [permissions, setPermissions] = useState<AdminPermission[]>([
-    "gallery_upload",
+    ...PHOTOGRAPHER_PERMISSIONS,
   ]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   const isEditing = Boolean(editingId);
+
+  const activePresetHint = useMemo(
+    () => TEAM_ROLE_PRESETS.find((preset) => preset.id === rolePreset)?.hint,
+    [rolePreset],
+  );
 
   const load = async () => {
     const res = await fetch("/api/admins");
@@ -53,23 +59,35 @@ export function TeamManager() {
     setName("");
     setEmail("");
     setPin("");
-    setPermissions(["gallery_upload"]);
+    setRolePreset("photographer");
+    setPermissions([...PHOTOGRAPHER_PERMISSIONS]);
     setError("");
   };
 
+  const applyPreset = (id: TeamRolePresetId) => {
+    setRolePreset(id);
+    const preset = TEAM_ROLE_PRESETS.find((item) => item.id === id);
+    if (preset?.permissions.length) {
+      setPermissions([...preset.permissions]);
+    }
+  };
+
   const startEdit = (admin: SafeAdmin) => {
+    const next = admin.permissions.filter((p) =>
+      ASSIGNABLE_PERMISSIONS.includes(p),
+    );
     setEditingId(admin.id);
     setName(admin.name);
     setEmail(admin.email || "");
     setPin("");
-    setPermissions(
-      admin.permissions.filter((p) => ASSIGNABLE.includes(p)),
-    );
+    setPermissions(next);
+    setRolePreset(matchTeamRolePreset(next)?.id || "custom");
     setError("");
     setNotice("");
   };
 
   const togglePerm = (perm: AdminPermission) => {
+    setRolePreset("custom");
     setPermissions((prev) =>
       prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm],
     );
@@ -152,7 +170,11 @@ export function TeamManager() {
         return;
       }
       if (data.emailSent) {
-        setNotice(`Member created — access details emailed to ${email.trim()}`);
+        setNotice(
+          `Member created${
+            isPhotographerRole(permissions) ? " as Photographer" : ""
+          } — access details emailed to ${email.trim()}`,
+        );
       } else {
         setError(
           data.emailError
@@ -233,8 +255,8 @@ export function TeamManager() {
         </div>
         <p className="mb-5 font-body text-sm text-muted">
           {isEditing
-            ? "Update name, email, permissions, or set a new PIN. First name is their login username. Leave PIN blank to keep the current one — they’ll get an update email either way."
-            : "Email is required — they’ll get the dashboard link, first-name username, PIN, and access list from noreply@mail.technorapper.com."}
+            ? "Update name, email, role, or set a new PIN. First name is their login username. Leave PIN blank to keep the current one — they’ll get an update email either way."
+            : "Email is required — they’ll get the dashboard link, first-name username, PIN, and access list from noreply@mail.technorapper.com. Default role is Photographer."}
         </p>
 
         <label className="mb-3 block">
@@ -277,10 +299,35 @@ export function TeamManager() {
         </label>
 
         <p className="mb-2 font-body text-[10px] uppercase tracking-[0.2em] text-muted">
-          Permissions / role
+          Role
+        </p>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {TEAM_ROLE_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => applyPreset(preset.id)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 font-body text-[10px] uppercase tracking-[0.16em] transition",
+                rolePreset === preset.id
+                  ? "bg-gradient-to-r from-gold-deep via-gold to-gold-soft text-[#1a1208]"
+                  : "border border-gold/25 text-gold-soft hover:bg-gold/10",
+              )}
+            >
+              {preset.id === "photographer" ? <Camera size={12} /> : null}
+              {preset.label}
+            </button>
+          ))}
+        </div>
+        {activePresetHint ? (
+          <p className="mb-4 font-body text-xs text-muted">{activePresetHint}</p>
+        ) : null}
+
+        <p className="mb-2 font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+          Permissions
         </p>
         <div className="space-y-2">
-          {ASSIGNABLE.map((perm) => (
+          {ASSIGNABLE_PERMISSIONS.map((perm) => (
             <label
               key={perm}
               className="flex cursor-pointer items-center gap-3 rounded-xl border border-gold/15 px-3 py-2.5"
@@ -319,66 +366,84 @@ export function TeamManager() {
         </div>
         {admins.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-gold/20 p-8 text-center font-body text-sm text-muted">
-            No team members yet. Add someone with a limited role.
+            No team members yet. Add a Photographer for gallery upload, or a
+            custom role.
           </p>
         ) : (
           <div className="space-y-3">
-            {admins.map((admin) => (
-              <div
-                key={admin.id}
-                className={cn(
-                  "rounded-2xl border border-gold/20 bg-[#141018] p-4",
-                  !admin.active && "opacity-60",
-                  editingId === admin.id && "ring-1 ring-gold/40",
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-display text-xl text-cream">
-                      {admin.name}
-                    </p>
-                    <p className="font-body text-[11px] uppercase tracking-[0.16em] text-muted">
-                      Login: {memberUsername(admin.name) || "—"}
-                    </p>
-                    {admin.email ? (
-                      <p className="font-body text-xs text-muted">
-                        {admin.email}
+            {admins.map((admin) => {
+              const role = matchTeamRolePreset(admin.permissions);
+              return (
+                <div
+                  key={admin.id}
+                  className={cn(
+                    "rounded-2xl border border-gold/20 bg-[#141018] p-4",
+                    !admin.active && "opacity-60",
+                    editingId === admin.id && "ring-1 ring-gold/40",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-display text-xl text-cream">
+                          {admin.name}
+                        </p>
+                        {role ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.16em] text-gold-soft">
+                            {role.id === "photographer" ? (
+                              <Camera size={10} />
+                            ) : null}
+                            {role.label}
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-gold/20 px-2.5 py-0.5 font-body text-[10px] uppercase tracking-[0.16em] text-muted">
+                            Custom
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-body text-[11px] uppercase tracking-[0.16em] text-muted">
+                        Login: {memberUsername(admin.name) || "—"}
                       </p>
-                    ) : null}
-                    <p className="mt-2 font-body text-[11px] text-gold-soft">
-                      {admin.permissions
-                        .map((p) => PERMISSION_LABELS[p] || p)
-                        .join(" · ")}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(admin)}
-                      className="inline-flex items-center gap-1 rounded-full border border-gold/25 px-3 py-1.5 font-body text-[10px] uppercase tracking-wider text-gold-soft"
-                    >
-                      <Pencil size={12} />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void onToggleActive(admin)}
-                      className="rounded-full border border-gold/25 px-3 py-1.5 font-body text-[10px] uppercase tracking-wider text-gold-soft"
-                    >
-                      {admin.active ? "Disable" : "Enable"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void onDelete(admin.id)}
-                      className="rounded-full border border-red-400/30 p-2 text-red-200"
-                      aria-label={`Remove ${admin.name}`}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                      {admin.email ? (
+                        <p className="font-body text-xs text-muted">
+                          {admin.email}
+                        </p>
+                      ) : null}
+                      <p className="mt-2 font-body text-[11px] text-gold-soft">
+                        {admin.permissions
+                          .map((p) => PERMISSION_LABELS[p] || p)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(admin)}
+                        className="inline-flex items-center gap-1 rounded-full border border-gold/25 px-3 py-1.5 font-body text-[10px] uppercase tracking-wider text-gold-soft"
+                      >
+                        <Pencil size={12} />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onToggleActive(admin)}
+                        className="rounded-full border border-gold/25 px-3 py-1.5 font-body text-[10px] uppercase tracking-wider text-gold-soft"
+                      >
+                        {admin.active ? "Disable" : "Enable"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onDelete(admin.id)}
+                        className="rounded-full border border-red-400/30 p-2 text-red-200"
+                        aria-label={`Remove ${admin.name}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

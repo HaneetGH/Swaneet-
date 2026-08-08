@@ -50,8 +50,8 @@ export function LoginForm() {
       </p>
       <h1 className="mt-3 font-display text-3xl text-cream">Dashboard</h1>
       <p className="mt-2 font-body text-sm text-muted">
-        Team: enter your first name + PIN. Master: leave username blank and use
-        the master PIN.
+        Team (including photographers): enter your first name + PIN from the
+        invite email. Master: leave username blank and use the master PIN.
       </p>
 
       <label

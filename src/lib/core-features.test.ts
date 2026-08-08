@@ -89,6 +89,34 @@ describe("bride invites", () => {
   });
 });
 
+describe("team role presets", () => {
+  it("recognizes the photographer role from gallery permissions only", async () => {
+    const {
+      PHOTOGRAPHER_PERMISSIONS,
+      isPhotographerRole,
+      matchTeamRolePreset,
+      normalizePermissions,
+    } = await import("@/lib/roles");
+
+    expect(PHOTOGRAPHER_PERMISSIONS).toEqual([
+      "gallery_upload",
+      "gallery_review",
+    ]);
+    expect(isPhotographerRole(["gallery_review", "gallery_upload"])).toBe(true);
+    expect(isPhotographerRole(["gallery_upload"])).toBe(false);
+    expect(isPhotographerRole(["gallery_upload", "gallery_review", "rsvp"])).toBe(
+      false,
+    );
+    expect(matchTeamRolePreset(PHOTOGRAPHER_PERMISSIONS)?.id).toBe(
+      "photographer",
+    );
+    expect(normalizePermissions(["gallery"])).toEqual([
+      "gallery_upload",
+      "gallery_review",
+    ]);
+  });
+});
+
 describe("feature flags", () => {
   it("defaults core features on and face_find off", () => {
     const flags = defaultFeatureFlags();
