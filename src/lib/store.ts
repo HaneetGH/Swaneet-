@@ -345,6 +345,12 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
               : typeof raw.eventEmailJobConfig.thanksTimeIst === "string"
                 ? raw.eventEmailJobConfig.thanksTimeIst
                 : "21:00",
+        scope:
+          raw.eventEmailJobConfig.scope === "main" ||
+          raw.eventEmailJobConfig.scope === "bride" ||
+          raw.eventEmailJobConfig.scope === "all"
+            ? raw.eventEmailJobConfig.scope
+            : "all",
         updatedAt: raw.eventEmailJobConfig.updatedAt,
       }
     : undefined;

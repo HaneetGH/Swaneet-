@@ -15,6 +15,7 @@ import {
   updateEventEmailJobConfig,
 } from "@/lib/store";
 import type {
+  EventEmailAudienceScope,
   EventEmailJobCancel,
   EventEmailJobConfig,
   EventEmailJobRun,
@@ -24,13 +25,29 @@ import type {
 export const DEFAULT_EVENT_EMAIL_JOB_CONFIG: EventEmailJobConfig = {
   enabled: true,
   timeIst: "21:00",
+  scope: "all",
 };
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const SCOPES = new Set<EventEmailAudienceScope>(["all", "main", "bride"]);
 
 export function normalizeTimeIst(value: string | undefined, fallback: string) {
   const trimmed = value?.trim() || "";
   return TIME_RE.test(trimmed) ? trimmed : fallback;
+}
+
+export function normalizeAudienceScope(
+  value: string | undefined,
+  fallback: EventEmailAudienceScope = "all",
+): EventEmailAudienceScope {
+  const trimmed = value?.trim() as EventEmailAudienceScope | undefined;
+  return trimmed && SCOPES.has(trimmed) ? trimmed : fallback;
+}
+
+export function audienceScopeLabel(scope: EventEmailAudienceScope): string {
+  if (scope === "main") return "Main site (groom)";
+  if (scope === "bride") return "Bride sites (Mehfil + Laavan)";
+  return "All guests (main + bride)";
 }
 
 export function normalizeEventEmailJobConfig(
@@ -55,6 +72,10 @@ export function normalizeEventEmailJobConfig(
     timeIst: normalizeTimeIst(
       raw?.timeIst || legacyTime || undefined,
       DEFAULT_EVENT_EMAIL_JOB_CONFIG.timeIst,
+    ),
+    scope: normalizeAudienceScope(
+      raw?.scope,
+      DEFAULT_EVENT_EMAIL_JOB_CONFIG.scope,
     ),
     updatedAt: raw?.updatedAt,
   };
@@ -174,6 +195,8 @@ export type EventEmailJobCard = {
   label: string;
   enabled: boolean;
   timeIst: string;
+  scope: EventEmailAudienceScope;
+  scopeLabel: string;
   next: {
     asOfDateKey: string;
     todayDateKey: string;
@@ -216,6 +239,7 @@ export async function getEventEmailJobsDashboard(
     const plan = await planEventEmails({
       asOfDateKey: next.asOfDateKey,
       dryRun: true,
+      scope: config.scope,
     });
     estimatedRecipients = plan.plans.reduce(
       (sum, row) => sum + row.recipients.length,
@@ -241,6 +265,8 @@ export async function getEventEmailJobsDashboard(
         label: phaseLabel("digest"),
         enabled: config.enabled,
         timeIst: config.timeIst,
+        scope: config.scope,
+        scopeLabel: audienceScopeLabel(config.scope),
         next: {
           asOfDateKey: next.asOfDateKey,
           todayDateKey,
@@ -356,6 +382,7 @@ export async function executeEventEmailJob(input: {
     dryRun: Boolean(input.dryRun),
     force: Boolean(input.force),
     asOfDateKey,
+    scope: config.scope,
   });
 
   const run = await persistRunFromResult({
@@ -405,12 +432,14 @@ export async function tickEventEmailJobs(now = new Date()): Promise<{
 export async function saveEventEmailJobSchedule(input: {
   enabled?: boolean;
   timeIst?: string;
+  scope?: EventEmailAudienceScope;
 }) {
   const current = normalizeEventEmailJobConfig(await getEventEmailJobConfig());
   const next = normalizeEventEmailJobConfig({
     enabled:
       input.enabled === undefined ? current.enabled : Boolean(input.enabled),
     timeIst: input.timeIst ?? current.timeIst,
+    scope: input.scope ?? current.scope,
     updatedAt: new Date().toISOString(),
   });
   await updateEventEmailJobConfig(next);

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarClock } from "lucide-react";
 import type {
+  EventEmailAudienceScope,
   EventEmailJobCancel,
   EventEmailJobConfig,
   EventEmailJobRun,
@@ -15,6 +16,8 @@ type JobCard = {
   label: string;
   enabled: boolean;
   timeIst: string;
+  scope: EventEmailAudienceScope;
+  scopeLabel: string;
   next: {
     asOfDateKey: string;
     todayDateKey: string;
@@ -69,6 +72,7 @@ export function EventEmailJobsManager() {
   const [busy, setBusy] = useState<string | null>(null);
   const [timeIst, setTimeIst] = useState("21:00");
   const [enabled, setEnabled] = useState(true);
+  const [scope, setScope] = useState<EventEmailAudienceScope>("all");
   const [asOf, setAsOf] = useState("");
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [message, setMessage] = useState("");
@@ -77,6 +81,7 @@ export function EventEmailJobsManager() {
     setDashboard(data);
     setTimeIst(data.config.timeIst);
     setEnabled(data.config.enabled);
+    setScope(data.config.scope || "all");
   }, []);
 
   const load = useCallback(async () => {
@@ -136,10 +141,14 @@ export function EventEmailJobsManager() {
 
   const saveSchedule = async () => {
     const data = await post(
-      { action: "update", enabled, timeIst },
+      { action: "update", enabled, timeIst, scope },
       "save",
     );
-    if (data) setMessage("Schedule saved. One evening digest email per day.");
+    if (data) {
+      setMessage(
+        "Schedule saved. Digest only covers the selected site scope.",
+      );
+    }
   };
 
   const job = dashboard?.jobs[0];
@@ -218,8 +227,8 @@ export function EventEmailJobsManager() {
             </div>
             <p className="mt-1 font-body text-sm text-muted">
               One evening email with today’s thank-you, tomorrow’s schedule, and
-              links (upload, gallery, wishes). Auto-send is once daily via
-              Vercel Hobby cron (~9:00 PM IST). Keep the time below aligned.
+              links. Choose whether cron covers the main (groom) site, bride
+              invite sites, or both. Auto-send is once daily (~9:00 PM IST).
               Now:{" "}
               <span className="text-cream">{dashboard?.nowIst || "—"}</span>
             </p>
@@ -233,7 +242,7 @@ export function EventEmailJobsManager() {
           </button>
         </div>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
           <label className="rounded-xl border border-gold/15 p-4">
             <div className="flex items-center justify-between gap-3">
               <span className="font-display text-lg text-cream">
@@ -247,10 +256,8 @@ export function EventEmailJobsManager() {
               />
             </div>
             <p className="mt-1 font-body text-xs text-muted">
-              Today + tomorrow in a single email. Changing this time only
-              updates the dashboard “next run” label — deploy a matching{" "}
-              <code className="text-cream/80">vercel.json</code> cron (UTC) to
-              change when Hobby actually fires.
+              Send time (IST label). Hobby cron is fixed in{" "}
+              <code className="text-cream/80">vercel.json</code>.
             </p>
             <input
               type="time"
@@ -258,6 +265,23 @@ export function EventEmailJobsManager() {
               onChange={(e) => setTimeIst(e.target.value)}
               className="mt-3 w-full rounded-lg border border-gold/25 bg-[#0d0b10] px-3 py-2 font-body text-sm text-cream"
             />
+          </label>
+          <label className="rounded-xl border border-gold/15 p-4">
+            <span className="font-display text-lg text-cream">Audience</span>
+            <p className="mt-1 font-body text-xs text-muted">
+              Only guests + events for this site group are emailed.
+            </p>
+            <select
+              value={scope}
+              onChange={(e) =>
+                setScope(e.target.value as EventEmailAudienceScope)
+              }
+              className="mt-3 w-full rounded-lg border border-gold/25 bg-[#0d0b10] px-3 py-2 font-body text-sm text-cream"
+            >
+              <option value="all">All guests (main + bride)</option>
+              <option value="main">Main site only (groom / #Swaneet)</option>
+              <option value="bride">Bride sites only (Mehfil + Laavan)</option>
+            </select>
           </label>
           <button
             type="button"
@@ -299,6 +323,9 @@ export function EventEmailJobsManager() {
           </div>
 
           <p className="mt-3 font-body text-sm text-cream">{job.next.label}</p>
+          <p className="mt-1 font-body text-xs text-gold-soft/90">
+            {job.scopeLabel || "All guests (main + bride)"}
+          </p>
           <p className="mt-1 font-body text-xs text-muted">
             Today {job.next.todayDateKey} · Tomorrow {job.next.tomorrowDateKey}
             {job.next.eventNames.length

@@ -45,8 +45,9 @@ import {
 import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinerary";
 import { buildEventEmailParts } from "@/lib/email-event-template";
 import { buildStayConfirmationParts } from "@/lib/email-stay-template";
-import { shiftDateKey } from "@/lib/event-emails";
+import { shiftDateKey, sitesForAudienceScope } from "@/lib/event-emails";
 import {
+  audienceScopeLabel,
   isWithinScheduleWindow,
   nextFiringIso,
   normalizeEventEmailJobConfig,
@@ -1065,6 +1066,14 @@ describe("event guest emails", () => {
     expect(shiftDateKey("2026-08-09", -1)).toBe("2026-08-08");
   });
 
+  it("maps digest audience scope to feature sites", () => {
+    expect(sitesForAudienceScope("main")).toEqual(["main"]);
+    expect(sitesForAudienceScope("bride")).toEqual(["mehfil", "laavan"]);
+    expect(sitesForAudienceScope("all")).toEqual(["main", "mehfil", "laavan"]);
+    expect(audienceScopeLabel("main")).toMatch(/groom/i);
+    expect(audienceScopeLabel("bride")).toMatch(/Mehfil/i);
+  });
+
   it("normalizes job schedule and schedule windows", () => {
     const config = normalizeEventEmailJobConfig({
       timeIst: "25:99",
@@ -1072,6 +1081,15 @@ describe("event guest emails", () => {
     });
     expect(config.timeIst).toBe("21:00");
     expect(config.enabled).toBe(false);
+    expect(config.scope).toBe("all");
+    expect(
+      normalizeEventEmailJobConfig({
+        previewTimeIst: "20:00",
+        thanksEnabled: false,
+        previewEnabled: false,
+        scope: "bride",
+      }).scope,
+    ).toBe("bride");
     expect(
       normalizeEventEmailJobConfig({
         previewTimeIst: "20:00",

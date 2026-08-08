@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     force?: boolean;
     enabled?: boolean;
     timeIst?: string;
+    scope?: "all" | "main" | "bride";
   };
 
   const action = body.action || "update";
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
     const config = await saveEventEmailJobSchedule({
       enabled: body.enabled,
       timeIst: body.timeIst,
+      scope: body.scope,
     });
     const dashboard = await getEventEmailJobsDashboard();
     return NextResponse.json({ config, dashboard });
