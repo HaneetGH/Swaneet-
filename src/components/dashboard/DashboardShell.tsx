@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   Heart,
   Images,
+  LayoutDashboard,
   LogOut,
   Mail,
   Menu,
@@ -91,11 +92,214 @@ type NavGroup = {
   items: NavItem[];
 };
 
+type DashboardAreaId = "site" | "guests" | "outreach" | "admin";
+
+type DashboardArea = {
+  id: DashboardAreaId;
+  label: string;
+  hint: string;
+  Icon: typeof Users;
+  groups: NavGroup[];
+};
+
 const SIDEBAR_KEY = "swaneet-dashboard-sidebar";
+const AREA_KEY = "swaneet-dashboard-area";
 
 function can(session: DashboardSession, permission: AdminPermission) {
   if (session.kind === "master") return true;
   return session.permissions.includes(permission);
+}
+
+function buildDashboardAreas(
+  session: DashboardSession,
+  counts: {
+    rsvps: number;
+    accommodations: number;
+    pendingPhotos: number;
+  },
+): DashboardArea[] {
+  const areas: DashboardArea[] = [];
+
+  const siteGroups: NavGroup[] = [];
+  const weddingItems: NavItem[] = [];
+  if (can(session, "events")) {
+    weddingItems.push({
+      id: "events",
+      label: "Events",
+      Icon: CalendarDays,
+      count: 0,
+    });
+  }
+  if (weddingItems.length) {
+    siteGroups.push({ id: "wedding", label: "Schedule", items: weddingItems });
+  }
+
+  const mediaItems: NavItem[] = [];
+  if (can(session, "gallery_upload")) {
+    mediaItems.push({
+      id: "upload",
+      label: "Upload media",
+      Icon: Images,
+      count: 0,
+    });
+  }
+  if (can(session, "gallery_review")) {
+    mediaItems.push({
+      id: "review",
+      label: "Review photos",
+      Icon: ClipboardCheck,
+      count: counts.pendingPhotos,
+    });
+  }
+  if (can(session, "faces")) {
+    mediaItems.push({
+      id: "faces",
+      label: "Faces",
+      Icon: ScanFace,
+      count: 0,
+    });
+  }
+  if (mediaItems.length) {
+    siteGroups.push({ id: "media", label: "Photos", items: mediaItems });
+  }
+
+  if (session.kind === "master") {
+    siteGroups.push({
+      id: "settings",
+      label: "Site controls",
+      items: [
+        {
+          id: "settings",
+          label: "Settings",
+          Icon: Settings2,
+          count: 0,
+        },
+      ],
+    });
+  }
+
+  if (siteGroups.length) {
+    areas.push({
+      id: "site",
+      label: "Wedding site",
+      hint: "Events, photos, site settings",
+      Icon: LayoutDashboard,
+      groups: siteGroups,
+    });
+  }
+
+  const guestGroups: NavGroup[] = [];
+  const stayItems: NavItem[] = [];
+  if (can(session, "rsvp")) {
+    stayItems.push({
+      id: "rsvp",
+      label: "RSVPs",
+      Icon: Users,
+      count: counts.rsvps,
+    });
+  }
+  if (can(session, "stay")) {
+    stayItems.push({
+      id: "stay",
+      label: "Accommodation",
+      Icon: BedDouble,
+      count: counts.accommodations,
+    });
+  }
+  if (stayItems.length) {
+    guestGroups.push({
+      id: "stay",
+      label: "Attendance & stay",
+      items: stayItems,
+    });
+  }
+
+  const peopleItems: NavItem[] = [];
+  if (can(session, "guests")) {
+    peopleItems.push({
+      id: "guests",
+      label: "Guest analytics",
+      Icon: UserRound,
+      count: 0,
+    });
+  }
+  if (can(session, "messages")) {
+    peopleItems.push({
+      id: "wishes",
+      label: "Wishes",
+      Icon: Heart,
+      count: 0,
+    });
+  }
+  if (peopleItems.length) {
+    guestGroups.push({
+      id: "people",
+      label: "Guest activity",
+      items: peopleItems,
+    });
+  }
+
+  if (guestGroups.length) {
+    areas.push({
+      id: "guests",
+      label: "Guests",
+      hint: "RSVPs, stay, wishes — guests only",
+      Icon: Users,
+      groups: guestGroups,
+    });
+  }
+
+  if (session.kind === "master") {
+    areas.push({
+      id: "outreach",
+      label: "Guest mail",
+      hint: "Evening digest schedule & sent mail",
+      Icon: Mail,
+      groups: [
+        {
+          id: "comms",
+          label: "Outreach",
+          items: [
+            {
+              id: "updates",
+              label: "Guest updates",
+              Icon: CalendarClock,
+              count: 0,
+            },
+            {
+              id: "emails",
+              label: "Email log",
+              Icon: Mail,
+              count: 0,
+            },
+          ],
+        },
+      ],
+    });
+
+    areas.push({
+      id: "admin",
+      label: "Team",
+      hint: "Dashboard logins & roles",
+      Icon: Shield,
+      groups: [
+        {
+          id: "team",
+          label: "Access",
+          items: [
+            {
+              id: "team",
+              label: "Team access",
+              Icon: Shield,
+              count: 0,
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  return areas;
 }
 
 export function DashboardShell({
@@ -110,12 +314,22 @@ export function DashboardShell({
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [areaId, setAreaId] = useState<DashboardAreaId | null>(null);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(SIDEBAR_KEY);
       if (saved === "0") setSidebarOpen(false);
       if (saved === "1") setSidebarOpen(true);
+      const savedArea = localStorage.getItem(AREA_KEY) as DashboardAreaId | null;
+      if (
+        savedArea === "site" ||
+        savedArea === "guests" ||
+        savedArea === "outreach" ||
+        savedArea === "admin"
+      ) {
+        setAreaId(savedArea);
+      }
     } catch {
       // ignore
     }
@@ -130,149 +344,58 @@ export function DashboardShell({
     }
   };
 
-  const navGroups = useMemo(() => {
-    const groups: NavGroup[] = [];
+  const areas = useMemo(
+    () =>
+      buildDashboardAreas(session, {
+        rsvps: rsvps.length,
+        accommodations: accommodations.length,
+        pendingPhotos: gallery.filter((g) => g.status === "pending").length,
+      }),
+    [session, rsvps.length, accommodations.length, gallery],
+  );
 
-    const stayItems: NavItem[] = [];
-    if (can(session, "rsvp")) {
-      stayItems.push({
-        id: "rsvp",
-        label: "RSVPs",
-        Icon: Users,
-        count: rsvps.length,
-      });
-    }
-    if (can(session, "stay")) {
-      stayItems.push({
-        id: "stay",
-        label: "Accommodation",
-        Icon: BedDouble,
-        count: accommodations.length,
-      });
-    }
-    if (stayItems.length) {
-      groups.push({ id: "stay", label: "Guests & stay", items: stayItems });
-    }
+  const activeArea =
+    areas.find((area) => area.id === areaId) || areas[0] || null;
 
-    const mediaItems: NavItem[] = [];
-    if (can(session, "gallery_upload")) {
-      mediaItems.push({
-        id: "upload",
-        label: "Upload media",
-        Icon: Images,
-        count: 0,
-      });
-    }
-    if (can(session, "gallery_review")) {
-      mediaItems.push({
-        id: "review",
-        label: "Review photos",
-        Icon: ClipboardCheck,
-        count: gallery.filter((g) => g.status === "pending").length,
-      });
-    }
-    if (can(session, "faces")) {
-      mediaItems.push({
-        id: "faces",
-        label: "Faces",
-        Icon: ScanFace,
-        count: 0,
-      });
-    }
-    if (mediaItems.length) {
-      groups.push({ id: "media", label: "Photos & faces", items: mediaItems });
-    }
-
-    const weddingItems: NavItem[] = [];
-    if (can(session, "events")) {
-      weddingItems.push({
-        id: "events",
-        label: "Events",
-        Icon: CalendarDays,
-        count: 0,
-      });
-    }
-    if (weddingItems.length) {
-      groups.push({ id: "wedding", label: "Wedding", items: weddingItems });
-    }
-
-    const peopleItems: NavItem[] = [];
-    if (can(session, "guests")) {
-      peopleItems.push({
-        id: "guests",
-        label: "Guest analytics",
-        Icon: UserRound,
-        count: 0,
-      });
-    }
-    if (can(session, "messages")) {
-      peopleItems.push({
-        id: "wishes",
-        label: "Wishes",
-        Icon: Heart,
-        count: 0,
-      });
-    }
-    if (session.kind === "master") {
-      peopleItems.push({
-        id: "team",
-        label: "Team access",
-        Icon: Shield,
-        count: 0,
-      });
-    }
-    if (peopleItems.length) {
-      groups.push({ id: "people", label: "People", items: peopleItems });
-    }
-
-    if (session.kind === "master") {
-      groups.push({
-        id: "comms",
-        label: "Communications",
-        items: [
-          {
-            id: "updates",
-            label: "Guest updates",
-            Icon: CalendarClock,
-            count: 0,
-          },
-          {
-            id: "emails",
-            label: "Email log",
-            Icon: Mail,
-            count: 0,
-          },
-        ],
-      });
-      groups.push({
-        id: "settings",
-        label: "Settings",
-        items: [
-          {
-            id: "settings",
-            label: "Settings",
-            Icon: Settings2,
-            count: 0,
-          },
-        ],
-      });
-    }
-
-    return groups;
-  }, [session, rsvps.length, accommodations.length, gallery]);
+  const navGroups = activeArea?.groups || [];
 
   const flatTabs = useMemo(
+    () => areas.flatMap((area) => area.groups.flatMap((group) => group.items)),
+    [areas],
+  );
+
+  const areaTabs = useMemo(
     () => navGroups.flatMap((group) => group.items),
     [navGroups],
   );
 
   const [tab, setTab] = useState<Tab>(flatTabs[0]?.id || "rsvp");
-  const activeTab = flatTabs.some((t) => t.id === tab)
+
+  useEffect(() => {
+    if (!activeArea) return;
+    if (!areaTabs.some((item) => item.id === tab) && areaTabs[0]) {
+      setTab(areaTabs[0].id);
+    }
+  }, [activeArea, areaTabs, tab]);
+
+  const activeTab = areaTabs.some((t) => t.id === tab)
     ? tab
-    : flatTabs[0]?.id;
+    : areaTabs[0]?.id || flatTabs[0]?.id;
 
   const activeLabel =
     flatTabs.find((item) => item.id === activeTab)?.label || "Dashboard";
+
+  const selectArea = (id: DashboardAreaId) => {
+    setAreaId(id);
+    try {
+      localStorage.setItem(AREA_KEY, id);
+    } catch {
+      // ignore
+    }
+    const next = areas.find((area) => area.id === id);
+    const first = next?.groups[0]?.items[0];
+    if (first) setTab(first.id);
+  };
 
   const selectTab = (id: Tab) => {
     setTab(id);
@@ -342,7 +465,57 @@ export function DashboardShell({
         )}
       </div>
 
+      <div
+        className={cn(
+          "border-b border-gold/15 px-2 py-3",
+          compact ? "px-1" : "",
+        )}
+      >
+        {!compact ? (
+          <p className="mb-2 px-2 font-body text-[10px] uppercase tracking-[0.22em] text-gold/55">
+            Choose area
+          </p>
+        ) : null}
+        <div className={cn("space-y-1", compact ? "space-y-1.5" : "")}>
+          {areas.map((area) => {
+            const active = activeArea?.id === area.id;
+            return (
+              <button
+                key={area.id}
+                type="button"
+                title={area.hint}
+                onClick={() => selectArea(area.id)}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-body text-sm transition",
+                  compact ? "justify-center px-2" : "",
+                  active
+                    ? "bg-gold/20 text-gold-soft"
+                    : "text-muted hover:bg-white/5 hover:text-cream",
+                )}
+              >
+                <area.Icon size={16} className="shrink-0" />
+                {!compact ? (
+                  <span className="min-w-0 flex-1 text-left">
+                    <span className="block truncate">{area.label}</span>
+                    <span className="mt-0.5 block truncate text-[10px] text-muted">
+                      {area.hint}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="sr-only">{area.label}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <nav className="flex-1 space-y-5 overflow-y-auto px-2 py-4">
+        {!compact && activeArea ? (
+          <p className="px-3 font-body text-[11px] text-muted">
+            {activeArea.label} tools
+          </p>
+        ) : null}
         {navGroups.map((group) => (
           <div key={group.id}>
             {!compact ? (
@@ -357,7 +530,7 @@ export function DashboardShell({
             </div>
           </div>
         ))}
-        {navGroups.length === 0 ? (
+        {areas.length === 0 ? (
           <p className="px-3 font-body text-xs text-muted">
             No permissions assigned.
           </p>
@@ -475,7 +648,8 @@ export function DashboardShell({
                 </button>
                 <div className="min-w-0">
                   <p className="font-body text-[10px] uppercase tracking-[0.28em] text-gold/70">
-                    {session.kind === "master" ? "Master" : "Team"}
+                    {(session.kind === "master" ? "Master" : "Team") +
+                      (activeArea ? ` · ${activeArea.label}` : "")}
                   </p>
                   <h1 className="truncate font-display text-xl text-cream sm:text-2xl">
                     {activeLabel}
