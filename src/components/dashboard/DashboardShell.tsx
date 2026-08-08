@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   BedDouble,
+  CalendarClock,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -35,6 +36,7 @@ import { FeatureFlagsManager } from "@/components/dashboard/FeatureFlagsManager"
 import { FacesManager } from "@/components/dashboard/FacesManager";
 import { RsvpBannerManager } from "@/components/dashboard/RsvpBannerManager";
 import { EmailLogManager } from "@/components/dashboard/EmailLogManager";
+import { EventEmailJobsManager } from "@/components/dashboard/EventEmailJobsManager";
 import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
 import { GuestLoginsManager } from "@/components/dashboard/GuestLoginsManager";
@@ -71,6 +73,7 @@ type Tab =
   | "guests"
   | "wishes"
   | "team"
+  | "updates"
   | "emails"
   | "settings";
 
@@ -221,23 +224,37 @@ export function DashboardShell({
       groups.push({ id: "people", label: "People", items: peopleItems });
     }
 
-    const settingsItems: NavItem[] = [];
     if (session.kind === "master") {
-      settingsItems.push({
-        id: "emails",
-        label: "Email log",
-        Icon: Mail,
-        count: 0,
+      groups.push({
+        id: "comms",
+        label: "Communications",
+        items: [
+          {
+            id: "updates",
+            label: "Guest updates",
+            Icon: CalendarClock,
+            count: 0,
+          },
+          {
+            id: "emails",
+            label: "Email log",
+            Icon: Mail,
+            count: 0,
+          },
+        ],
       });
-      settingsItems.push({
+      groups.push({
         id: "settings",
         label: "Settings",
-        Icon: Settings2,
-        count: 0,
+        items: [
+          {
+            id: "settings",
+            label: "Settings",
+            Icon: Settings2,
+            count: 0,
+          },
+        ],
       });
-    }
-    if (settingsItems.length) {
-      groups.push({ id: "settings", label: "Settings", items: settingsItems });
     }
 
     return groups;
@@ -523,6 +540,8 @@ export function DashboardShell({
               <GuestWishesReview />
             ) : activeTab === "team" ? (
               <TeamManager />
+            ) : activeTab === "updates" ? (
+              <EventEmailJobsManager />
             ) : activeTab === "emails" ? (
               <EmailLogManager />
             ) : activeTab === "settings" ? (

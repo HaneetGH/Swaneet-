@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runEventEmails } from "@/lib/event-emails";
+import { executeEventEmailJob } from "@/lib/event-email-jobs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,11 +11,15 @@ function authorized(request: NextRequest) {
   return header === `Bearer ${secret}`;
 }
 
-/** 8:00 PM IST — tomorrow’s events for attending guests */
+/** Legacy path — still respects enable/cancel/already-ran guards. */
 export async function GET(request: NextRequest) {
   if (!authorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const result = await runEventEmails({ phase: "preview" });
-  return NextResponse.json(result);
+  const executed = await executeEventEmailJob({
+    phase: "preview",
+    trigger: "cron",
+    respectGuards: true,
+  });
+  return NextResponse.json(executed);
 }

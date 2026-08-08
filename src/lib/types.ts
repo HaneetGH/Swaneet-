@@ -441,6 +441,50 @@ export type EventEmailSend = {
   sentAt: string;
 };
 
+/** Admin-editable schedule for night-before / day-end guest emails (IST). */
+export type EventEmailJobConfig = {
+  previewEnabled: boolean;
+  thanksEnabled: boolean;
+  /** HH:mm in Asia/Kolkata — night-before “tomorrow” email */
+  previewTimeIst: string;
+  /** HH:mm in Asia/Kolkata — day-end thank-you email */
+  thanksTimeIst: string;
+  updatedAt?: string;
+};
+
+/** Cancel a specific calendar-day firing (as-of IST date), not the whole job. */
+export type EventEmailJobCancel = {
+  phase: EventEmailPhase;
+  /** IST YYYY-MM-DD the cron would fire on */
+  asOfDateKey: string;
+  cancelledAt: string;
+  reason?: string;
+};
+
+export type EventEmailJobRunStatus =
+  | "ran"
+  | "skipped"
+  | "cancelled"
+  | "failed"
+  | "dry_run";
+
+/** One scheduled/manual job execution summary for the dashboard. */
+export type EventEmailJobRun = {
+  id: string;
+  phase: EventEmailPhase;
+  asOfDateKey: string;
+  targetDateKey: string;
+  status: EventEmailJobRunStatus;
+  trigger: "cron" | "manual";
+  sent: number;
+  skipped: number;
+  failed: number;
+  recipientCount: number;
+  note?: string;
+  startedAt: string;
+  finishedAt: string;
+};
+
 export type EmailLogEntry = {
   id: string;
   kind: EmailKind;
@@ -490,6 +534,12 @@ export type ContentStore = {
   emailLogs?: EmailLogEntry[];
   /** Scheduled event-email deliveries (dedupe) */
   eventEmailSends?: EventEmailSend[];
+  /** Night-before / day-end job schedule + enable flags */
+  eventEmailJobConfig?: EventEmailJobConfig;
+  /** Cancelled upcoming firings (phase + as-of day) */
+  eventEmailJobCancels?: EventEmailJobCancel[];
+  /** Recent job run history for the admin dashboard */
+  eventEmailJobRuns?: EventEmailJobRun[];
   /** scrypt hash in `salt:hash` form; falls back to ADMIN_PIN env when unset */
   adminPinHash?: string;
 };

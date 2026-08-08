@@ -3,12 +3,8 @@
   "framework": "nextjs",
   "crons": [
     {
-      "path": "/api/cron/event-emails/preview",
-      "schedule": "30 14 * * *"
-    },
-    {
-      "path": "/api/cron/event-emails/thanks",
-      "schedule": "0 17 * * *"
+      "path": "/api/cron/event-emails/tick",
+      "schedule": "5 * * * *"
     }
   ]
 }

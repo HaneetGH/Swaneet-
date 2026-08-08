@@ -37,6 +37,9 @@ import type {
   ContentStore,
   EmailKind,
   EmailLogEntry,
+  EventEmailJobCancel,
+  EventEmailJobConfig,
+  EventEmailJobRun,
   EventEmailPhase,
   EventEmailSend,
   FeatureFlags,
@@ -108,10 +111,15 @@ export function defaultStore(): ContentStore {
     faceDetections: [],
     emailLogs: [],
     eventEmailSends: [],
+    eventEmailJobConfig: undefined,
+    eventEmailJobCancels: [],
+    eventEmailJobRuns: [],
   };
 }
 
 const MAX_EVENT_EMAIL_SENDS = 2000;
+const MAX_EVENT_EMAIL_JOB_RUNS = 80;
+const MAX_EVENT_EMAIL_JOB_CANCELS = 40;
 
 const MAX_EMAIL_LOGS = 150;
 
@@ -294,6 +302,42 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     )
     .slice(0, MAX_EVENT_EMAIL_SENDS);
 
+  const eventEmailJobCancels = (raw.eventEmailJobCancels ?? [])
+    .filter(
+      (entry) =>
+        entry &&
+        (entry.phase === "preview" || entry.phase === "thanks") &&
+        typeof entry.asOfDateKey === "string" &&
+        typeof entry.cancelledAt === "string",
+    )
+    .slice(0, MAX_EVENT_EMAIL_JOB_CANCELS);
+
+  const eventEmailJobRuns = (raw.eventEmailJobRuns ?? [])
+    .filter(
+      (entry) =>
+        entry &&
+        typeof entry.id === "string" &&
+        (entry.phase === "preview" || entry.phase === "thanks") &&
+        typeof entry.asOfDateKey === "string",
+    )
+    .slice(0, MAX_EVENT_EMAIL_JOB_RUNS);
+
+  const eventEmailJobConfig = raw.eventEmailJobConfig
+    ? {
+        previewEnabled: raw.eventEmailJobConfig.previewEnabled !== false,
+        thanksEnabled: raw.eventEmailJobConfig.thanksEnabled !== false,
+        previewTimeIst:
+          typeof raw.eventEmailJobConfig.previewTimeIst === "string"
+            ? raw.eventEmailJobConfig.previewTimeIst
+            : "20:00",
+        thanksTimeIst:
+          typeof raw.eventEmailJobConfig.thanksTimeIst === "string"
+            ? raw.eventEmailJobConfig.thanksTimeIst
+            : "22:30",
+        updatedAt: raw.eventEmailJobConfig.updatedAt,
+      }
+    : undefined;
+
   return {
     events,
     gallery,
@@ -310,6 +354,9 @@ function normalizeStore(raw: Partial<ContentStore>): ContentStore {
     guestLogins,
     emailLogs,
     eventEmailSends,
+    eventEmailJobConfig,
+    eventEmailJobCancels,
+    eventEmailJobRuns,
     adminPinHash: raw.adminPinHash,
   };
 }
@@ -403,6 +450,86 @@ export async function recordEventEmailSend(input: {
         eventEmailSendKey(item.kind, item.dateKey, item.email) !== key,
     ),
   ].slice(0, MAX_EVENT_EMAIL_SENDS);
+  await writeStore(store);
+  return entry;
+}
+
+export async function getEventEmailJobConfig(): Promise<
+  EventEmailJobConfig | undefined
+> {
+  const store = await readStore();
+  return store.eventEmailJobConfig;
+}
+
+export async function updateEventEmailJobConfig(
+  config: EventEmailJobConfig,
+): Promise<EventEmailJobConfig> {
+  const store = await readStore();
+  store.eventEmailJobConfig = config;
+  await writeStore(store);
+  return config;
+}
+
+export async function getEventEmailJobCancels(): Promise<EventEmailJobCancel[]> {
+  const store = await readStore();
+  return [...(store.eventEmailJobCancels || [])];
+}
+
+export async function setEventEmailJobCancel(input: {
+  phase: EventEmailPhase;
+  asOfDateKey: string;
+  reason?: string;
+}): Promise<EventEmailJobCancel> {
+  const entry: EventEmailJobCancel = {
+    phase: input.phase,
+    asOfDateKey: input.asOfDateKey,
+    cancelledAt: new Date().toISOString(),
+    reason: input.reason,
+  };
+  const store = await readStore();
+  const key = `${entry.phase}:${entry.asOfDateKey}`;
+  store.eventEmailJobCancels = [
+    entry,
+    ...(store.eventEmailJobCancels || []).filter(
+      (item) => `${item.phase}:${item.asOfDateKey}` !== key,
+    ),
+  ].slice(0, MAX_EVENT_EMAIL_JOB_CANCELS);
+  await writeStore(store);
+  return entry;
+}
+
+export async function removeEventEmailJobCancel(
+  phase: EventEmailPhase,
+  asOfDateKey: string,
+): Promise<boolean> {
+  const store = await readStore();
+  const key = `${phase}:${asOfDateKey}`;
+  const before = store.eventEmailJobCancels?.length || 0;
+  store.eventEmailJobCancels = (store.eventEmailJobCancels || []).filter(
+    (item) => `${item.phase}:${item.asOfDateKey}` !== key,
+  );
+  if ((store.eventEmailJobCancels?.length || 0) === before) return false;
+  await writeStore(store);
+  return true;
+}
+
+export async function listEventEmailJobRuns(): Promise<EventEmailJobRun[]> {
+  const store = await readStore();
+  return [...(store.eventEmailJobRuns || [])];
+}
+
+export async function recordEventEmailJobRun(
+  input: Omit<EventEmailJobRun, "id">,
+): Promise<EventEmailJobRun> {
+  const entry: EventEmailJobRun = {
+    id: `evjob-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ...input,
+  };
+  const store = await readStore();
+  store.eventEmailJobRuns = [entry, ...(store.eventEmailJobRuns || [])].slice(
+    0,
+    MAX_EVENT_EMAIL_JOB_RUNS,
+  );
   await writeStore(store);
   return entry;
 }

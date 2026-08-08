@@ -46,6 +46,12 @@ import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinera
 import { buildEventEmailParts } from "@/lib/email-event-template";
 import { buildStayConfirmationParts } from "@/lib/email-stay-template";
 import { shiftDateKey } from "@/lib/event-emails";
+import {
+  isWithinScheduleWindow,
+  nextFiringIso,
+  normalizeEventEmailJobConfig,
+  timeIstToMinutes,
+} from "@/lib/event-email-jobs";
 import { computeRoomInventory } from "@/lib/store";
 import { buildRoomOccupancy, occupancyRoomsHeld } from "@/lib/room-occupancy";
 import { isShorterStayOffer, stayNights } from "@/lib/stay-dates";
@@ -1029,6 +1035,30 @@ describe("event guest emails", () => {
     expect(shiftDateKey("2026-08-08", 1)).toBe("2026-08-09");
     expect(shiftDateKey("2026-08-31", 1)).toBe("2026-09-01");
     expect(shiftDateKey("2026-08-09", -1)).toBe("2026-08-08");
+  });
+
+  it("normalizes job schedule and schedule windows", () => {
+    const config = normalizeEventEmailJobConfig({
+      previewTimeIst: "25:99",
+      thanksEnabled: false,
+    });
+    expect(config.previewTimeIst).toBe("20:00");
+    expect(config.thanksEnabled).toBe(false);
+    expect(timeIstToMinutes("20:00")).toBe(20 * 60);
+    expect(isWithinScheduleWindow(20 * 60 + 10, "20:00")).toBe(true);
+    expect(isWithinScheduleWindow(20 * 60 + 56, "20:00")).toBe(false);
+    expect(isWithinScheduleWindow(19 * 60 + 59, "20:00")).toBe(false);
+
+    const next = nextFiringIso(
+      "20:00",
+      new Date("2026-08-08T10:00:00+05:30"),
+    );
+    expect(next.asOfDateKey).toBe("2026-08-08");
+    const later = nextFiringIso(
+      "20:00",
+      new Date("2026-08-08T20:30:00+05:30"),
+    );
+    expect(later.asOfDateKey).toBe("2026-08-09");
   });
 
   it("builds tomorrow preview and day-end thank-you copy", () => {
