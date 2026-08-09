@@ -28,7 +28,7 @@ export async function GET() {
 
 /**
  * Master: dry-run or send arrival announcement.
- * body: { wave: "today" | "tomorrow", dryRun?: boolean, force?: boolean }
+ * body: { wave: "today" | "tomorrow" | "apology", dryRun?: boolean, force?: boolean }
  */
 export async function POST(request: NextRequest) {
   if (!(await requireMaster())) {
@@ -41,7 +41,13 @@ export async function POST(request: NextRequest) {
     force?: boolean;
   };
 
-  const wave = (body.wave === "tomorrow" ? "tomorrow" : "today") as AnnouncementWave;
+  const wave = (
+    body.wave === "tomorrow"
+      ? "tomorrow"
+      : body.wave === "apology"
+        ? "apology"
+        : "today"
+  ) as AnnouncementWave;
   const dryRun = body.dryRun === undefined ? true : Boolean(body.dryRun);
 
   const result = await runAnnouncementEmail({

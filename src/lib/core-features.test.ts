@@ -1237,4 +1237,29 @@ describe("arrival announcement email", () => {
     expect(laavan.subject).not.toContain("Sangeet");
     expect(laavan.text).not.toMatch(/sangeet/i);
   });
+
+  it("builds apology emails with site-correct schedules", () => {
+    const groom = buildAnnouncementEmailParts({
+      guestName: "Uncle",
+      wave: "apology",
+      site: "main",
+    });
+    expect(groom.subject).toContain("Apology · correct schedule");
+    expect(groom.subject).not.toContain("incl. Sangeet");
+    expect(groom.text).toMatch(/sorry/i);
+    expect(groom.text).toMatch(/incorrectly mentioned bride-side/i);
+    expect(groom.text).not.toContain("Sangeet on 9th");
+    expect(groom.html).toContain("A sincere apology");
+    expect(groom.html).not.toMatch(/>Sangeet</);
+
+    const mehfil = buildAnnouncementEmailParts({
+      guestName: "Auntie",
+      wave: "apology",
+      site: "mehfil",
+    });
+    expect(mehfil.subject).toContain("incl. Sangeet");
+    expect(mehfil.text).toMatch(/sorry/i);
+    expect(mehfil.text).toContain("Sangeet");
+    expect(mehfil.text).toContain("Mehfil");
+  });
 });

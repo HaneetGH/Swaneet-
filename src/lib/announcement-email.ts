@@ -10,7 +10,7 @@ import {
 import type { FeatureSite } from "@/lib/types";
 import { wedding } from "@/data/wedding";
 
-export type AnnouncementWave = "today" | "tomorrow";
+export type AnnouncementWave = "today" | "tomorrow" | "apology";
 
 export type AnnouncementSource = "rsvp" | "stay" | "wish" | "login";
 
@@ -148,6 +148,7 @@ export async function collectAnnouncementRecipients(): Promise<
 }
 
 function announcementSubjectMarker(site: FeatureSite, wave: AnnouncementWave) {
+  if (wave === "apology") return "Apology · correct schedule";
   if (announcementIncludesSangeet(site)) {
     return wave === "tomorrow" ? "Reminder · Sangeet" : "Sangeet ·";
   }
@@ -162,25 +163,39 @@ export function buildAnnouncementEmailParts(input: {
 }): { subject: string; text: string; html: string } {
   const site = input.site || "main";
   const includeSangeet = announcementIncludesSangeet(site);
+  const isApology = input.wave === "apology";
   const greet = input.guestName.trim() || "Friend";
   const siteUrl = siteBaseUrl();
   const venue = wedding.venue.fullAddress;
 
-  const subject = includeSangeet
-    ? input.wave === "tomorrow"
-      ? `Reminder · Sangeet & wedding from 11th August — please be with us · ${wedding.hashtag}`
-      : `Sangeet · Wedding from 11th August — please be with us · ${wedding.hashtag}`
-    : input.wave === "tomorrow"
-      ? `Reminder · Celebrations begin from 11th August — please be with us · ${wedding.hashtag}`
-      : `Celebrations begin from 11th August — please be with us · ${wedding.hashtag}`;
-
-  const opening = includeSangeet
-    ? input.wave === "tomorrow"
-      ? "A warm reminder as we get closer — our #Swaneet celebrations include Sangeet on 9th August in Panipat, then wedding days from 11th August. Please make sure you are with us."
-      : "With love from both families — our #Swaneet celebrations include Sangeet on 9th August in Panipat, then wedding days from 11th August. Please make sure you are with us for the days ahead."
-    : input.wave === "tomorrow"
-      ? "A warm reminder as we get closer — our #Swaneet celebrations begin from 11th August. Please make sure you are with us."
-      : "With love from both families — our #Swaneet celebrations begin from 11th August. Please make sure you are with us for the days ahead.";
+  let subject: string;
+  let opening: string;
+  if (isApology) {
+    subject = includeSangeet
+      ? `Apology · correct schedule for your invite (incl. Sangeet) · ${wedding.hashtag}`
+      : `Apology · correct schedule for your invite · ${wedding.hashtag}`;
+    opening = includeSangeet
+      ? "We’re sorry — a recent email mixed guest lists and may have been confusing. Here is the correct schedule for your Mehfil invite: Sangeet on 9th August in Panipat, then wedding celebrations from 11th August in Jagadhri."
+      : "We’re sorry — a recent email incorrectly mentioned bride-side events (including Sangeet in Panipat) that are not part of your invitation. Please ignore that detail. Here is the correct schedule for your invite: wedding celebrations from 11th August in Jagadhri.";
+  } else if (includeSangeet) {
+    subject =
+      input.wave === "tomorrow"
+        ? `Reminder · Sangeet & wedding from 11th August — please be with us · ${wedding.hashtag}`
+        : `Sangeet · Wedding from 11th August — please be with us · ${wedding.hashtag}`;
+    opening =
+      input.wave === "tomorrow"
+        ? "A warm reminder as we get closer — our #Swaneet celebrations include Sangeet on 9th August in Panipat, then wedding days from 11th August. Please make sure you are with us."
+        : "With love from both families — our #Swaneet celebrations include Sangeet on 9th August in Panipat, then wedding days from 11th August. Please make sure you are with us for the days ahead.";
+  } else {
+    subject =
+      input.wave === "tomorrow"
+        ? `Reminder · Celebrations begin from 11th August — please be with us · ${wedding.hashtag}`
+        : `Celebrations begin from 11th August — please be with us · ${wedding.hashtag}`;
+    opening =
+      input.wave === "tomorrow"
+        ? "A warm reminder as we get closer — our #Swaneet celebrations begin from 11th August. Please make sure you are with us."
+        : "With love from both families — our #Swaneet celebrations begin from 11th August. Please make sure you are with us for the days ahead.";
+  }
 
   const scheduleLines = [
     ...(includeSangeet
@@ -214,8 +229,11 @@ export function buildAnnouncementEmailParts(input: {
     wedding.hashtag,
   ].join("\n");
 
-  const headline =
-    input.wave === "tomorrow" ? "A gentle reminder" : "Please be with us";
+  const headline = isApology
+    ? "A sincere apology"
+    : input.wave === "tomorrow"
+      ? "A gentle reminder"
+      : "Please be with us";
   const mapsUrl =
     wedding.venue.mapsUrl ||
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(wedding.venue.mapQuery)}`;
@@ -421,11 +439,24 @@ export async function runAnnouncementEmail(input: {
   let alreadySent = new Set<string>();
   if (!force) {
     const logs = await listEmailLogs();
+    const marker = announcementSubjectMarker("main", input.wave);
     for (const entry of logs) {
       if (entry.kind !== "announcement" || entry.status !== "sent") continue;
       const email = normalizeEmail(entry.to);
       if (!email) continue;
       const subject = entry.subject || "";
+      if (input.wave === "apology") {
+        if (subject.includes(marker)) {
+          // Apology subjects are site-specific; match mehfil vs groom by Sangeet wording.
+          if (subject.includes("incl. Sangeet")) {
+            alreadySent.add(recipientKey(email, "mehfil"));
+          } else {
+            alreadySent.add(recipientKey(email, "main"));
+            alreadySent.add(recipientKey(email, "laavan"));
+          }
+        }
+        continue;
+      }
       if (subject.includes(announcementSubjectMarker("mehfil", input.wave))) {
         alreadySent.add(recipientKey(email, "mehfil"));
       }
