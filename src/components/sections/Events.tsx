@@ -1,8 +1,9 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
+  ChevronDown,
   ExternalLink,
   Heart,
   Moon,
@@ -103,7 +104,10 @@ export function Events() {
             return (
               <li
                 key={event.id}
-                className="relative grid grid-cols-[2.3rem_1fr] gap-x-5 pb-12 last:pb-0 md:grid-cols-[1fr_2.5rem_1fr] md:gap-x-8 md:pb-16"
+                className={cn(
+                  "relative grid grid-cols-[2.3rem_1fr] gap-x-5 last:pb-0 md:grid-cols-[1fr_2.5rem_1fr] md:gap-x-8",
+                  done ? "pb-6 md:pb-8" : "pb-12 md:pb-16",
+                )}
               >
                 {/* Desktop left content */}
                 <motion.div
@@ -200,6 +204,10 @@ function EventDetails({
   align: "left" | "right";
   done: boolean;
 }) {
+  // Done events start collapsed; upcoming always show full details.
+  const [expanded, setExpanded] = useState(!done);
+  const showDetails = !done || expanded;
+
   return (
     <article
       className={cn(
@@ -227,101 +235,156 @@ function EventDetails({
         ) : null}
       </div>
 
-      <h3
-        className={cn(
-          "mt-2 font-display text-2xl tracking-wide sm:text-3xl",
-          done ? "text-cream/75 line-through decoration-gold/30" : "text-cream",
-          align === "right" && "md:text-right",
-        )}
-      >
-        {event.name}
-      </h3>
-
-      <p
-        className={cn(
-          "mt-2 font-display text-lg text-gold-soft",
-          align === "right" && "md:text-right",
-        )}
-      >
-        {event.date}
-      </p>
-
-      <p
-        className={cn(
-          "mt-1 font-body text-sm tracking-wide text-cream/80",
-          align === "right" && "md:text-right",
-        )}
-      >
-        {event.time}
-      </p>
-
-      <div
-        className={cn(
-          "my-4 h-px w-16 bg-gradient-to-r from-gold/50 to-transparent",
-          align === "right" && "md:ml-auto md:bg-gradient-to-l",
-        )}
-      />
-
-      <p
-        className={cn(
-          "font-display text-base text-cream",
-          align === "right" && "md:text-right",
-        )}
-      >
-        {event.venue}
-      </p>
-      {event.venueDetail ? (
-        <p
+      {done ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
           className={cn(
-            "mt-1 font-body text-xs text-muted",
-            align === "right" && "md:text-right",
+            "mt-1.5 flex w-full items-start gap-2 text-left transition hover:opacity-100",
+            align === "right" && "md:flex-row-reverse md:text-right",
           )}
         >
-          {event.venueDetail}
-        </p>
-      ) : null}
-      {event.address ? (
-        <p
-          className={cn(
-            "mt-1 font-body text-xs text-muted",
-            align === "right" && "md:text-right",
-          )}
-        >
-          {event.address}
-        </p>
-      ) : null}
+          <span className="min-w-0 flex-1">
+            <h3
+              className={cn(
+                "font-display text-xl tracking-wide text-cream/75 line-through decoration-gold/30 sm:text-2xl",
+                align === "right" && "md:text-right",
+              )}
+            >
+              {event.name}
+            </h3>
+            <p
+              className={cn(
+                "mt-1 font-display text-base text-gold-soft/85",
+                align === "right" && "md:text-right",
+              )}
+            >
+              {event.date}
+            </p>
+          </span>
+          <ChevronDown
+            size={18}
+            aria-hidden
+            className={cn(
+              "mt-1.5 shrink-0 text-gold/60 transition-transform duration-300",
+              expanded && "rotate-180",
+            )}
+          />
+          <span className="sr-only">
+            {expanded ? "Collapse event details" : "Expand event details"}
+          </span>
+        </button>
+      ) : (
+        <>
+          <h3
+            className={cn(
+              "mt-2 font-display text-2xl tracking-wide text-cream sm:text-3xl",
+              align === "right" && "md:text-right",
+            )}
+          >
+            {event.name}
+          </h3>
+          <p
+            className={cn(
+              "mt-2 font-display text-lg text-gold-soft",
+              align === "right" && "md:text-right",
+            )}
+          >
+            {event.date}
+          </p>
+        </>
+      )}
 
-      <div
-        className={cn(
-          "mt-4 flex flex-col gap-3",
-          align === "right" && "md:items-end",
-        )}
-      >
-        <a
-          href={eventDirectionsUrl(event)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={cn(
-            "inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-[0.2em] text-gold-soft transition hover:text-gold",
-            done && "opacity-80",
-          )}
-        >
-          Get directions
-          <ExternalLink size={12} aria-hidden />
-        </a>
-        {!done ? <AddToCalendar event={event} align={align} /> : null}
-      </div>
+      <AnimatePresence initial={false}>
+        {showDetails ? (
+          <motion.div
+            key="details"
+            initial={done ? { height: 0, opacity: 0 } : false}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <p
+              className={cn(
+                "mt-1 font-body text-sm tracking-wide text-cream/80",
+                align === "right" && "md:text-right",
+              )}
+            >
+              {event.time}
+            </p>
 
-      {event.description ? (
-        <p
-          className={cn(
-            "mt-4 font-body text-sm leading-relaxed text-muted",
-            align === "right" && "md:text-right",
-          )}
-        >
-          {event.description}
-        </p>
-      ) : null}
+            <div
+              className={cn(
+                "my-4 h-px w-16 bg-gradient-to-r from-gold/50 to-transparent",
+                align === "right" && "md:ml-auto md:bg-gradient-to-l",
+              )}
+            />
+
+            <p
+              className={cn(
+                "font-display text-base text-cream",
+                align === "right" && "md:text-right",
+              )}
+            >
+              {event.venue}
+            </p>
+            {event.venueDetail ? (
+              <p
+                className={cn(
+                  "mt-1 font-body text-xs text-muted",
+                  align === "right" && "md:text-right",
+                )}
+              >
+                {event.venueDetail}
+              </p>
+            ) : null}
+            {event.address ? (
+              <p
+                className={cn(
+                  "mt-1 font-body text-xs text-muted",
+                  align === "right" && "md:text-right",
+                )}
+              >
+                {event.address}
+              </p>
+            ) : null}
+
+            <div
+              className={cn(
+                "mt-4 flex flex-col gap-3",
+                align === "right" && "md:items-end",
+              )}
+            >
+              <a
+                href={eventDirectionsUrl(event)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "inline-flex items-center gap-1.5 font-body text-xs uppercase tracking-[0.2em] text-gold-soft transition hover:text-gold",
+                  done && "opacity-80",
+                )}
+              >
+                Get directions
+                <ExternalLink size={12} aria-hidden />
+              </a>
+              {!done ? <AddToCalendar event={event} align={align} /> : null}
+            </div>
+
+            {event.description ? (
+              <p
+                className={cn(
+                  "mt-4 font-body text-sm leading-relaxed text-muted",
+                  align === "right" && "md:text-right",
+                )}
+              >
+                {event.description}
+              </p>
+            ) : null}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </article>
   );
 }
