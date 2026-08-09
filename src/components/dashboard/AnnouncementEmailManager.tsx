@@ -57,7 +57,7 @@ export function AnnouncementEmailManager() {
   const run = async (dryRun: boolean) => {
     const confirmLabel =
       wave === "apology"
-        ? "Send the APOLOGY email now? Main uses Events from the dashboard (including your main Sangeet). Mehfil uses bride Panipat + wedding. New dashboard events are included automatically."
+        ? "Send the APOLOGY email now? Main = Dashboard Events only. Mehfil = bride invite schedule (Panipat + wedding). Main-only events like Roka / 11th Sangeet will not appear on Mehfil."
         : `Send the ${wave === "tomorrow" ? "reminder" : "arrival"} email to all guests (RSVP, stay, wishes, logins) now?`;
     if (!dryRun && !confirm(confirmLabel)) {
       return;
@@ -104,10 +104,10 @@ export function AnnouncementEmailManager() {
             </h3>
           </div>
           <p className="mt-1 max-w-xl font-body text-sm text-muted">
-            Schedules come from the dashboard Events list (plus bride invite
-            events for Mehfil/Laavan). Add or edit an event in Events and it
-            shows in these emails. Main never pulls Mehfil-only bride invite
-            ceremonies — only what you saved on the main Events list.
+            Main emails use Dashboard → Events only (Roka, main Sangeet, Dinner…).
+            Mehfil/Laavan use their invite schedules; dashboard edits apply only
+            when the event has the same name and date as an invite event — main-only
+            events never appear on Mehfil mail.
           </p>
           <p className="mt-2 font-body text-xs text-gold-soft/90">
             Guest rows ready: {previewCount === null ? "…" : previewCount}
@@ -148,7 +148,7 @@ export function AnnouncementEmailManager() {
 
       <p className="mt-3 font-body text-xs text-muted">
         {wave === "apology"
-          ? "Main: apologizes + lists dashboard Events (your main Sangeet included if it’s there). Mehfil: Panipat bride ceremonies + wedding. Laavan: wedding-side invite events."
+          ? "Main: dashboard Events only. Mehfil: Panipat bride ceremonies + wedding (no main-only Roka / 11th Sangeet). Laavan: wedding-side invite events."
           : wave === "tomorrow"
             ? "Subject starts with “Reminder · …” so you can send again tomorrow without colliding with today’s send."
             : "Normal arrival note, still split by invite site — schedule from Events / invite."}
