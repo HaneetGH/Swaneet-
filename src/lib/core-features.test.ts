@@ -45,7 +45,9 @@ import {
 } from "@/lib/calendar";
 import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinerary";
 import {
+  ANNOUNCEMENT_TEST_EMAIL,
   buildAnnouncementEmailParts,
+  isMainAnnouncementTestSubject,
   mergeInviteWithManagedOverrides,
   mergeScheduleEvents,
 } from "@/lib/announcement-email";
@@ -1338,6 +1340,28 @@ describe("arrival announcement email", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]?.time).toBe("9:00 PM");
     expect(merged[0]?.venue).toBe("New Venue");
+  });
+
+  it("recognizes main-schedule test subjects for the test inbox gate", () => {
+    expect(ANNOUNCEMENT_TEST_EMAIL).toBe("haneet555@gmail.com");
+    expect(
+      isMainAnnouncementTestSubject(
+        "[TEST] Apology · we mixed groom & bride events · main Events schedule · #Swaneet",
+        "apology",
+      ),
+    ).toBe(true);
+    expect(
+      isMainAnnouncementTestSubject(
+        "Apology · we mixed groom & bride events · main Events schedule · #Swaneet",
+        "apology",
+      ),
+    ).toBe(false);
+    expect(
+      isMainAnnouncementTestSubject(
+        "[TEST] Apology · we mixed groom & bride events · Mehfil invite schedule · #Swaneet",
+        "apology",
+      ),
+    ).toBe(false);
   });
 
   it("does not leak main-only dashboard events into Mehfil schedule", () => {

@@ -21,6 +21,11 @@ export type AnnouncementWave = "today" | "tomorrow" | "apology";
 
 export type AnnouncementSource = "rsvp" | "stay" | "wish" | "login";
 
+/** Always send a main-schedule test here before blasting main guests. */
+export const ANNOUNCEMENT_TEST_EMAIL = "haneet555@gmail.com";
+
+const TEST_SUBJECT_PREFIX = "[TEST]";
+
 export type AnnouncementRecipient = {
   email: string;
   name: string;
@@ -264,6 +269,71 @@ function announcementSubjectMarker(site: FeatureSite, wave: AnnouncementWave) {
     return wave === "tomorrow" ? "Reminder · Sangeet" : "Sangeet ·";
   }
   return wave === "tomorrow" ? "Reminder · Celebrations begin" : "Celebrations begin";
+}
+
+export function isMainAnnouncementTestSubject(
+  subject: string,
+  wave: AnnouncementWave,
+) {
+  return (
+    subject.includes(TEST_SUBJECT_PREFIX) &&
+    subject.includes(announcementSubjectMarker("main", wave))
+  );
+}
+
+/** True when a successful main-schedule test was already sent for this wave. */
+export async function hasMainAnnouncementTest(
+  wave: AnnouncementWave,
+): Promise<boolean> {
+  const logs = await listEmailLogs();
+  return logs.some(
+    (entry) =>
+      entry.kind === "announcement" &&
+      entry.status === "sent" &&
+      normalizeEmail(entry.to) === ANNOUNCEMENT_TEST_EMAIL &&
+      isMainAnnouncementTestSubject(entry.subject || "", wave),
+  );
+}
+
+/**
+ * Send only the main dashboard schedule to the test inbox.
+ * Always forces delivery (does not use guest already-sent skips).
+ */
+export async function sendMainAnnouncementTest(input: {
+  wave: AnnouncementWave;
+}): Promise<{
+  wave: AnnouncementWave;
+  mode: "test";
+  to: string;
+  site: "main";
+  ok: boolean;
+  subject: string;
+  error?: string;
+}> {
+  const events = await resolveAnnouncementScheduleEvents("main");
+  const parts = buildAnnouncementEmailParts({
+    guestName: "Haneet",
+    wave: input.wave,
+    site: "main",
+    events,
+  });
+  const subject = `${TEST_SUBJECT_PREFIX} ${parts.subject}`;
+  const result = await sendResendEmail({
+    kind: "announcement",
+    to: ANNOUNCEMENT_TEST_EMAIL,
+    subject,
+    text: `[TEST — main schedule only · ${ANNOUNCEMENT_TEST_EMAIL}]\n\n${parts.text}`,
+    html: parts.html,
+  });
+  return {
+    wave: input.wave,
+    mode: "test",
+    to: ANNOUNCEMENT_TEST_EMAIL,
+    site: "main",
+    ok: result.ok,
+    subject,
+    error: result.ok ? undefined : result.error || "Send failed",
+  };
 }
 
 export function buildAnnouncementEmailParts(input: {
@@ -593,6 +663,11 @@ export async function runAnnouncementEmail(input: {
   wave: AnnouncementWave;
   dryRun?: boolean;
   force?: boolean;
+  /**
+   * Full sends that include main guests require a prior successful
+   * sendMainAnnouncementTest for this wave (unless dryRun).
+   */
+  requireMainTest?: boolean;
 }): Promise<{
   wave: AnnouncementWave;
   dryRun: boolean;
@@ -601,6 +676,8 @@ export async function runAnnouncementEmail(input: {
   skipped: number;
   failed: number;
   errors: string[];
+  blocked?: string;
+  mainTestOk?: boolean;
   recipients: Array<{
     email: string;
     name: string;
@@ -612,6 +689,30 @@ export async function runAnnouncementEmail(input: {
   const dryRun = Boolean(input.dryRun);
   const force = Boolean(input.force);
   const recipients = await collectAnnouncementRecipients();
+  const hasMainRecipients = recipients.some((row) => row.site === "main");
+  const mainTestOk = await hasMainAnnouncementTest(input.wave);
+  const requireMainTest = input.requireMainTest !== false;
+
+  if (
+    !dryRun &&
+    requireMainTest &&
+    hasMainRecipients &&
+    !mainTestOk
+  ) {
+    return {
+      wave: input.wave,
+      dryRun: false,
+      recipientCount: recipients.length,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+      mainTestOk: false,
+      blocked: `Send a main-schedule test to ${ANNOUNCEMENT_TEST_EMAIL} first, then send to everyone.`,
+      recipients: [],
+    };
+  }
+
   const waveTag = `announcement:${input.wave}`;
   const scheduleBySite: Record<FeatureSite, ManagedEvent[]> = {
     main: await resolveAnnouncementScheduleEvents("main"),
@@ -722,6 +823,7 @@ export async function runAnnouncementEmail(input: {
     skipped,
     failed,
     errors,
+    mainTestOk,
     recipients: summary,
   };
 }
