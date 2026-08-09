@@ -64,11 +64,6 @@ function eventDedupeKey(event: ManagedEvent): string {
   return `${dateKey}::${event.name.trim().toLowerCase()}`;
 }
 
-/** Bride-side Panipat ceremonies — never list these on main/groom announcement mail. */
-export function isBrideSidePanipatCeremony(event: ManagedEvent): boolean {
-  return /sukhmani|mehndi|jaggo|\bsangeet\b/i.test(event.name);
-}
-
 /**
  * Merge schedule sources. Later arrays win on the same date+name so a
  * dashboard-managed Sangeet replaces the hardcoded bride-invites copy.
@@ -122,11 +117,11 @@ function formatScheduleHtmlRow(event: ManagedEvent): string {
 }
 
 /**
- * Live schedule for announcements (site-scoped — never inject Mehfil/Panipat
- * events into main/groom mail):
- * - main → dashboard / managed events only
- * - mehfil → bride invite events + dashboard events (dashboard wins on clashes)
+ * Live schedule for announcements (site-scoped):
+ * - main → dashboard Events manager only (includes a main-site Sangeet if you added one)
+ * - mehfil → bride invite events + dashboard events (dashboard wins on same date+name)
  * - laavan → laavan invite events + dashboard events
+ * Never inject bride-invite Panipat ceremonies into main mail.
  */
 export async function resolveAnnouncementScheduleEvents(
   site: FeatureSite,
@@ -139,11 +134,7 @@ export async function resolveAnnouncementScheduleEvents(
     brideInvites.find((item) => item.tier === "laavan") ||
     getBrideInvite("swnt-chugh-laavan-p9x4");
 
-  if (site === "main") {
-    return sortEventsByDateTime(
-      managed.filter((event) => !isBrideSidePanipatCeremony(event)),
-    );
-  }
+  if (site === "main") return sortEventsByDateTime(managed);
   if (site === "mehfil") {
     const inviteEvents = mehfilInvite ? eventsForInvite(mehfilInvite) : [];
     return mergeScheduleEvents(inviteEvents, managed);
@@ -288,9 +279,12 @@ export function buildAnnouncementEmailParts(input: {
     subject = includePanipatEvents
       ? `Apology · we mixed groom & bride events · Mehfil schedule · ${wedding.hashtag}`
       : `Apology · we mixed groom & bride events · wedding schedule · ${wedding.hashtag}`;
+    const liveNames = liveEvents.map((event) => event.name).join(", ");
     opening = includePanipatEvents
       ? "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct Mehfil schedule: Panipat celebrations on 9th August (Sukhmani Sahib Path, Mehndi, Jaggo & Sangeet), then wedding celebrations from 11th August in Jagadhri."
-      : "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct wedding schedule from 11th August in Jagadhri (Wedding Dinner on 12th, Anand Karaj & Brunch on 13th).";
+      : liveEvents.length
+        ? `We’re sorry — a recent email mixed up groom and bride events. Please follow this correct schedule from the wedding site: ${liveNames}.`
+        : "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct wedding schedule from 11th August in Jagadhri (Wedding Dinner on 12th, Anand Karaj & Brunch on 13th).";
   } else if (includePanipatEvents) {
     subject =
       input.wave === "tomorrow"

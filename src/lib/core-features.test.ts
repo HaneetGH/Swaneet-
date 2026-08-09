@@ -1252,10 +1252,10 @@ describe("arrival announcement email", () => {
     expect(groom.text).toMatch(/sorry/i);
     expect(groom.text).toMatch(/mixed up groom and bride events/i);
     expect(groom.text).not.toMatch(/not part of your invitation/i);
-    expect(groom.text).not.toMatch(/\bMehndi\b|\bJaggo\b|\bSangeet\b|Sukhmani Sahib/i);
+    // Fallback main schedule has no bride-invite Panipat ceremonies
+    expect(groom.text).not.toMatch(/\bMehndi\b|\bJaggo\b|Sukhmani Sahib/i);
     expect(groom.text).toContain("11th August");
     expect(groom.html).toContain("A sincere apology");
-    expect(groom.html).not.toMatch(/\bMehndi\b|\bJaggo\b|\bSangeet\b|Sukhmani Sahib/i);
 
     const mehfil = buildAnnouncementEmailParts({
       guestName: "Auntie",
@@ -1270,17 +1270,17 @@ describe("arrival announcement email", () => {
     expect(mehfil.html).toContain("Panipat");
   });
 
-  it("does not put dashboard Panipat ceremonies on main apology mail", () => {
+  it("includes a main dashboard Sangeet in main apology mail", () => {
     const managedSangeet: ManagedEvent = {
       id: "event-manual-sangeet",
       name: "Sangeet",
       date: "9th August 2026",
       day: "Sunday Night",
       time: "8:30 PM",
-      venue: "Panipat Club",
+      venue: "Groom Lawn",
       venueDetail: "",
-      address: "Panipat",
-      description: "Manual dashboard Sangeet",
+      address: "Jagadhri",
+      description: "Main-site Sangeet",
       icon: "sun",
     };
     const dinner: ManagedEvent = {
@@ -1299,13 +1299,13 @@ describe("arrival announcement email", () => {
       guestName: "Guest",
       wave: "apology",
       site: "main",
-      events: [managedSangeet, dinner].filter(
-        (event) => !/sukhmani|mehndi|jaggo|\bsangeet\b/i.test(event.name),
-      ),
+      events: [managedSangeet, dinner],
     });
-    expect(mail.text).toContain("Wedding Dinner");
-    expect(mail.text).not.toMatch(/sangeet/i);
-    expect(mail.html).toContain("Maple Garden");
+    expect(mail.text).toContain("Sangeet");
+    expect(mail.text).toContain("8:30 PM");
+    expect(mail.text).toContain("Groom Lawn");
+    expect(mail.text).not.toMatch(/\bMehndi\b|\bJaggo\b/);
+    expect(mail.html).toContain("Groom Lawn");
   });
 
   it("lets a dashboard Sangeet replace the hardcoded bride Sangeet", () => {
