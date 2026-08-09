@@ -429,7 +429,9 @@ export type EmailKind =
   /** @deprecated Use event_digest */
   | "event_thanks"
   /** Evening digest: today + tomorrow in one email */
-  | "event_digest";
+  | "event_digest"
+  /** One-off guest broadcast (RSVP + stay) */
+  | "announcement";
 
 /** Active phase is `digest`. Legacy preview/thanks kept for stored history. */
 export type EventEmailPhase = "digest" | "preview" | "thanks";

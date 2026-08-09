@@ -37,6 +37,7 @@ import { FeatureFlagsManager } from "@/components/dashboard/FeatureFlagsManager"
 import { FacesManager } from "@/components/dashboard/FacesManager";
 import { RsvpBannerManager } from "@/components/dashboard/RsvpBannerManager";
 import { EmailLogManager } from "@/components/dashboard/EmailLogManager";
+import { AnnouncementEmailManager } from "@/components/dashboard/AnnouncementEmailManager";
 import { EventEmailJobsManager } from "@/components/dashboard/EventEmailJobsManager";
 import { EventsManager } from "@/components/dashboard/EventsManager";
 import { GalleryManager } from "@/components/dashboard/GalleryManager";
@@ -728,7 +729,10 @@ export function DashboardShell({
             ) : activeTab === "team" ? (
               <TeamManager />
             ) : activeTab === "updates" ? (
-              <EventEmailJobsManager />
+              <div>
+                <AnnouncementEmailManager />
+                <EventEmailJobsManager />
+              </div>
             ) : activeTab === "emails" ? (
               <EmailLogManager />
             ) : activeTab === "settings" ? (
