@@ -57,7 +57,7 @@ export function AnnouncementEmailManager() {
     if (
       !dryRun &&
       !confirm(
-        `Send the ${wave === "tomorrow" ? "reminder" : "arrival"} email to all RSVP + stay guests now?`,
+        `Send the ${wave === "tomorrow" ? "reminder" : "arrival"} email to all guests (RSVP, stay, wishes, logins) now?`,
       )
     ) {
       return;
@@ -104,10 +104,10 @@ export function AnnouncementEmailManager() {
             </h3>
           </div>
           <p className="mt-1 max-w-xl font-body text-sm text-muted">
-            One-off email to every unique RSVP (not “no”) and stay request (not
-            declined). Copy: celebrations begin from 11th August — please be
-            sure you are with us. No cron needed — send today, then tomorrow’s
-            reminder wave.
+            One-off email to every unique guest with an email: RSVPs (not “no”),
+            stay bookings (not declined), wish senders, and site logins. Copy:
+            celebrations begin from 11th August — please be sure you are with
+            us. No cron — send today, then tomorrow’s reminder wave.
           </p>
           <p className="mt-2 font-body text-xs text-gold-soft/90">
             Unique guests ready:{" "}
