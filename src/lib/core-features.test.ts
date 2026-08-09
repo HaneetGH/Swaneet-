@@ -1241,36 +1241,36 @@ describe("arrival announcement email", () => {
     expect(laavan.text).not.toMatch(/sangeet/i);
   });
 
-  it("builds apology emails with full schedule including Sangeet", () => {
+  it("builds apology emails with site-correct schedules", () => {
     const groom = buildAnnouncementEmailParts({
       guestName: "Uncle",
       wave: "apology",
       site: "main",
     });
-    expect(groom.subject).toContain(
-      "Apology · we mixed groom & bride events · full correct schedule",
-    );
+    expect(groom.subject).toContain("wedding schedule");
+    expect(groom.subject).not.toContain("Mehfil schedule");
     expect(groom.text).toMatch(/sorry/i);
     expect(groom.text).toMatch(/mixed up groom and bride events/i);
     expect(groom.text).not.toMatch(/not part of your invitation/i);
-    expect(groom.text).toContain("Sangeet");
-    expect(groom.text).toContain("Mehndi");
-    expect(groom.text).toContain("Jaggo");
-    expect(groom.text).toContain("Sukhmani");
+    expect(groom.text).not.toMatch(/\bMehndi\b|\bJaggo\b|\bSangeet\b|Sukhmani Sahib/i);
+    expect(groom.text).toContain("11th August");
     expect(groom.html).toContain("A sincere apology");
-    expect(groom.html).toContain("Sangeet");
+    expect(groom.html).not.toMatch(/\bMehndi\b|\bJaggo\b|\bSangeet\b|Sukhmani Sahib/i);
 
     const mehfil = buildAnnouncementEmailParts({
       guestName: "Auntie",
       wave: "apology",
       site: "mehfil",
     });
+    expect(mehfil.subject).toContain("Mehfil schedule");
     expect(mehfil.text).toMatch(/mixed up groom and bride events/i);
     expect(mehfil.text).toContain("Sangeet");
+    expect(mehfil.text).toContain("Mehndi");
+    expect(mehfil.text).toContain("Jaggo");
     expect(mehfil.html).toContain("Panipat");
   });
 
-  it("uses a dashboard-managed Sangeet in the schedule when provided", () => {
+  it("does not put dashboard Panipat ceremonies on main apology mail", () => {
     const managedSangeet: ManagedEvent = {
       id: "event-manual-sangeet",
       name: "Sangeet",
@@ -1299,13 +1299,13 @@ describe("arrival announcement email", () => {
       guestName: "Guest",
       wave: "apology",
       site: "main",
-      events: [managedSangeet, dinner],
+      events: [managedSangeet, dinner].filter(
+        (event) => !/sukhmani|mehndi|jaggo|\bsangeet\b/i.test(event.name),
+      ),
     });
-    expect(mail.text).toContain("Sangeet");
-    expect(mail.text).toContain("8:30 PM");
-    expect(mail.text).toContain("Panipat Club");
-    expect(mail.html).toContain("8:30 PM");
-    expect(mail.html).toContain("Panipat Club");
+    expect(mail.text).toContain("Wedding Dinner");
+    expect(mail.text).not.toMatch(/sangeet/i);
+    expect(mail.html).toContain("Maple Garden");
   });
 
   it("lets a dashboard Sangeet replace the hardcoded bride Sangeet", () => {

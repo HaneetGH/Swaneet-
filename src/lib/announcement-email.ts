@@ -1,5 +1,4 @@
 import {
-  brideEvents,
   brideInvites,
   eventsForInvite,
   getBrideInvite,
@@ -65,6 +64,11 @@ function eventDedupeKey(event: ManagedEvent): string {
   return `${dateKey}::${event.name.trim().toLowerCase()}`;
 }
 
+/** Bride-side Panipat ceremonies — never list these on main/groom announcement mail. */
+export function isBrideSidePanipatCeremony(event: ManagedEvent): boolean {
+  return /sukhmani|mehndi|jaggo|\bsangeet\b/i.test(event.name);
+}
+
 /**
  * Merge schedule sources. Later arrays win on the same date+name so a
  * dashboard-managed Sangeet replaces the hardcoded bride-invites copy.
@@ -118,15 +122,14 @@ function formatScheduleHtmlRow(event: ManagedEvent): string {
 }
 
 /**
- * Live schedule for announcements:
- * - apology → dashboard events + full Mehfil bride list (manual Sangeet included)
+ * Live schedule for announcements (site-scoped — never inject Mehfil/Panipat
+ * events into main/groom mail):
  * - main → dashboard / managed events only
  * - mehfil → bride invite events + dashboard events (dashboard wins on clashes)
  * - laavan → laavan invite events + dashboard events
  */
 export async function resolveAnnouncementScheduleEvents(
   site: FeatureSite,
-  wave: AnnouncementWave,
 ): Promise<ManagedEvent[]> {
   const managed = await listEvents();
   const mehfilInvite =
@@ -136,11 +139,11 @@ export async function resolveAnnouncementScheduleEvents(
     brideInvites.find((item) => item.tier === "laavan") ||
     getBrideInvite("swnt-chugh-laavan-p9x4");
 
-  if (wave === "apology") {
-    const mehfilEvents = mehfilInvite ? eventsForInvite(mehfilInvite) : brideEvents;
-    return mergeScheduleEvents(mehfilEvents, managed);
+  if (site === "main") {
+    return sortEventsByDateTime(
+      managed.filter((event) => !isBrideSidePanipatCeremony(event)),
+    );
   }
-  if (site === "main") return sortEventsByDateTime(managed);
   if (site === "mehfil") {
     const inviteEvents = mehfilInvite ? eventsForInvite(mehfilInvite) : [];
     return mergeScheduleEvents(inviteEvents, managed);
@@ -245,9 +248,11 @@ export async function collectAnnouncementRecipients(): Promise<
 }
 
 function announcementSubjectMarker(site: FeatureSite, wave: AnnouncementWave) {
-  // Distinct from the earlier wedding-only apology subjects so a resend is allowed.
+  // Distinct from earlier apology subjects so a corrected resend is allowed.
   if (wave === "apology") {
-    return "Apology · we mixed groom & bride events · full correct schedule";
+    return announcementIncludesSangeet(site)
+      ? "Apology · we mixed groom & bride events · Mehfil schedule"
+      : "Apology · we mixed groom & bride events · wedding schedule";
   }
   if (announcementIncludesSangeet(site)) {
     return wave === "tomorrow" ? "Reminder · Sangeet" : "Sangeet ·";
@@ -271,17 +276,8 @@ export function buildAnnouncementEmailParts(input: {
   const liveEvents = input.events?.length
     ? sortEventsByDateTime(input.events)
     : [];
-  const hasLiveSangeet = liveEvents.some((event) =>
-    /sangeet/i.test(event.name),
-  );
-  /**
-   * Apology always lists full celebrations. Mehfil gets Panipat events.
-   * If live events include Sangeet (e.g. dashboard-managed), show it too.
-   */
-  const includePanipatEvents =
-    isApology ||
-    announcementIncludesSangeet(site) ||
-    (liveEvents.length > 0 && hasLiveSangeet);
+  /** Panipat bride-side block only for Mehfil — never for main/groom. */
+  const includePanipatEvents = announcementIncludesSangeet(site);
   const greet = input.guestName.trim() || "Friend";
   const siteUrl = siteBaseUrl();
   const venue = wedding.venue.fullAddress;
@@ -289,9 +285,12 @@ export function buildAnnouncementEmailParts(input: {
   let subject: string;
   let opening: string;
   if (isApology) {
-    subject = `Apology · we mixed groom & bride events · full correct schedule · ${wedding.hashtag}`;
-    opening =
-      "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct #Swaneet schedule below (including Panipat celebrations such as Sangeet, then wedding days in Jagadhri).";
+    subject = includePanipatEvents
+      ? `Apology · we mixed groom & bride events · Mehfil schedule · ${wedding.hashtag}`
+      : `Apology · we mixed groom & bride events · wedding schedule · ${wedding.hashtag}`;
+    opening = includePanipatEvents
+      ? "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct Mehfil schedule: Panipat celebrations on 9th August (Sukhmani Sahib Path, Mehndi, Jaggo & Sangeet), then wedding celebrations from 11th August in Jagadhri."
+      : "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct wedding schedule from 11th August in Jagadhri (Wedding Dinner on 12th, Anand Karaj & Brunch on 13th).";
   } else if (includePanipatEvents) {
     subject =
       input.wave === "tomorrow"
@@ -606,30 +605,20 @@ export async function runAnnouncementEmail(input: {
   const recipients = await collectAnnouncementRecipients();
   const waveTag = `announcement:${input.wave}`;
   const scheduleBySite: Record<FeatureSite, ManagedEvent[]> = {
-    main: await resolveAnnouncementScheduleEvents("main", input.wave),
-    mehfil: await resolveAnnouncementScheduleEvents("mehfil", input.wave),
-    laavan: await resolveAnnouncementScheduleEvents("laavan", input.wave),
+    main: await resolveAnnouncementScheduleEvents("main"),
+    mehfil: await resolveAnnouncementScheduleEvents("mehfil"),
+    laavan: await resolveAnnouncementScheduleEvents("laavan"),
   };
 
   /** Keyed by email::site so groom + bride sends for the same inbox stay independent */
   const alreadySent = new Set<string>();
   if (!force) {
     const logs = await listEmailLogs();
-    const marker = announcementSubjectMarker("main", input.wave);
     for (const entry of logs) {
       if (entry.kind !== "announcement" || entry.status !== "sent") continue;
       const email = normalizeEmail(entry.to);
       if (!email) continue;
       const subject = entry.subject || "";
-      if (input.wave === "apology") {
-        // Apology content is the same full schedule for every site — one per inbox.
-        if (subject.includes(marker)) {
-          alreadySent.add(recipientKey(email, "main"));
-          alreadySent.add(recipientKey(email, "mehfil"));
-          alreadySent.add(recipientKey(email, "laavan"));
-        }
-        continue;
-      }
       if (subject.includes(announcementSubjectMarker("mehfil", input.wave))) {
         alreadySent.add(recipientKey(email, "mehfil"));
       }
@@ -654,8 +643,6 @@ export async function runAnnouncementEmail(input: {
     site: FeatureSite;
     skipped?: string;
   }> = [];
-  /** Apology body is identical across sites — only one send per inbox in this run. */
-  const seenEmailThisRun = new Set<string>();
 
   for (const guest of recipients) {
     const key = recipientKey(guest.email, guest.site);
@@ -671,18 +658,6 @@ export async function runAnnouncementEmail(input: {
       continue;
     }
 
-    if (input.wave === "apology" && seenEmailThisRun.has(guest.email)) {
-      skipped += 1;
-      summary.push({
-        email: guest.email,
-        name: guest.name,
-        sources: guest.sources,
-        site: guest.site,
-        skipped: "Same inbox already queued for apology",
-      });
-      continue;
-    }
-
     const parts = buildAnnouncementEmailParts({
       guestName: guest.name,
       wave: input.wave,
@@ -691,7 +666,6 @@ export async function runAnnouncementEmail(input: {
     });
 
     if (dryRun) {
-      if (input.wave === "apology") seenEmailThisRun.add(guest.email);
       summary.push({
         email: guest.email,
         name: guest.name,
@@ -711,7 +685,6 @@ export async function runAnnouncementEmail(input: {
 
     if (result.ok) {
       sent += 1;
-      if (input.wave === "apology") seenEmailThisRun.add(guest.email);
       summary.push({
         email: guest.email,
         name: guest.name,
