@@ -9,7 +9,7 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Master: preview unique RSVP + stay recipients */
+/** Master: preview unique RSVP + stay + wish + login recipients */
 export async function GET() {
   if (!(await requireMaster())) {
     return NextResponse.json({ error: "Master only" }, { status: 403 });
@@ -21,6 +21,7 @@ export async function GET() {
       email: row.email,
       name: row.name,
       sources: row.sources,
+      site: row.site,
     })),
   });
 }
