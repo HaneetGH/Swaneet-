@@ -4,12 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Megaphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Wave = "today" | "tomorrow";
+type Wave = "today" | "tomorrow" | "apology";
 
 type RecipientRow = {
   email: string;
   name: string;
   sources: string[];
+  site?: string;
   skipped?: string;
 };
 
@@ -25,7 +26,7 @@ type RunResult = {
 };
 
 export function AnnouncementEmailManager() {
-  const [wave, setWave] = useState<Wave>("today");
+  const [wave, setWave] = useState<Wave>("apology");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -54,12 +55,11 @@ export function AnnouncementEmailManager() {
   }, [loadCount]);
 
   const run = async (dryRun: boolean) => {
-    if (
-      !dryRun &&
-      !confirm(
-        `Send the ${wave === "tomorrow" ? "reminder" : "arrival"} email to all guests (RSVP, stay, wishes, logins) now?`,
-      )
-    ) {
+    const confirmLabel =
+      wave === "apology"
+        ? "Send the APOLOGY / correct-schedule email to all guests now? Groom gets wedding-only copy; Mehfil gets Sangeet + wedding."
+        : `Send the ${wave === "tomorrow" ? "reminder" : "arrival"} email to all guests (RSVP, stay, wishes, logins) now?`;
+    if (!dryRun && !confirm(confirmLabel)) {
       return;
     }
 
@@ -82,7 +82,7 @@ export function AnnouncementEmailManager() {
       setResult(data);
       setMessage(
         dryRun
-          ? `Dry run ready · ${data.recipientCount} unique guests (${data.skipped} already sent for this wave)`
+          ? `Dry run ready · ${data.recipientCount} guest rows by invite site (${data.skipped} already sent for this wave)`
           : `Sent ${data.sent} · skipped ${data.skipped} · failed ${data.failed}`,
       );
       void loadCount();
@@ -104,14 +104,13 @@ export function AnnouncementEmailManager() {
             </h3>
           </div>
           <p className="mt-1 max-w-xl font-body text-sm text-muted">
-            One-off email to every unique guest with an email: RSVPs (not “no”),
-            stay bookings (not declined), wish senders, and site logins. Copy:
-            celebrations begin from 11th August — please be sure you are with
-            us. No cron — send today, then tomorrow’s reminder wave.
+            Emails are split by invite site. Groom / Laavan never get Mehfil-only
+            events (Sangeet). Use <span className="text-gold-soft">Apology</span>{" "}
+            to correct a mixed send — everyone gets an apology plus their correct
+            schedule.
           </p>
           <p className="mt-2 font-body text-xs text-gold-soft/90">
-            Unique guests ready:{" "}
-            {previewCount === null ? "…" : previewCount}
+            Guest rows ready: {previewCount === null ? "…" : previewCount}
           </p>
         </div>
         <button
@@ -126,6 +125,7 @@ export function AnnouncementEmailManager() {
       <div className="mt-5 flex flex-wrap gap-2">
         {(
           [
+            ["apology", "Apology / correct schedule"],
             ["today", "Send today"],
             ["tomorrow", "Tomorrow reminder"],
           ] as const
@@ -147,9 +147,11 @@ export function AnnouncementEmailManager() {
       </div>
 
       <p className="mt-3 font-body text-xs text-muted">
-        {wave === "tomorrow"
-          ? "Subject starts with “Reminder · …” so you can send again tomorrow without colliding with today’s send."
-          : "Subject: Celebrations begin from 11th August — please be with us."}
+        {wave === "apology"
+          ? "Says sorry for the mix-up. Main/Laavan: wedding from 11th only (no Sangeet). Mehfil: confirms Sangeet + wedding."
+          : wave === "tomorrow"
+            ? "Subject starts with “Reminder · …” so you can send again tomorrow without colliding with today’s send."
+            : "Normal arrival note, still split by invite site."}
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -183,15 +185,20 @@ export function AnnouncementEmailManager() {
               <tr>
                 <th className="px-3 py-2">Guest</th>
                 <th className="px-3 py-2">Email</th>
+                <th className="px-3 py-2">Invite</th>
                 <th className="px-3 py-2">From</th>
                 <th className="px-3 py-2">Note</th>
               </tr>
             </thead>
             <tbody>
               {result.recipients.slice(0, 80).map((row) => (
-                <tr key={row.email} className="border-t border-gold/10">
+                <tr
+                  key={`${row.email}:${row.site || "main"}`}
+                  className="border-t border-gold/10"
+                >
                   <td className="px-3 py-2">{row.name}</td>
                   <td className="px-3 py-2 text-muted">{row.email}</td>
+                  <td className="px-3 py-2 text-muted">{row.site || "main"}</td>
                   <td className="px-3 py-2 text-muted">
                     {row.sources.join(" + ")}
                   </td>
