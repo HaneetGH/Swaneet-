@@ -1,13 +1,21 @@
 import { sendResendEmail } from "@/lib/email";
-import { listAccommodations, listEmailLogs, listRsvps } from "@/lib/store";
+import {
+  listAccommodations,
+  listEmailLogs,
+  listGuestLogins,
+  listGuestMessages,
+  listRsvps,
+} from "@/lib/store";
 import { wedding } from "@/data/wedding";
 
 export type AnnouncementWave = "today" | "tomorrow";
 
+export type AnnouncementSource = "rsvp" | "stay" | "wish" | "login";
+
 export type AnnouncementRecipient = {
   email: string;
   name: string;
-  sources: Array<"rsvp" | "stay">;
+  sources: AnnouncementSource[];
 };
 
 function escapeHtml(value: string) {
@@ -31,53 +39,80 @@ function siteBaseUrl(): string {
   return raw.replace(/\/$/, "");
 }
 
-/** Unique guests from RSVP (not “no”) + stay (not declined). */
+function upsertRecipient(
+  byEmail: Map<string, AnnouncementRecipient>,
+  input: { email?: string | null; name?: string | null; source: AnnouncementSource },
+) {
+  const email = normalizeEmail(input.email);
+  if (!email) return;
+  const name = (input.name || "").trim();
+  const existing = byEmail.get(email);
+  if (existing) {
+    if (!existing.sources.includes(input.source)) {
+      existing.sources.push(input.source);
+    }
+    if ((!existing.name || existing.name === "Guest") && name) {
+      existing.name = name;
+    }
+    return;
+  }
+  byEmail.set(email, {
+    email,
+    name: name || "Guest",
+    sources: [input.source],
+  });
+}
+
+/**
+ * Unique guests with an email from:
+ * RSVP (not “no”), stay (not declined), wishes (real guest posts), and site logins.
+ */
 export async function collectAnnouncementRecipients(): Promise<
   AnnouncementRecipient[]
 > {
-  const [rsvps, stays] = await Promise.all([
+  const [rsvps, stays, wishes, logins] = await Promise.all([
     listRsvps(),
     listAccommodations(),
+    listGuestMessages(),
+    listGuestLogins(),
   ]);
   const byEmail = new Map<string, AnnouncementRecipient>();
 
   for (const rsvp of rsvps) {
     if (rsvp.attendance === "no") continue;
-    const email = normalizeEmail(rsvp.email || rsvp.authEmail);
-    if (!email) continue;
-    const existing = byEmail.get(email);
-    if (existing) {
-      if (!existing.sources.includes("rsvp")) existing.sources.push("rsvp");
-      if (!existing.name.trim() && rsvp.name.trim()) {
-        existing.name = rsvp.name.trim();
-      }
-    } else {
-      byEmail.set(email, {
-        email,
-        name: rsvp.name.trim() || "Guest",
-        sources: ["rsvp"],
-      });
-    }
+    upsertRecipient(byEmail, {
+      email: rsvp.email || rsvp.authEmail,
+      name: rsvp.name,
+      source: "rsvp",
+    });
   }
 
   for (const stay of stays) {
     if (stay.status === "declined") continue;
     if (stay.offerStatus === "declined") continue;
-    const email = normalizeEmail(stay.email || stay.authEmail);
-    if (!email) continue;
-    const existing = byEmail.get(email);
-    if (existing) {
-      if (!existing.sources.includes("stay")) existing.sources.push("stay");
-      if (!existing.name.trim() && stay.name.trim()) {
-        existing.name = stay.name.trim();
-      }
-    } else {
-      byEmail.set(email, {
-        email,
-        name: stay.name.trim() || "Guest",
-        sources: ["stay"],
-      });
-    }
+    upsertRecipient(byEmail, {
+      email: stay.email || stay.authEmail,
+      name: stay.name,
+      source: "stay",
+    });
+  }
+
+  for (const wish of wishes) {
+    if (wish.source === "sample") continue;
+    if (wish.status === "rejected") continue;
+    upsertRecipient(byEmail, {
+      email: wish.authEmail,
+      name: wish.displayName,
+      source: "wish",
+    });
+  }
+
+  for (const login of logins) {
+    upsertRecipient(byEmail, {
+      email: login.email,
+      name: login.name,
+      source: "login",
+    });
   }
 
   return [...byEmail.values()].sort((a, b) =>
