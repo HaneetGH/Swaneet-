@@ -8,6 +8,7 @@ import { FloatingLanterns } from "@/components/effects/FloatingLanterns";
 import { FloatingWishBackdrop, FloatingWishes } from "@/components/effects/FloatingWishes";
 import { Petals } from "@/components/effects/Petals";
 import { Sparkles } from "@/components/effects/Sparkles";
+import { Countdown } from "@/components/sections/Countdown";
 import { MusicToggle } from "@/components/ui/MusicToggle";
 import { useInvite } from "@/lib/invite-context";
 
@@ -50,7 +51,11 @@ export function Hero() {
 
       <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,rgba(7,6,10,0.28)_0%,transparent_42%,rgba(7,6,10,0.5)_72%,rgba(7,6,10,0.92)_100%)]" />
 
-      <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center px-6 pb-16 pt-28 text-center">
+      <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center px-6 pb-16 pt-24 text-center sm:pt-28">
+        <div className="mb-5">
+          <Countdown />
+        </div>
+
         <motion.p
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -153,7 +158,7 @@ export function Hero() {
         </motion.div>
 
         <motion.a
-          href="#countdown"
+          href="#events"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1.35 }}

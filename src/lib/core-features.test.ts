@@ -1277,8 +1277,8 @@ describe("arrival announcement email", () => {
     const managedSangeet: ManagedEvent = {
       id: "event-manual-sangeet",
       name: "Sangeet",
-      date: "9th August 2026",
-      day: "Sunday Night",
+      date: "11th August 2099",
+      day: "Tuesday Night",
       time: "8:30 PM",
       venue: "Groom Lawn",
       venueDetail: "",
