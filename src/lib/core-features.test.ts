@@ -45,7 +45,10 @@ import {
 } from "@/lib/calendar";
 import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinerary";
 import {
+  ANNOUNCEMENT_TEST_EMAIL,
   buildAnnouncementEmailParts,
+  isMainAnnouncementTestSubject,
+  mergeInviteWithManagedOverrides,
   mergeScheduleEvents,
 } from "@/lib/announcement-email";
 import { buildEventEmailParts } from "@/lib/email-event-template";
@@ -1247,8 +1250,8 @@ describe("arrival announcement email", () => {
       wave: "apology",
       site: "main",
     });
-    expect(groom.subject).toContain("wedding schedule");
-    expect(groom.subject).not.toContain("Mehfil schedule");
+    expect(groom.subject).toContain("main Events schedule");
+    expect(groom.subject).not.toContain("Mehfil invite schedule");
     expect(groom.text).toMatch(/sorry/i);
     expect(groom.text).toMatch(/mixed up groom and bride events/i);
     expect(groom.text).not.toMatch(/not part of your invitation/i);
@@ -1262,7 +1265,7 @@ describe("arrival announcement email", () => {
       wave: "apology",
       site: "mehfil",
     });
-    expect(mehfil.subject).toContain("Mehfil schedule");
+    expect(mehfil.subject).toContain("Mehfil invite schedule");
     expect(mehfil.text).toMatch(/mixed up groom and bride events/i);
     expect(mehfil.text).toContain("Sangeet");
     expect(mehfil.text).toContain("Mehndi");
@@ -1337,5 +1340,102 @@ describe("arrival announcement email", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]?.time).toBe("9:00 PM");
     expect(merged[0]?.venue).toBe("New Venue");
+  });
+
+  it("recognizes main-schedule test subjects for the test inbox gate", () => {
+    expect(ANNOUNCEMENT_TEST_EMAIL).toBe("haneet555@gmail.com");
+    expect(
+      isMainAnnouncementTestSubject(
+        "[TEST] Apology · we mixed groom & bride events · main Events schedule · #Swaneet",
+        "apology",
+      ),
+    ).toBe(true);
+    expect(
+      isMainAnnouncementTestSubject(
+        "Apology · we mixed groom & bride events · main Events schedule · #Swaneet",
+        "apology",
+      ),
+    ).toBe(false);
+    expect(
+      isMainAnnouncementTestSubject(
+        "[TEST] Apology · we mixed groom & bride events · Mehfil invite schedule · #Swaneet",
+        "apology",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not leak main-only dashboard events into Mehfil schedule", () => {
+    const mehfilInvite: ManagedEvent[] = [
+      {
+        id: "bride-sangeet",
+        name: "Sangeet",
+        date: "9th August 2026",
+        day: "Sunday Night",
+        time: "8:00 PM",
+        venue: "Panipat",
+        venueDetail: "",
+        address: "",
+        description: "",
+        icon: "sun",
+      },
+      {
+        id: "bride-haldi",
+        name: "Haldi",
+        date: "12th August 2026",
+        day: "Wednesday Morning",
+        time: "9:00 AM",
+        venue: "Maple Garden",
+        venueDetail: "",
+        address: "",
+        description: "",
+        icon: "sun",
+      },
+    ];
+    const managed: ManagedEvent[] = [
+      {
+        id: "event-roka",
+        name: "Roka",
+        date: "14th April 2026",
+        day: "Tuesday",
+        time: "12:00 PM",
+        venue: "Jai Paradise",
+        venueDetail: "",
+        address: "",
+        description: "",
+        icon: "heart",
+      },
+      {
+        id: "event-main-sangeet",
+        name: "Sangeet",
+        date: "11th August 2026",
+        day: "Tuesday",
+        time: "8:00 PM",
+        venue: "HOTEL NG PARADISE",
+        venueDetail: "",
+        address: "",
+        description: "",
+        icon: "sun",
+      },
+      {
+        id: "event-override-sangeet",
+        name: "Sangeet",
+        date: "9th August 2026",
+        day: "Sunday Night",
+        time: "8:15 PM",
+        venue: "Panipat Updated",
+        venueDetail: "",
+        address: "",
+        description: "",
+        icon: "sun",
+      },
+    ];
+    const merged = mergeInviteWithManagedOverrides(mehfilInvite, managed);
+    expect(merged.map((e) => e.name).sort()).toEqual(["Haldi", "Sangeet"]);
+    expect(merged.find((e) => e.name === "Sangeet")?.venue).toBe(
+      "Panipat Updated",
+    );
+    expect(merged.find((e) => e.name === "Sangeet")?.time).toBe("8:15 PM");
+    expect(merged.some((e) => e.name === "Roka")).toBe(false);
+    expect(merged.some((e) => /NG PARADISE/i.test(e.venue))).toBe(false);
   });
 });

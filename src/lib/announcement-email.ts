@@ -21,6 +21,11 @@ export type AnnouncementWave = "today" | "tomorrow" | "apology";
 
 export type AnnouncementSource = "rsvp" | "stay" | "wish" | "login";
 
+/** Always send a main-schedule test here before blasting main guests. */
+export const ANNOUNCEMENT_TEST_EMAIL = "haneet555@gmail.com";
+
+const TEST_SUBJECT_PREFIX = "[TEST]";
+
 export type AnnouncementRecipient = {
   email: string;
   name: string;
@@ -80,6 +85,48 @@ export function mergeScheduleEvents(
   return sortEventsByDateTime([...byKey.values()]);
 }
 
+/**
+ * For bride invites: keep invite events, and only apply dashboard overrides
+ * when date+name already exists on the invite (so main-only events like Roka
+ * or a separate main Sangeet never leak into Mehfil/Laavan mail).
+ */
+export function mergeInviteWithManagedOverrides(
+  inviteEvents: ManagedEvent[],
+  managed: ManagedEvent[],
+): ManagedEvent[] {
+  const inviteKeys = new Set(inviteEvents.map(eventDedupeKey));
+  const overrides = managed.filter((event) =>
+    inviteKeys.has(eventDedupeKey(event)),
+  );
+  return mergeScheduleEvents(inviteEvents, overrides);
+}
+
+/**
+ * Live schedule for announcements (strictly site-scoped):
+ * - main → dashboard Events manager only (Roka, main Sangeet, Dinner, …)
+ * - mehfil → Mehfil invite events only (+ dashboard override if same date+name)
+ * - laavan → Laavan invite events only (+ dashboard override if same date+name)
+ */
+export async function resolveAnnouncementScheduleEvents(
+  site: FeatureSite,
+): Promise<ManagedEvent[]> {
+  const managed = await listEvents();
+  const mehfilInvite =
+    brideInvites.find((item) => item.tier === "mehfil") ||
+    getBrideInvite("swnt-chugh-mehfil-k7m2");
+  const laavanInvite =
+    brideInvites.find((item) => item.tier === "laavan") ||
+    getBrideInvite("swnt-chugh-laavan-p9x4");
+
+  if (site === "main") return sortEventsByDateTime(managed);
+  if (site === "mehfil") {
+    const inviteEvents = mehfilInvite ? eventsForInvite(mehfilInvite) : [];
+    return mergeInviteWithManagedOverrides(inviteEvents, managed);
+  }
+  const inviteEvents = laavanInvite ? eventsForInvite(laavanInvite) : [];
+  return mergeInviteWithManagedOverrides(inviteEvents, managed);
+}
+
 function formatScheduleLine(event: ManagedEvent): string {
   const when = [event.day, event.date].filter(Boolean).join(" · ");
   const place = [event.venue, event.venueDetail]
@@ -114,33 +161,6 @@ function formatScheduleHtmlRow(event: ManagedEvent): string {
                           }
                         </td>
                       </tr>`;
-}
-
-/**
- * Live schedule for announcements (site-scoped):
- * - main → dashboard Events manager only (includes a main-site Sangeet if you added one)
- * - mehfil → bride invite events + dashboard events (dashboard wins on same date+name)
- * - laavan → laavan invite events + dashboard events
- * Never inject bride-invite Panipat ceremonies into main mail.
- */
-export async function resolveAnnouncementScheduleEvents(
-  site: FeatureSite,
-): Promise<ManagedEvent[]> {
-  const managed = await listEvents();
-  const mehfilInvite =
-    brideInvites.find((item) => item.tier === "mehfil") ||
-    getBrideInvite("swnt-chugh-mehfil-k7m2");
-  const laavanInvite =
-    brideInvites.find((item) => item.tier === "laavan") ||
-    getBrideInvite("swnt-chugh-laavan-p9x4");
-
-  if (site === "main") return sortEventsByDateTime(managed);
-  if (site === "mehfil") {
-    const inviteEvents = mehfilInvite ? eventsForInvite(mehfilInvite) : [];
-    return mergeScheduleEvents(inviteEvents, managed);
-  }
-  const inviteEvents = laavanInvite ? eventsForInvite(laavanInvite) : [];
-  return mergeScheduleEvents(inviteEvents, managed);
 }
 
 function upsertRecipient(
@@ -242,13 +262,78 @@ function announcementSubjectMarker(site: FeatureSite, wave: AnnouncementWave) {
   // Distinct from earlier apology subjects so a corrected resend is allowed.
   if (wave === "apology") {
     return announcementIncludesSangeet(site)
-      ? "Apology · we mixed groom & bride events · Mehfil schedule"
-      : "Apology · we mixed groom & bride events · wedding schedule";
+      ? "Apology · we mixed groom & bride events · Mehfil invite schedule"
+      : "Apology · we mixed groom & bride events · main Events schedule";
   }
   if (announcementIncludesSangeet(site)) {
     return wave === "tomorrow" ? "Reminder · Sangeet" : "Sangeet ·";
   }
   return wave === "tomorrow" ? "Reminder · Celebrations begin" : "Celebrations begin";
+}
+
+export function isMainAnnouncementTestSubject(
+  subject: string,
+  wave: AnnouncementWave,
+) {
+  return (
+    subject.includes(TEST_SUBJECT_PREFIX) &&
+    subject.includes(announcementSubjectMarker("main", wave))
+  );
+}
+
+/** True when a successful main-schedule test was already sent for this wave. */
+export async function hasMainAnnouncementTest(
+  wave: AnnouncementWave,
+): Promise<boolean> {
+  const logs = await listEmailLogs();
+  return logs.some(
+    (entry) =>
+      entry.kind === "announcement" &&
+      entry.status === "sent" &&
+      normalizeEmail(entry.to) === ANNOUNCEMENT_TEST_EMAIL &&
+      isMainAnnouncementTestSubject(entry.subject || "", wave),
+  );
+}
+
+/**
+ * Send only the main dashboard schedule to the test inbox.
+ * Always forces delivery (does not use guest already-sent skips).
+ */
+export async function sendMainAnnouncementTest(input: {
+  wave: AnnouncementWave;
+}): Promise<{
+  wave: AnnouncementWave;
+  mode: "test";
+  to: string;
+  site: "main";
+  ok: boolean;
+  subject: string;
+  error?: string;
+}> {
+  const events = await resolveAnnouncementScheduleEvents("main");
+  const parts = buildAnnouncementEmailParts({
+    guestName: "Haneet",
+    wave: input.wave,
+    site: "main",
+    events,
+  });
+  const subject = `${TEST_SUBJECT_PREFIX} ${parts.subject}`;
+  const result = await sendResendEmail({
+    kind: "announcement",
+    to: ANNOUNCEMENT_TEST_EMAIL,
+    subject,
+    text: `[TEST — main schedule only · ${ANNOUNCEMENT_TEST_EMAIL}]\n\n${parts.text}`,
+    html: parts.html,
+  });
+  return {
+    wave: input.wave,
+    mode: "test",
+    to: ANNOUNCEMENT_TEST_EMAIL,
+    site: "main",
+    ok: result.ok,
+    subject,
+    error: result.ok ? undefined : result.error || "Send failed",
+  };
 }
 
 export function buildAnnouncementEmailParts(input: {
@@ -277,8 +362,8 @@ export function buildAnnouncementEmailParts(input: {
   let opening: string;
   if (isApology) {
     subject = includePanipatEvents
-      ? `Apology · we mixed groom & bride events · Mehfil schedule · ${wedding.hashtag}`
-      : `Apology · we mixed groom & bride events · wedding schedule · ${wedding.hashtag}`;
+      ? `Apology · we mixed groom & bride events · Mehfil invite schedule · ${wedding.hashtag}`
+      : `Apology · we mixed groom & bride events · main Events schedule · ${wedding.hashtag}`;
     const liveNames = liveEvents.map((event) => event.name).join(", ");
     opening = includePanipatEvents
       ? "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct Mehfil schedule: Panipat celebrations on 9th August (Sukhmani Sahib Path, Mehndi, Jaggo & Sangeet), then wedding celebrations from 11th August in Jagadhri."
@@ -578,6 +663,11 @@ export async function runAnnouncementEmail(input: {
   wave: AnnouncementWave;
   dryRun?: boolean;
   force?: boolean;
+  /**
+   * Full sends that include main guests require a prior successful
+   * sendMainAnnouncementTest for this wave (unless dryRun).
+   */
+  requireMainTest?: boolean;
 }): Promise<{
   wave: AnnouncementWave;
   dryRun: boolean;
@@ -586,6 +676,8 @@ export async function runAnnouncementEmail(input: {
   skipped: number;
   failed: number;
   errors: string[];
+  blocked?: string;
+  mainTestOk?: boolean;
   recipients: Array<{
     email: string;
     name: string;
@@ -597,6 +689,30 @@ export async function runAnnouncementEmail(input: {
   const dryRun = Boolean(input.dryRun);
   const force = Boolean(input.force);
   const recipients = await collectAnnouncementRecipients();
+  const hasMainRecipients = recipients.some((row) => row.site === "main");
+  const mainTestOk = await hasMainAnnouncementTest(input.wave);
+  const requireMainTest = input.requireMainTest !== false;
+
+  if (
+    !dryRun &&
+    requireMainTest &&
+    hasMainRecipients &&
+    !mainTestOk
+  ) {
+    return {
+      wave: input.wave,
+      dryRun: false,
+      recipientCount: recipients.length,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+      mainTestOk: false,
+      blocked: `Send a main-schedule test to ${ANNOUNCEMENT_TEST_EMAIL} first, then send to everyone.`,
+      recipients: [],
+    };
+  }
+
   const waveTag = `announcement:${input.wave}`;
   const scheduleBySite: Record<FeatureSite, ManagedEvent[]> = {
     main: await resolveAnnouncementScheduleEvents("main"),
@@ -707,6 +823,7 @@ export async function runAnnouncementEmail(input: {
     skipped,
     failed,
     errors,
+    mainTestOk,
     recipients: summary,
   };
 }
