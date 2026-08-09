@@ -5,6 +5,7 @@ import {
 } from "@/data/bride-invites";
 import { wedding } from "@/data/wedding";
 import { parseDisplayDate, sortEventsByDateTime } from "@/lib/datetime";
+import { filterUpcomingEvents } from "@/lib/email-itinerary";
 import { sendResendEmail } from "@/lib/email";
 import { resolveEntryInviteSite } from "@/lib/rsvp-days";
 import {
@@ -106,6 +107,7 @@ export function mergeInviteWithManagedOverrides(
  * - main → dashboard Events manager only (Roka, main Sangeet, Dinner, …)
  * - mehfil → Mehfil invite events only (+ dashboard override if same date+name)
  * - laavan → Laavan invite events only (+ dashboard override if same date+name)
+ * Always drops events that are already done or past.
  */
 export async function resolveAnnouncementScheduleEvents(
   site: FeatureSite,
@@ -118,13 +120,17 @@ export async function resolveAnnouncementScheduleEvents(
     brideInvites.find((item) => item.tier === "laavan") ||
     getBrideInvite("swnt-chugh-laavan-p9x4");
 
-  if (site === "main") return sortEventsByDateTime(managed);
-  if (site === "mehfil") {
+  let events: ManagedEvent[];
+  if (site === "main") {
+    events = sortEventsByDateTime(managed);
+  } else if (site === "mehfil") {
     const inviteEvents = mehfilInvite ? eventsForInvite(mehfilInvite) : [];
-    return mergeInviteWithManagedOverrides(inviteEvents, managed);
+    events = mergeInviteWithManagedOverrides(inviteEvents, managed);
+  } else {
+    const inviteEvents = laavanInvite ? eventsForInvite(laavanInvite) : [];
+    events = mergeInviteWithManagedOverrides(inviteEvents, managed);
   }
-  const inviteEvents = laavanInvite ? eventsForInvite(laavanInvite) : [];
-  return mergeInviteWithManagedOverrides(inviteEvents, managed);
+  return filterUpcomingEvents(events);
 }
 
 function formatScheduleLine(event: ManagedEvent): string {
@@ -350,7 +356,7 @@ export function buildAnnouncementEmailParts(input: {
   const site = input.site || "main";
   const isApology = input.wave === "apology";
   const liveEvents = input.events?.length
-    ? sortEventsByDateTime(input.events)
+    ? filterUpcomingEvents(sortEventsByDateTime(input.events))
     : [];
   /** Panipat bride-side block only for Mehfil — never for main/groom. */
   const includePanipatEvents = announcementIncludesSangeet(site);

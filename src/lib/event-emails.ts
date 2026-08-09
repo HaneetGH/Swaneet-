@@ -9,6 +9,7 @@ import {
   type EventEmailLink,
 } from "@/lib/email-event-template";
 import { sendResendEmail } from "@/lib/email";
+import { filterUpcomingEvents } from "@/lib/email-itinerary";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { absoluteGuestUrl } from "@/lib/guest-paths";
 import {
@@ -269,8 +270,13 @@ export async function planEventEmails(
 
   for (const site of sites) {
     const all = await eventsForSite(site);
-    const todayEvents = eventsOnDate(all, todayDateKey);
-    const tomorrowEvents = eventsOnDate(all, tomorrowDateKey);
+    const todayEvents = eventsOnDate(all, todayDateKey).filter(
+      (event) => !event.done,
+    );
+    // Tomorrow preview should never include finished/past events.
+    const tomorrowEvents = filterUpcomingEvents(
+      eventsOnDate(all, tomorrowDateKey),
+    );
     if (!todayEvents.length && !tomorrowEvents.length) continue;
 
     const todayLabel = displayDayLabel(todayEvents, todayDateKey);
