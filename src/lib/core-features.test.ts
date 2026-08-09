@@ -44,6 +44,7 @@ import {
   parseEventTimeBounds,
 } from "@/lib/calendar";
 import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinerary";
+import { buildAnnouncementEmailParts } from "@/lib/announcement-email";
 import { buildEventEmailParts } from "@/lib/email-event-template";
 import { buildStayConfirmationParts } from "@/lib/email-stay-template";
 import { shiftDateKey, sitesForAudienceScope } from "@/lib/event-emails";
@@ -1182,5 +1183,26 @@ describe("event guest emails", () => {
     expect(digest.html).toContain("Your evening update");
     expect(digest.html).toContain("Today");
     expect(digest.html).toContain("Tomorrow");
+  });
+});
+
+describe("arrival announcement email", () => {
+  it("builds today and tomorrow reminder copy", () => {
+    const today = buildAnnouncementEmailParts({
+      guestName: "Aman",
+      wave: "today",
+    });
+    expect(today.subject).toContain("Celebrations begin from 11th August");
+    expect(today.subject).not.toContain("Reminder ·");
+    expect(today.text).toContain("Dear Aman");
+    expect(today.html).toContain("From 11th August 2026");
+    expect(today.html).toContain("Wedding Dinner");
+
+    const reminder = buildAnnouncementEmailParts({
+      guestName: "Aman",
+      wave: "tomorrow",
+    });
+    expect(reminder.subject).toContain("Reminder ·");
+    expect(reminder.html).toContain("gentle reminder");
   });
 });

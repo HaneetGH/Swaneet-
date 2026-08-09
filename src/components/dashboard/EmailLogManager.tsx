@@ -20,6 +20,7 @@ const KIND_LABELS: Record<EmailKind, string> = {
   event_preview: "Tomorrow’s events (legacy)",
   event_thanks: "Day-end thank you (legacy)",
   event_digest: "Evening digest",
+  announcement: "Arrival announcement",
 };
 
 export function EmailLogManager() {
