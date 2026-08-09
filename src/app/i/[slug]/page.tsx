@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { Footer } from "@/components/layout/Footer";
 import { Navigation } from "@/components/layout/Navigation";
-import { Countdown } from "@/components/sections/Countdown";
 import { Events } from "@/components/sections/Events";
 import { Family } from "@/components/sections/Family";
 import { Gallery } from "@/components/sections/Gallery";
@@ -57,7 +56,6 @@ export default async function BrideInvitePage({ params }: Params) {
         <GuestEngageBanner />
         <DownloadPhotosBanner />
         <RsvpStayBanner />
-        <Countdown />
         <OurStory />
         <Events />
         <Venue />
