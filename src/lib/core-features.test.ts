@@ -1343,7 +1343,7 @@ describe("arrival announcement email", () => {
   });
 
   it("drops already-done events from announcement schedule payloads", () => {
-    const past: ManagedEvent = {
+    const pastMarked: ManagedEvent = {
       id: "roka",
       name: "Roka",
       date: "14th April 2026",
@@ -1355,6 +1355,19 @@ describe("arrival announcement email", () => {
       description: "",
       icon: "heart",
       done: true,
+    };
+    const pastByDate: ManagedEvent = {
+      id: "old-dinner",
+      name: "Engagement dinner",
+      date: "1st January 2020",
+      day: "Wednesday",
+      time: "8:00 PM",
+      venue: "Old Venue",
+      venueDetail: "",
+      address: "",
+      description: "",
+      icon: "heart",
+      // not marked done — still excluded because the date passed
     };
     const upcoming: ManagedEvent = {
       id: "sangeet-main",
@@ -1372,11 +1385,13 @@ describe("arrival announcement email", () => {
       guestName: "Guest",
       wave: "apology",
       site: "main",
-      events: [past, upcoming],
+      events: [pastMarked, pastByDate, upcoming],
     });
     expect(mail.text).not.toContain("Roka");
+    expect(mail.text).not.toContain("Engagement dinner");
     expect(mail.text).toContain("Sangeet");
     expect(mail.html).not.toContain("Jai Paradise");
+    expect(mail.html).not.toContain("Old Venue");
     expect(mail.html).toContain("HOTEL NG PARADISE");
   });
 

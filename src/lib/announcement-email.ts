@@ -355,8 +355,10 @@ export function buildAnnouncementEmailParts(input: {
 }): { subject: string; text: string; html: string } {
   const site = input.site || "main";
   const isApology = input.wave === "apology";
-  const liveEvents = input.events?.length
-    ? filterUpcomingEvents(sortEventsByDateTime(input.events))
+  /** Caller supplied a schedule (even if empty after filtering). */
+  const hasProvidedEvents = Array.isArray(input.events);
+  const liveEvents = hasProvidedEvents
+    ? filterUpcomingEvents(sortEventsByDateTime(input.events || []))
     : [];
   /** Panipat bride-side block only for Mehfil — never for main/groom. */
   const includePanipatEvents = announcementIncludesSangeet(site);
@@ -412,9 +414,13 @@ export function buildAnnouncementEmailParts(input: {
         "13th August (Thursday) — Anand Karaj & Brunch.",
       ];
 
+  // Prefer live upcoming events. If a schedule was provided and everything is
+  // already done/past, show nothing — do not resurrect hardcoded past lines.
   const scheduleLines = liveEvents.length
     ? liveEvents.map(formatScheduleLine)
-    : fallbackScheduleLines;
+    : hasProvidedEvents
+      ? []
+      : fallbackScheduleLines;
 
   const text = [
     `Dear ${greet},`,
@@ -453,7 +459,9 @@ export function buildAnnouncementEmailParts(input: {
 
   const timelineRows = liveEvents.length
     ? liveEvents.map(formatScheduleHtmlRow).join("")
-    : includePanipatEvents
+    : hasProvidedEvents
+      ? ""
+      : includePanipatEvents
       ? `
                       <tr>
                         <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">

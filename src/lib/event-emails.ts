@@ -270,10 +270,10 @@ export async function planEventEmails(
 
   for (const site of sites) {
     const all = await eventsForSite(site);
-    const todayEvents = eventsOnDate(all, todayDateKey).filter(
-      (event) => !event.done,
+    // Drop finished/past events (manual done flag or schedule already passed).
+    const todayEvents = filterUpcomingEvents(
+      eventsOnDate(all, todayDateKey),
     );
-    // Tomorrow preview should never include finished/past events.
     const tomorrowEvents = filterUpcomingEvents(
       eventsOnDate(all, tomorrowDateKey),
     );
