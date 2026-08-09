@@ -1187,32 +1187,54 @@ describe("event guest emails", () => {
 });
 
 describe("arrival announcement email", () => {
-  it("builds today and tomorrow reminder copy", () => {
-    const today = buildAnnouncementEmailParts({
+  it("keeps groom announcements free of bride Sangeet", () => {
+    const groom = buildAnnouncementEmailParts({
       guestName: "Aman",
       wave: "today",
+      site: "main",
     });
-    expect(today.subject).toContain("Sangeet");
-    expect(today.subject).toContain("11th August");
-    expect(today.subject).not.toContain("Reminder ·");
-    expect(today.text).toContain("Dear Aman");
-    expect(today.text).toContain("Sangeet");
-    expect(today.text).toContain("Panipat");
-    expect(today.html).toContain("Sangeet");
-    expect(today.html).toContain("9th August 2026");
-    expect(today.html).toContain("11th August 2026");
-    expect(today.html).toContain("Celebration timeline");
-    expect(today.html).toContain("Wedding dinner");
-    expect(today.html).toContain("Open wedding site");
-    expect(today.html).toContain("linear-gradient");
+    expect(groom.subject).toContain("Celebrations begin from 11th August");
+    expect(groom.subject).not.toContain("Sangeet");
+    expect(groom.subject).not.toContain("Reminder ·");
+    expect(groom.text).toContain("Dear Aman");
+    expect(groom.text).not.toMatch(/sangeet/i);
+    expect(groom.text).not.toMatch(/panipat/i);
+    expect(groom.html).toContain("11th August 2026");
+    expect(groom.html).not.toMatch(/sangeet/i);
+    expect(groom.html).toContain("Celebration timeline");
+    expect(groom.html).toContain("Wedding dinner");
+    expect(groom.html).toContain("Open wedding site");
+    expect(groom.html).toContain("linear-gradient");
 
     const reminder = buildAnnouncementEmailParts({
       guestName: "Aman",
       wave: "tomorrow",
+      site: "main",
     });
     expect(reminder.subject).toContain("Reminder ·");
-    expect(reminder.subject).toContain("Sangeet");
+    expect(reminder.subject).not.toContain("Sangeet");
     expect(reminder.html).toContain("A gentle reminder");
-    expect(reminder.text).toContain("Sangeet");
+    expect(reminder.text).not.toMatch(/sangeet/i);
+  });
+
+  it("includes Sangeet only for mehfil bride guests", () => {
+    const mehfil = buildAnnouncementEmailParts({
+      guestName: "Simran",
+      wave: "today",
+      site: "mehfil",
+    });
+    expect(mehfil.subject).toContain("Sangeet");
+    expect(mehfil.text).toContain("Sangeet");
+    expect(mehfil.text).toContain("Panipat");
+    expect(mehfil.html).toContain("Sangeet");
+    expect(mehfil.html).toContain("9th August 2026");
+
+    const laavan = buildAnnouncementEmailParts({
+      guestName: "Simran",
+      wave: "today",
+      site: "laavan",
+    });
+    expect(laavan.subject).not.toContain("Sangeet");
+    expect(laavan.text).not.toMatch(/sangeet/i);
   });
 });

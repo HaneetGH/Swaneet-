@@ -18,7 +18,7 @@ export type AnnouncementRecipient = {
   email: string;
   name: string;
   sources: AnnouncementSource[];
-  /** Best-known invite surface for digest / cron audience merging */
+  /** Invite surface this copy is for — never mix groom/bride into one send */
   site: FeatureSite;
 };
 
@@ -43,29 +43,29 @@ function siteBaseUrl(): string {
   return raw.replace(/\/$/, "");
 }
 
-function preferSite(current: FeatureSite, next: FeatureSite): FeatureSite {
-  if (current === next) return current;
-  // Prefer a bride invite surface over a default main guess.
-  if (current === "main" && (next === "mehfil" || next === "laavan")) {
-    return next;
-  }
-  return current;
+/** Mehfil invites include Panipat Sangeet; groom/main and laavan do not. */
+export function announcementIncludesSangeet(site: FeatureSite): boolean {
+  return site === "mehfil";
+}
+
+function recipientKey(email: string, site: FeatureSite): string {
+  return `${email}::${site}`;
 }
 
 function upsertRecipient(
-  byEmail: Map<string, AnnouncementRecipient>,
+  byKey: Map<string, AnnouncementRecipient>,
   input: {
     email?: string | null;
     name?: string | null;
     source: AnnouncementSource;
-    site?: FeatureSite;
+    site: FeatureSite;
   },
 ) {
   const email = normalizeEmail(input.email);
   if (!email) return;
   const name = (input.name || "").trim();
-  const site = input.site || "main";
-  const existing = byEmail.get(email);
+  const key = recipientKey(email, input.site);
+  const existing = byKey.get(key);
   if (existing) {
     if (!existing.sources.includes(input.source)) {
       existing.sources.push(input.source);
@@ -73,20 +73,20 @@ function upsertRecipient(
     if ((!existing.name || existing.name === "Guest") && name) {
       existing.name = name;
     }
-    existing.site = preferSite(existing.site, site);
     return;
   }
-  byEmail.set(email, {
+  byKey.set(key, {
     email,
     name: name || "Guest",
     sources: [input.source],
-    site,
+    site: input.site,
   });
 }
 
 /**
- * Unique guests with an email from:
- * RSVP (not “no”), stay (not declined), wishes (real guest posts), and site logins.
+ * Guests with an email, kept separate per invite site so groom and bride
+ * never share one mixed announcement.
+ * Sources: RSVP (not “no”), stay (not declined), wishes, site logins.
  */
 export async function collectAnnouncementRecipients(): Promise<
   AnnouncementRecipient[]
@@ -97,11 +97,11 @@ export async function collectAnnouncementRecipients(): Promise<
     listGuestMessages(),
     listGuestLogins(),
   ]);
-  const byEmail = new Map<string, AnnouncementRecipient>();
+  const byKey = new Map<string, AnnouncementRecipient>();
 
   for (const rsvp of rsvps) {
     if (rsvp.attendance === "no") continue;
-    upsertRecipient(byEmail, {
+    upsertRecipient(byKey, {
       email: rsvp.email || rsvp.authEmail,
       name: rsvp.name,
       source: "rsvp",
@@ -112,7 +112,7 @@ export async function collectAnnouncementRecipients(): Promise<
   for (const stay of stays) {
     if (stay.status === "declined") continue;
     if (stay.offerStatus === "declined") continue;
-    upsertRecipient(byEmail, {
+    upsertRecipient(byKey, {
       email: stay.email || stay.authEmail,
       name: stay.name,
       source: "stay",
@@ -123,7 +123,7 @@ export async function collectAnnouncementRecipients(): Promise<
   for (const wish of wishes) {
     if (wish.source === "sample") continue;
     if (wish.status === "rejected") continue;
-    upsertRecipient(byEmail, {
+    upsertRecipient(byKey, {
       email: wish.authEmail,
       name: wish.displayName,
       source: "wish",
@@ -132,7 +132,7 @@ export async function collectAnnouncementRecipients(): Promise<
   }
 
   for (const login of logins) {
-    upsertRecipient(byEmail, {
+    upsertRecipient(byKey, {
       email: login.email,
       name: login.name,
       source: "login",
@@ -140,32 +140,55 @@ export async function collectAnnouncementRecipients(): Promise<
     });
   }
 
-  return [...byEmail.values()].sort((a, b) =>
-    a.name.localeCompare(b.name, "en"),
-  );
+  return [...byKey.values()].sort((a, b) => {
+    const byName = a.name.localeCompare(b.name, "en");
+    if (byName) return byName;
+    return a.site.localeCompare(b.site);
+  });
+}
+
+function announcementSubjectMarker(site: FeatureSite, wave: AnnouncementWave) {
+  if (announcementIncludesSangeet(site)) {
+    return wave === "tomorrow" ? "Reminder · Sangeet" : "Sangeet ·";
+  }
+  return wave === "tomorrow" ? "Reminder · Celebrations begin" : "Celebrations begin";
 }
 
 export function buildAnnouncementEmailParts(input: {
   guestName: string;
   wave: AnnouncementWave;
+  /** Defaults to main (groom) — no bride-only events */
+  site?: FeatureSite;
 }): { subject: string; text: string; html: string } {
+  const site = input.site || "main";
+  const includeSangeet = announcementIncludesSangeet(site);
   const greet = input.guestName.trim() || "Friend";
   const siteUrl = siteBaseUrl();
   const venue = wedding.venue.fullAddress;
 
-  const subject =
-    input.wave === "tomorrow"
+  const subject = includeSangeet
+    ? input.wave === "tomorrow"
       ? `Reminder · Sangeet & wedding from 11th August — please be with us · ${wedding.hashtag}`
-      : `Sangeet · Wedding from 11th August — please be with us · ${wedding.hashtag}`;
+      : `Sangeet · Wedding from 11th August — please be with us · ${wedding.hashtag}`
+    : input.wave === "tomorrow"
+      ? `Reminder · Celebrations begin from 11th August — please be with us · ${wedding.hashtag}`
+      : `Celebrations begin from 11th August — please be with us · ${wedding.hashtag}`;
 
-  const opening =
-    input.wave === "tomorrow"
+  const opening = includeSangeet
+    ? input.wave === "tomorrow"
       ? "A warm reminder as we get closer — our #Swaneet celebrations include Sangeet on 9th August in Panipat, then wedding days from 11th August. Please make sure you are with us."
-      : "With love from both families — our #Swaneet celebrations include Sangeet on 9th August in Panipat, then wedding days from 11th August. Please make sure you are with us for the days ahead.";
+      : "With love from both families — our #Swaneet celebrations include Sangeet on 9th August in Panipat, then wedding days from 11th August. Please make sure you are with us for the days ahead."
+    : input.wave === "tomorrow"
+      ? "A warm reminder as we get closer — our #Swaneet celebrations begin from 11th August. Please make sure you are with us."
+      : "With love from both families — our #Swaneet celebrations begin from 11th August. Please make sure you are with us for the days ahead.";
 
   const scheduleLines = [
-    "9th August (Sunday night) — Sangeet in Panipat · 8:00 PM.",
-    "From 11th August 2026 — wedding celebrations continue. Kindly plan to be present.",
+    ...(includeSangeet
+      ? ["9th August (Sunday night) — Sangeet in Panipat · 8:00 PM."]
+      : []),
+    includeSangeet
+      ? "From 11th August 2026 — wedding celebrations continue. Kindly plan to be present."
+      : "From 11th August 2026 — wedding celebrations begin. Kindly plan to be present.",
     "12th August (Wednesday night) — Wedding Dinner at Maple Garden.",
     "13th August (Thursday) — Anand Karaj & Brunch.",
   ];
@@ -197,6 +220,29 @@ export function buildAnnouncementEmailParts(input: {
     wedding.venue.mapsUrl ||
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(wedding.venue.mapQuery)}`;
 
+  const heroDates = includeSangeet
+    ? `Sangeet on <strong style="color:#fff8e8;">9th August</strong>
+                · Wedding from <strong style="color:#fff8e8;">11th August 2026</strong>`
+    : `Celebrations begin from <strong style="color:#fff8e8;">11th August 2026</strong>`;
+
+  const sangeetRow = includeSangeet
+    ? `
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Sangeet</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#1a1208;">9th August 2026 · Sunday night</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
+                            Panipat · 8:00 PM — music, dance, and celebration with both families.
+                          </p>
+                        </td>
+                      </tr>`
+    : "";
+
+  const startLabel = includeSangeet ? "Wedding days" : "Start";
+  const startDetail = includeSangeet
+    ? "Wedding celebrations continue in Jagadhri — please be sure you are with us."
+    : "Wedding celebrations begin — please be sure you are with us.";
+
   const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -224,8 +270,7 @@ export function buildAnnouncementEmailParts(input: {
                 ${escapeHtml(headline)}
               </p>
               <p style="margin:10px auto 0;max-width:360px;font-family:Georgia,'Times New Roman',serif;font-size:14px;line-height:1.55;color:#e8d9b5;">
-                Sangeet on <strong style="color:#fff8e8;">9th August</strong>
-                · Wedding from <strong style="color:#fff8e8;">11th August 2026</strong>
+                ${heroDates}
               </p>
             </td>
           </tr>
@@ -255,21 +300,13 @@ export function buildAnnouncementEmailParts(input: {
                 <tr>
                   <td style="padding:8px 12px 16px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      ${sangeetRow}
                       <tr>
                         <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
-                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Sangeet</p>
-                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#1a1208;">9th August 2026 · Sunday night</p>
-                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
-                            Panipat · 8:00 PM — music, dance, and celebration with both families.
-                          </p>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
-                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Wedding days</p>
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">${escapeHtml(startLabel)}</p>
                           <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#1a1208;">11th August 2026</p>
                           <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
-                            Wedding celebrations continue in Jagadhri — please be sure you are with us.
+                            ${escapeHtml(startDetail)}
                           </p>
                         </td>
                       </tr>
@@ -367,28 +404,39 @@ export async function runAnnouncementEmail(input: {
   skipped: number;
   failed: number;
   errors: string[];
-  recipients: Array<{ email: string; name: string; sources: string[]; skipped?: string }>;
+  recipients: Array<{
+    email: string;
+    name: string;
+    sources: string[];
+    site: FeatureSite;
+    skipped?: string;
+  }>;
 }> {
   const dryRun = Boolean(input.dryRun);
   const force = Boolean(input.force);
   const recipients = await collectAnnouncementRecipients();
   const waveTag = `announcement:${input.wave}`;
 
+  /** Keyed by email::site so groom + bride sends for the same inbox stay independent */
   let alreadySent = new Set<string>();
   if (!force) {
     const logs = await listEmailLogs();
-    alreadySent = new Set(
-      logs
-        .filter(
-          (entry) =>
-            entry.kind === "announcement" &&
-            entry.status === "sent" &&
-            entry.subject.includes(
-              input.wave === "tomorrow" ? "Reminder ·" : "Sangeet ·",
-            ),
-        )
-        .map((entry) => normalizeEmail(entry.to)),
-    );
+    for (const entry of logs) {
+      if (entry.kind !== "announcement" || entry.status !== "sent") continue;
+      const email = normalizeEmail(entry.to);
+      if (!email) continue;
+      const subject = entry.subject || "";
+      if (subject.includes(announcementSubjectMarker("mehfil", input.wave))) {
+        alreadySent.add(recipientKey(email, "mehfil"));
+      }
+      if (
+        subject.includes(announcementSubjectMarker("main", input.wave)) ||
+        subject.includes(announcementSubjectMarker("laavan", input.wave))
+      ) {
+        alreadySent.add(recipientKey(email, "main"));
+        alreadySent.add(recipientKey(email, "laavan"));
+      }
+    }
   }
 
   let sent = 0;
@@ -399,17 +447,20 @@ export async function runAnnouncementEmail(input: {
     email: string;
     name: string;
     sources: string[];
+    site: FeatureSite;
     skipped?: string;
   }> = [];
 
   for (const guest of recipients) {
-    if (!force && alreadySent.has(guest.email)) {
+    const key = recipientKey(guest.email, guest.site);
+    if (!force && alreadySent.has(key)) {
       skipped += 1;
       summary.push({
         email: guest.email,
         name: guest.name,
         sources: guest.sources,
-        skipped: `Already sent (${waveTag})`,
+        site: guest.site,
+        skipped: `Already sent (${waveTag}/${guest.site})`,
       });
       continue;
     }
@@ -417,6 +468,7 @@ export async function runAnnouncementEmail(input: {
     const parts = buildAnnouncementEmailParts({
       guestName: guest.name,
       wave: input.wave,
+      site: guest.site,
     });
 
     if (dryRun) {
@@ -424,6 +476,7 @@ export async function runAnnouncementEmail(input: {
         email: guest.email,
         name: guest.name,
         sources: guest.sources,
+        site: guest.site,
       });
       continue;
     }
@@ -442,15 +495,17 @@ export async function runAnnouncementEmail(input: {
         email: guest.email,
         name: guest.name,
         sources: guest.sources,
+        site: guest.site,
       });
     } else {
       failed += 1;
       const message = result.error || "Send failed";
-      errors.push(`${guest.email}: ${message}`);
+      errors.push(`${guest.email} (${guest.site}): ${message}`);
       summary.push({
         email: guest.email,
         name: guest.name,
         sources: guest.sources,
+        site: guest.site,
         skipped: message,
       });
     }

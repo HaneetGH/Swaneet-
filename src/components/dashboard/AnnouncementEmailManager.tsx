@@ -10,6 +10,7 @@ type RecipientRow = {
   email: string;
   name: string;
   sources: string[];
+  site?: string;
   skipped?: string;
 };
 
@@ -183,15 +184,20 @@ export function AnnouncementEmailManager() {
               <tr>
                 <th className="px-3 py-2">Guest</th>
                 <th className="px-3 py-2">Email</th>
+                <th className="px-3 py-2">Invite</th>
                 <th className="px-3 py-2">From</th>
                 <th className="px-3 py-2">Note</th>
               </tr>
             </thead>
             <tbody>
               {result.recipients.slice(0, 80).map((row) => (
-                <tr key={row.email} className="border-t border-gold/10">
+                <tr
+                  key={`${row.email}:${row.site || "main"}`}
+                  className="border-t border-gold/10"
+                >
                   <td className="px-3 py-2">{row.name}</td>
                   <td className="px-3 py-2 text-muted">{row.email}</td>
+                  <td className="px-3 py-2 text-muted">{row.site || "main"}</td>
                   <td className="px-3 py-2 text-muted">
                     {row.sources.join(" + ")}
                   </td>

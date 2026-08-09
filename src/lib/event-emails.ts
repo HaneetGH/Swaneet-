@@ -4,7 +4,6 @@ import {
   getBrideInvite,
 } from "@/data/bride-invites";
 import { parseDisplayDate, sortEventsByDateTime } from "@/lib/datetime";
-import { collectAnnouncementRecipients } from "@/lib/announcement-email";
 import {
   buildEventEmailParts,
   type EventEmailLink,
@@ -38,9 +37,7 @@ export type EventEmailRecipient = {
   email: string;
   name: string;
   site: FeatureSite;
-  rsvpId?: string;
-  /** How this guest was selected for the digest */
-  sources?: Array<"rsvp" | "stay" | "wish" | "login" | "announcement">;
+  rsvpId: string;
 };
 
 export type EventEmailPlan = {
@@ -266,10 +263,7 @@ export async function planEventEmails(
   const tomorrowDateKey = shiftDateKey(asOfDateKey, 1);
 
   const flags = await getFeatureFlags();
-  const [rsvps, announcementGuests] = await Promise.all([
-    listRsvps(),
-    collectAnnouncementRecipients(),
-  ]);
+  const rsvps = await listRsvps();
   const sites = sitesForAudienceScope(options.scope || "all");
   const plans: EventEmailPlan[] = [];
 
@@ -284,6 +278,8 @@ export async function planEventEmails(
     const recipients: EventEmailRecipient[] = [];
     const seen = new Set<string>();
 
+    // Keep digests strictly site-scoped: only RSVPs for this invite surface
+    // who are attending today or tomorrow. Never mix groom/bride audiences.
     for (const rsvp of rsvps) {
       const rsvpSite = resolveEntryInviteSite(rsvp);
       if (rsvpSite !== site) continue;
@@ -300,21 +296,6 @@ export async function planEventEmails(
         name: rsvp.name,
         site: rsvpSite,
         rsvpId: rsvp.id,
-        sources: ["rsvp"],
-      });
-    }
-
-    // Also reach guests from the arrival-announcement audience (stay / wish / login),
-    // not only day-attending RSVPs.
-    for (const guest of announcementGuests) {
-      if (guest.site !== site) continue;
-      if (seen.has(guest.email)) continue;
-      seen.add(guest.email);
-      recipients.push({
-        email: guest.email,
-        name: guest.name,
-        site: guest.site,
-        sources: ["announcement", ...guest.sources],
       });
     }
 
