@@ -57,7 +57,7 @@ export function AnnouncementEmailManager() {
   const run = async (dryRun: boolean) => {
     const confirmLabel =
       wave === "apology"
-        ? "Send the APOLOGY / correct-schedule email to all guests now? Groom gets wedding-only copy; Mehfil gets Sangeet + wedding."
+        ? "Send the APOLOGY email to all guests now? It says we mixed groom & bride events, then lists each guest’s correct schedule."
         : `Send the ${wave === "tomorrow" ? "reminder" : "arrival"} email to all guests (RSVP, stay, wishes, logins) now?`;
     if (!dryRun && !confirm(confirmLabel)) {
       return;
@@ -104,9 +104,9 @@ export function AnnouncementEmailManager() {
             </h3>
           </div>
           <p className="mt-1 max-w-xl font-body text-sm text-muted">
-            Emails are split by invite site. Groom / Laavan never get Mehfil-only
-            events (Sangeet). Use <span className="text-gold-soft">Apology</span>{" "}
-            to correct a mixed send — everyone gets an apology plus their correct
+            Emails are split by invite site so schedules stay correct. Use{" "}
+            <span className="text-gold-soft">Apology</span> if a send mixed groom
+            and bride events — everyone gets a short sorry plus their correct
             schedule.
           </p>
           <p className="mt-2 font-body text-xs text-gold-soft/90">
@@ -148,7 +148,7 @@ export function AnnouncementEmailManager() {
 
       <p className="mt-3 font-body text-xs text-muted">
         {wave === "apology"
-          ? "Says sorry for the mix-up. Main/Laavan: wedding from 11th only (no Sangeet). Mehfil: confirms Sangeet + wedding."
+          ? "Subject: we mixed groom & bride events. Body apologizes, then shows that guest’s correct dates (Mehfil includes Sangeet; others get wedding-from-11th)."
           : wave === "tomorrow"
             ? "Subject starts with “Reminder · …” so you can send again tomorrow without colliding with today’s send."
             : "Normal arrival note, still split by invite site."}
