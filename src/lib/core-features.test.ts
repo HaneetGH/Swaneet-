@@ -1342,6 +1342,59 @@ describe("arrival announcement email", () => {
     expect(merged[0]?.venue).toBe("New Venue");
   });
 
+  it("drops already-done events from announcement schedule payloads", () => {
+    const pastMarked: ManagedEvent = {
+      id: "roka",
+      name: "Roka",
+      date: "14th April 2026",
+      day: "Tuesday",
+      time: "12:00 PM",
+      venue: "Jai Paradise",
+      venueDetail: "",
+      address: "",
+      description: "",
+      icon: "heart",
+      done: true,
+    };
+    const pastByDate: ManagedEvent = {
+      id: "old-dinner",
+      name: "Engagement dinner",
+      date: "1st January 2020",
+      day: "Wednesday",
+      time: "8:00 PM",
+      venue: "Old Venue",
+      venueDetail: "",
+      address: "",
+      description: "",
+      icon: "heart",
+      // not marked done — still excluded because the date passed
+    };
+    const upcoming: ManagedEvent = {
+      id: "sangeet-main",
+      name: "Sangeet",
+      date: "11th August 2099",
+      day: "Tuesday",
+      time: "8:00 PM",
+      venue: "HOTEL NG PARADISE",
+      venueDetail: "",
+      address: "",
+      description: "",
+      icon: "sun",
+    };
+    const mail = buildAnnouncementEmailParts({
+      guestName: "Guest",
+      wave: "apology",
+      site: "main",
+      events: [pastMarked, pastByDate, upcoming],
+    });
+    expect(mail.text).not.toContain("Roka");
+    expect(mail.text).not.toContain("Engagement dinner");
+    expect(mail.text).toContain("Sangeet");
+    expect(mail.html).not.toContain("Jai Paradise");
+    expect(mail.html).not.toContain("Old Venue");
+    expect(mail.html).toContain("HOTEL NG PARADISE");
+  });
+
   it("recognizes main-schedule test subjects for the test inbox gate", () => {
     expect(ANNOUNCEMENT_TEST_EMAIL).toBe("haneet555@gmail.com");
     expect(
