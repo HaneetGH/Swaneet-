@@ -436,7 +436,7 @@ export async function runAnnouncementEmail(input: {
   const waveTag = `announcement:${input.wave}`;
 
   /** Keyed by email::site so groom + bride sends for the same inbox stay independent */
-  let alreadySent = new Set<string>();
+  const alreadySent = new Set<string>();
   if (!force) {
     const logs = await listEmailLogs();
     const marker = announcementSubjectMarker("main", input.wave);
