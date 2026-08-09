@@ -57,7 +57,7 @@ export function AnnouncementEmailManager() {
   const run = async (dryRun: boolean) => {
     const confirmLabel =
       wave === "apology"
-        ? "Send the APOLOGY email to all guests now? It says we mixed groom & bride events, then lists the full schedule (Panipat: Sukhmani, Mehndi, Jaggo, Sangeet + wedding from 11th)."
+        ? "Send the APOLOGY email now? Main uses Events from the dashboard (including your main Sangeet). Mehfil uses bride Panipat + wedding. New dashboard events are included automatically."
         : `Send the ${wave === "tomorrow" ? "reminder" : "arrival"} email to all guests (RSVP, stay, wishes, logins) now?`;
     if (!dryRun && !confirm(confirmLabel)) {
       return;
@@ -104,10 +104,10 @@ export function AnnouncementEmailManager() {
             </h3>
           </div>
           <p className="mt-1 max-w-xl font-body text-sm text-muted">
-            Emails are split by invite site so schedules stay correct. Use{" "}
-            <span className="text-gold-soft">Apology</span> if a send mixed groom
-            and bride events — everyone gets a short sorry plus their correct
-            schedule.
+            Schedules come from the dashboard Events list (plus bride invite
+            events for Mehfil/Laavan). Add or edit an event in Events and it
+            shows in these emails. Main never pulls Mehfil-only bride invite
+            ceremonies — only what you saved on the main Events list.
           </p>
           <p className="mt-2 font-body text-xs text-gold-soft/90">
             Guest rows ready: {previewCount === null ? "…" : previewCount}
@@ -148,10 +148,10 @@ export function AnnouncementEmailManager() {
 
       <p className="mt-3 font-body text-xs text-muted">
         {wave === "apology"
-          ? "Subject: we mixed groom & bride events. Body apologizes, then lists the full schedule — Sukhmani, Mehndi, Jaggo, Sangeet (9th, Panipat) and wedding from 11th."
+          ? "Main: apologizes + lists dashboard Events (your main Sangeet included if it’s there). Mehfil: Panipat bride ceremonies + wedding. Laavan: wedding-side invite events."
           : wave === "tomorrow"
             ? "Subject starts with “Reminder · …” so you can send again tomorrow without colliding with today’s send."
-            : "Normal arrival note, still split by invite site."}
+            : "Normal arrival note, still split by invite site — schedule from Events / invite."}
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
