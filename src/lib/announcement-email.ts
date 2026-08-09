@@ -148,7 +148,7 @@ export async function collectAnnouncementRecipients(): Promise<
 }
 
 function announcementSubjectMarker(site: FeatureSite, wave: AnnouncementWave) {
-  if (wave === "apology") return "Apology · correct schedule";
+  if (wave === "apology") return "Apology · we mixed groom & bride events";
   if (announcementIncludesSangeet(site)) {
     return wave === "tomorrow" ? "Reminder · Sangeet" : "Sangeet ·";
   }
@@ -172,11 +172,11 @@ export function buildAnnouncementEmailParts(input: {
   let opening: string;
   if (isApology) {
     subject = includeSangeet
-      ? `Apology · correct schedule for your invite (incl. Sangeet) · ${wedding.hashtag}`
-      : `Apology · correct schedule for your invite · ${wedding.hashtag}`;
+      ? `Apology · we mixed groom & bride events · your schedule (with Sangeet) · ${wedding.hashtag}`
+      : `Apology · we mixed groom & bride events · your schedule · ${wedding.hashtag}`;
     opening = includeSangeet
-      ? "We’re sorry — a recent email mixed guest lists and may have been confusing. Here is the correct schedule for your Mehfil invite: Sangeet on 9th August in Panipat, then wedding celebrations from 11th August in Jagadhri."
-      : "We’re sorry — a recent email incorrectly mentioned bride-side events (including Sangeet in Panipat) that are not part of your invitation. Please ignore that detail. Here is the correct schedule for your invite: wedding celebrations from 11th August in Jagadhri.";
+      ? "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct schedule: Sangeet on 9th August in Panipat, then wedding celebrations from 11th August in Jagadhri."
+      : "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct schedule: wedding celebrations from 11th August in Jagadhri (Wedding Dinner on 12th, Anand Karaj & Brunch on 13th).";
   } else if (includeSangeet) {
     subject =
       input.wave === "tomorrow"
@@ -447,8 +447,8 @@ export async function runAnnouncementEmail(input: {
       const subject = entry.subject || "";
       if (input.wave === "apology") {
         if (subject.includes(marker)) {
-          // Apology subjects are site-specific; match mehfil vs groom by Sangeet wording.
-          if (subject.includes("incl. Sangeet")) {
+          // Match which schedule variant was sent (with vs without Sangeet).
+          if (/\(with Sangeet\)/i.test(subject)) {
             alreadySent.add(recipientKey(email, "mehfil"));
           } else {
             alreadySent.add(recipientKey(email, "main"));

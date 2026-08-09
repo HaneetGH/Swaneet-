@@ -1244,10 +1244,11 @@ describe("arrival announcement email", () => {
       wave: "apology",
       site: "main",
     });
-    expect(groom.subject).toContain("Apology · correct schedule");
-    expect(groom.subject).not.toContain("incl. Sangeet");
+    expect(groom.subject).toContain("Apology · we mixed groom & bride events");
+    expect(groom.subject).not.toContain("with Sangeet");
     expect(groom.text).toMatch(/sorry/i);
-    expect(groom.text).toMatch(/incorrectly mentioned bride-side/i);
+    expect(groom.text).toMatch(/mixed up groom and bride events/i);
+    expect(groom.text).not.toMatch(/not part of your invitation/i);
     expect(groom.text).not.toContain("Sangeet on 9th");
     expect(groom.html).toContain("A sincere apology");
     expect(groom.html).not.toMatch(/>Sangeet</);
@@ -1257,9 +1258,9 @@ describe("arrival announcement email", () => {
       wave: "apology",
       site: "mehfil",
     });
-    expect(mehfil.subject).toContain("incl. Sangeet");
+    expect(mehfil.subject).toContain("with Sangeet");
     expect(mehfil.text).toMatch(/sorry/i);
+    expect(mehfil.text).toMatch(/mixed up groom and bride events/i);
     expect(mehfil.text).toContain("Sangeet");
-    expect(mehfil.text).toContain("Mehfil");
   });
 });
