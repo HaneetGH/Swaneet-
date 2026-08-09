@@ -165,56 +165,155 @@ export function buildAnnouncementEmailParts(input: {
     wedding.hashtag,
   ].join("\n");
 
+  const headline =
+    input.wave === "tomorrow" ? "A gentle reminder" : "Please be with us";
+  const mapsUrl =
+    wedding.venue.mapsUrl ||
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(wedding.venue.mapQuery)}`;
+
   const html = `
-    <div style="font-family: Georgia, serif; color: #1a1208; line-height: 1.65; max-width: 560px;">
-      <p style="letter-spacing: 0.22em; text-transform: uppercase; font-size: 11px; color: #b8922a; margin: 0 0 8px;">
-        ${escapeHtml(wedding.hashtag)}
-      </p>
-      <h1 style="font-weight: 400; font-size: 28px; margin: 0 0 16px; color: #1a1208;">
-        ${
-          input.wave === "tomorrow"
-            ? "A gentle reminder"
-            : "Please be with us"
-        }
-      </h1>
-      <p>Dear ${escapeHtml(greet)},</p>
-      <p>${escapeHtml(opening)}</p>
-      <div style="margin: 22px 0; border: 1px solid #e8dcc4; border-radius: 16px; overflow: hidden; background: #fffdf8;">
-        <div style="padding: 12px 18px; background: linear-gradient(90deg, #f3e6c8 0%, #faf4e6 100%); border-bottom: 1px solid #e8dcc4;">
-          <p style="margin: 0; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #8a6d24; font-weight: 600;">
-            Important dates
-          </p>
-        </div>
-        <div style="padding: 16px 18px;">
-          <p style="margin: 0 0 12px; font-size: 16px; color: #2a2118;">
-            <strong>From 11th August 2026</strong> — celebrations begin.<br/>
-            <span style="font-size: 14px; color: #6b5c4a;">Please be sure you are here for them.</span>
-          </p>
-          <p style="margin: 0 0 8px; font-size: 15px; color: #2a2118;">
-            <strong>12th August</strong> · Wednesday night · Wedding Dinner
-          </p>
-          <p style="margin: 0; font-size: 15px; color: #2a2118;">
-            <strong>13th August</strong> · Thursday · Anand Karaj &amp; Brunch
-          </p>
-          <p style="margin: 14px 0 0; font-size: 13px; color: #6b5c4a;">
-            ${escapeHtml(venue)}
-          </p>
-        </div>
-      </div>
-      <p>We would love your presence, your blessings, and your smiles. If anything has changed, kindly update your RSVP on the wedding site.</p>
-      <p style="margin: 22px 0 10px;">
-        <a href="${escapeHtml(siteUrl)}"
-           style="display:inline-block;background:#1a1208;color:#f7f1e6;padding:11px 20px;border-radius:999px;text-decoration:none;letter-spacing:0.08em;font-size:12px;text-transform:uppercase;">
-          Open wedding site
-        </a>
-      </p>
-      <p style="margin: 0 0 8px;">
-        <a href="${escapeHtml(`${siteUrl}/wishes`)}" style="color:#8a6d24;">Leave a wish</a>
-        &nbsp;·&nbsp;
-        <a href="${escapeHtml(`${siteUrl}/upload`)}" style="color:#8a6d24;">Upload photos</a>
-      </p>
-      <p style="margin-top: 24px;">With love,<br/>Haneet &amp; Swarandeep<br/>${escapeHtml(wedding.hashtag)}</p>
-    </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:#f3ebe0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3ebe0;padding:28px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#fffdf8;border-radius:24px;overflow:hidden;border:1px solid #e4d4b4;box-shadow:0 12px 40px rgba(80,55,20,0.08);">
+          <tr>
+            <td style="background:linear-gradient(160deg,#1a1208 0%,#3a2a14 48%,#6b4f1f 100%);padding:36px 28px 32px;text-align:center;">
+              <p style="margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.42em;text-transform:uppercase;color:#e8c97a;">
+                ${escapeHtml(wedding.hashtag)}
+              </p>
+              <p style="margin:0 0 6px;font-family:Georgia,'Times New Roman',serif;font-size:34px;line-height:1.15;color:#faf3e4;font-weight:400;">
+                ${escapeHtml(wedding.couple.groom.firstName)}
+                <span style="color:#d4af37;font-size:22px;">&amp;</span>
+                ${escapeHtml(wedding.couple.bride.firstName)}
+              </p>
+              <p style="margin:14px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#f7e7c1;font-weight:400;">
+                ${escapeHtml(headline)}
+              </p>
+              <p style="margin:10px auto 0;max-width:360px;font-family:Georgia,'Times New Roman',serif;font-size:14px;line-height:1.55;color:#e8d9b5;">
+                Celebrations begin from <strong style="color:#fff8e8;">11th August 2026</strong>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="height:4px;background:linear-gradient(90deg,#c9a227,#f0d78c,#c9a227);font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding:30px 28px 8px;font-family:Georgia,'Times New Roman',serif;color:#1a1208;">
+              <p style="margin:0 0 14px;font-size:17px;line-height:1.6;">
+                Dear <span style="color:#8a6d24;">${escapeHtml(greet)}</span>,
+              </p>
+              <p style="margin:0 0 22px;font-size:16px;line-height:1.7;color:#3a3126;">
+                ${escapeHtml(opening)}
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 28px 8px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e8dcc4;border-radius:18px;overflow:hidden;background:#fffaf0;">
+                <tr>
+                  <td style="padding:14px 20px;background:linear-gradient(90deg,#f3e6c8 0%,#faf4e6 100%);border-bottom:1px solid #e8dcc4;">
+                    <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:#8a6d24;font-weight:600;">
+                      Celebration timeline
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 12px 16px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Start</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#1a1208;">11th August 2026</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
+                            Wedding celebrations begin — please be sure you are with us.
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Wedding dinner</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">12th August · Wednesday night</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;">Maple Garden · 8:00 PM onwards</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:14px 12px;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Anand Karaj &amp; brunch</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">13th August · Thursday</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;">Morning ceremonies · blessings &amp; brunch</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 28px 8px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f7f0e4;border-radius:16px;border:1px solid #e8dcc4;">
+                <tr>
+                  <td style="padding:16px 18px;font-family:Georgia,'Times New Roman',serif;">
+                    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:#8a6d24;">Venue</p>
+                    <p style="margin:0;font-size:16px;color:#1a1208;line-height:1.5;">${escapeHtml(venue)}</p>
+                    <p style="margin:10px 0 0;">
+                      <a href="${escapeHtml(mapsUrl)}" style="color:#8a6d24;font-size:14px;text-decoration:underline;">Open in Maps</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 28px 6px;font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:1.7;color:#3a3126;">
+              We would love your presence, your blessings, and your smiles. If anything has changed, kindly update your RSVP on the wedding site.
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:22px 28px 10px;">
+              <a href="${escapeHtml(siteUrl)}"
+                 style="display:inline-block;background:linear-gradient(90deg,#1a1208,#3a2a14);color:#f7f1e6;padding:14px 28px;border-radius:999px;text-decoration:none;letter-spacing:0.14em;font-size:12px;text-transform:uppercase;font-family:Georgia,'Times New Roman',serif;border:1px solid #d4af37;">
+                Open wedding site
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:6px 28px 8px;font-family:Georgia,'Times New Roman',serif;font-size:14px;">
+              <a href="${escapeHtml(`${siteUrl}/wishes`)}" style="color:#8a6d24;text-decoration:none;padding:0 8px;">Leave a wish</a>
+              <span style="color:#d4c4a0;">·</span>
+              <a href="${escapeHtml(`${siteUrl}/upload`)}" style="color:#8a6d24;text-decoration:none;padding:0 8px;">Upload photos</a>
+              <span style="color:#d4c4a0;">·</span>
+              <a href="${escapeHtml(`${siteUrl}/gallery`)}" style="color:#8a6d24;text-decoration:none;padding:0 8px;">Gallery</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 28px 32px;text-align:center;font-family:Georgia,'Times New Roman',serif;">
+              <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:#b8922a;">With love</p>
+              <p style="margin:0;font-size:22px;color:#1a1208;">
+                ${escapeHtml(wedding.couple.groom.firstName)} &amp; ${escapeHtml(wedding.couple.bride.firstName)}
+              </p>
+              <p style="margin:10px 0 0;font-size:13px;letter-spacing:0.2em;color:#8a6d24;">
+                ${escapeHtml(wedding.hashtag)}
+              </p>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:16px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:11px;color:#9a8b76;text-align:center;">
+          You are receiving this because you RSVP’d, booked a stay, left a wish, or joined #Swaneet online.
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
   `;
 
   return { subject, text, html };

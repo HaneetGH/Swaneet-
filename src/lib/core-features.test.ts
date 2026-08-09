@@ -1195,14 +1195,17 @@ describe("arrival announcement email", () => {
     expect(today.subject).toContain("Celebrations begin from 11th August");
     expect(today.subject).not.toContain("Reminder ·");
     expect(today.text).toContain("Dear Aman");
-    expect(today.html).toContain("From 11th August 2026");
-    expect(today.html).toContain("Wedding Dinner");
+    expect(today.html).toContain("11th August 2026");
+    expect(today.html).toContain("Celebration timeline");
+    expect(today.html).toContain("Wedding dinner");
+    expect(today.html).toContain("Open wedding site");
+    expect(today.html).toContain("linear-gradient");
 
     const reminder = buildAnnouncementEmailParts({
       guestName: "Aman",
       wave: "tomorrow",
     });
     expect(reminder.subject).toContain("Reminder ·");
-    expect(reminder.html).toContain("gentle reminder");
+    expect(reminder.html).toContain("A gentle reminder");
   });
 });
