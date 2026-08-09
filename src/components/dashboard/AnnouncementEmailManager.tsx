@@ -57,7 +57,7 @@ export function AnnouncementEmailManager() {
   const run = async (dryRun: boolean) => {
     const confirmLabel =
       wave === "apology"
-        ? "Send the APOLOGY email to all guests now? It says we mixed groom & bride events, then lists each guest’s correct schedule."
+        ? "Send the APOLOGY email to all guests now? It says we mixed groom & bride events, then lists the full schedule (Panipat: Sukhmani, Mehndi, Jaggo, Sangeet + wedding from 11th)."
         : `Send the ${wave === "tomorrow" ? "reminder" : "arrival"} email to all guests (RSVP, stay, wishes, logins) now?`;
     if (!dryRun && !confirm(confirmLabel)) {
       return;
@@ -148,7 +148,7 @@ export function AnnouncementEmailManager() {
 
       <p className="mt-3 font-body text-xs text-muted">
         {wave === "apology"
-          ? "Subject: we mixed groom & bride events. Body apologizes, then shows that guest’s correct dates (Mehfil includes Sangeet; others get wedding-from-11th)."
+          ? "Subject: we mixed groom & bride events. Body apologizes, then lists the full schedule — Sukhmani, Mehndi, Jaggo, Sangeet (9th, Panipat) and wedding from 11th."
           : wave === "tomorrow"
             ? "Subject starts with “Reminder · …” so you can send again tomorrow without colliding with today’s send."
             : "Normal arrival note, still split by invite site."}

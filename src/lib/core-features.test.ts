@@ -1238,29 +1238,32 @@ describe("arrival announcement email", () => {
     expect(laavan.text).not.toMatch(/sangeet/i);
   });
 
-  it("builds apology emails with site-correct schedules", () => {
+  it("builds apology emails with full schedule including Sangeet", () => {
     const groom = buildAnnouncementEmailParts({
       guestName: "Uncle",
       wave: "apology",
       site: "main",
     });
-    expect(groom.subject).toContain("Apology · we mixed groom & bride events");
-    expect(groom.subject).not.toContain("with Sangeet");
+    expect(groom.subject).toContain(
+      "Apology · we mixed groom & bride events · full correct schedule",
+    );
     expect(groom.text).toMatch(/sorry/i);
     expect(groom.text).toMatch(/mixed up groom and bride events/i);
     expect(groom.text).not.toMatch(/not part of your invitation/i);
-    expect(groom.text).not.toContain("Sangeet on 9th");
+    expect(groom.text).toContain("Sangeet");
+    expect(groom.text).toContain("Mehndi");
+    expect(groom.text).toContain("Jaggo");
+    expect(groom.text).toContain("Sukhmani");
     expect(groom.html).toContain("A sincere apology");
-    expect(groom.html).not.toMatch(/>Sangeet</);
+    expect(groom.html).toContain("Sangeet");
 
     const mehfil = buildAnnouncementEmailParts({
       guestName: "Auntie",
       wave: "apology",
       site: "mehfil",
     });
-    expect(mehfil.subject).toContain("with Sangeet");
-    expect(mehfil.text).toMatch(/sorry/i);
     expect(mehfil.text).toMatch(/mixed up groom and bride events/i);
     expect(mehfil.text).toContain("Sangeet");
+    expect(mehfil.html).toContain("Panipat");
   });
 });

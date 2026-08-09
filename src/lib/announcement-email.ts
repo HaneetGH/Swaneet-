@@ -148,7 +148,10 @@ export async function collectAnnouncementRecipients(): Promise<
 }
 
 function announcementSubjectMarker(site: FeatureSite, wave: AnnouncementWave) {
-  if (wave === "apology") return "Apology · we mixed groom & bride events";
+  // Distinct from the earlier wedding-only apology subjects so a resend is allowed.
+  if (wave === "apology") {
+    return "Apology · we mixed groom & bride events · full correct schedule";
+  }
   if (announcementIncludesSangeet(site)) {
     return wave === "tomorrow" ? "Reminder · Sangeet" : "Sangeet ·";
   }
@@ -162,8 +165,14 @@ export function buildAnnouncementEmailParts(input: {
   site?: FeatureSite;
 }): { subject: string; text: string; html: string } {
   const site = input.site || "main";
-  const includeSangeet = announcementIncludesSangeet(site);
   const isApology = input.wave === "apology";
+  /**
+   * Apology always lists the full #Swaneet celebrations (Panipat + Jagadhri),
+   * including Sangeet etc. — not a wedding-only note. Regular waves stay
+   * site-scoped so Mehfil gets Panipat events and groom/main does not.
+   */
+  const includePanipatEvents =
+    isApology || announcementIncludesSangeet(site);
   const greet = input.guestName.trim() || "Friend";
   const siteUrl = siteBaseUrl();
   const venue = wedding.venue.fullAddress;
@@ -171,13 +180,10 @@ export function buildAnnouncementEmailParts(input: {
   let subject: string;
   let opening: string;
   if (isApology) {
-    subject = includeSangeet
-      ? `Apology · we mixed groom & bride events · your schedule (with Sangeet) · ${wedding.hashtag}`
-      : `Apology · we mixed groom & bride events · your schedule · ${wedding.hashtag}`;
-    opening = includeSangeet
-      ? "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct schedule: Sangeet on 9th August in Panipat, then wedding celebrations from 11th August in Jagadhri."
-      : "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct schedule: wedding celebrations from 11th August in Jagadhri (Wedding Dinner on 12th, Anand Karaj & Brunch on 13th).";
-  } else if (includeSangeet) {
+    subject = `Apology · we mixed groom & bride events · full correct schedule · ${wedding.hashtag}`;
+    opening =
+      "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct #Swaneet schedule: Panipat celebrations on 9th August (Sukhmani Sahib Path, Mehndi, Jaggo & Sangeet), then wedding celebrations from 11th August in Jagadhri.";
+  } else if (includePanipatEvents) {
     subject =
       input.wave === "tomorrow"
         ? `Reminder · Sangeet & wedding from 11th August — please be with us · ${wedding.hashtag}`
@@ -197,16 +203,21 @@ export function buildAnnouncementEmailParts(input: {
         : "With love from both families — our #Swaneet celebrations begin from 11th August. Please make sure you are with us for the days ahead.";
   }
 
-  const scheduleLines = [
-    ...(includeSangeet
-      ? ["9th August (Sunday night) — Sangeet in Panipat · 8:00 PM."]
-      : []),
-    includeSangeet
-      ? "From 11th August 2026 — wedding celebrations continue. Kindly plan to be present."
-      : "From 11th August 2026 — wedding celebrations begin. Kindly plan to be present.",
-    "12th August (Wednesday night) — Wedding Dinner at Maple Garden.",
-    "13th August (Thursday) — Anand Karaj & Brunch.",
-  ];
+  const scheduleLines = includePanipatEvents
+    ? [
+        "9th August (Sunday) — Sukhmani Sahib Path in Panipat · 11:00 AM – 1:00 PM.",
+        "9th August (Sunday) — Mehndi in Panipat · 2:00 PM onwards.",
+        "9th August (Sunday night) — Jaggo in Panipat · 7:00 PM.",
+        "9th August (Sunday night) — Sangeet in Panipat · 8:00 PM.",
+        "From 11th August 2026 — wedding celebrations in Jagadhri. Kindly plan to be present.",
+        "12th August (Wednesday night) — Wedding Dinner at Maple Garden.",
+        "13th August (Thursday) — Anand Karaj & Brunch.",
+      ]
+    : [
+        "From 11th August 2026 — wedding celebrations begin. Kindly plan to be present.",
+        "12th August (Wednesday night) — Wedding Dinner at Maple Garden.",
+        "13th August (Thursday) — Anand Karaj & Brunch.",
+      ];
 
   const text = [
     `Dear ${greet},`,
@@ -238,13 +249,40 @@ export function buildAnnouncementEmailParts(input: {
     wedding.venue.mapsUrl ||
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(wedding.venue.mapQuery)}`;
 
-  const heroDates = includeSangeet
-    ? `Sangeet on <strong style="color:#fff8e8;">9th August</strong>
+  const heroDates = includePanipatEvents
+    ? `Panipat on <strong style="color:#fff8e8;">9th August</strong>
                 · Wedding from <strong style="color:#fff8e8;">11th August 2026</strong>`
     : `Celebrations begin from <strong style="color:#fff8e8;">11th August 2026</strong>`;
 
-  const sangeetRow = includeSangeet
+  const panipatRows = includePanipatEvents
     ? `
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Sukhmani Sahib Path</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">9th August 2026 · Sunday</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
+                            Panipat · 11:00 AM – 1:00 PM
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Mehndi</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">9th August 2026 · Sunday</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
+                            Panipat · 2:00 PM onwards
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Jaggo</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">9th August 2026 · Sunday night</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
+                            Panipat · 7:00 PM
+                          </p>
+                        </td>
+                      </tr>
                       <tr>
                         <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
                           <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Sangeet</p>
@@ -256,9 +294,9 @@ export function buildAnnouncementEmailParts(input: {
                       </tr>`
     : "";
 
-  const startLabel = includeSangeet ? "Wedding days" : "Start";
-  const startDetail = includeSangeet
-    ? "Wedding celebrations continue in Jagadhri — please be sure you are with us."
+  const startLabel = includePanipatEvents ? "Wedding days" : "Start";
+  const startDetail = includePanipatEvents
+    ? "Wedding celebrations in Jagadhri — please be sure you are with us."
     : "Wedding celebrations begin — please be sure you are with us.";
 
   const html = `
@@ -318,7 +356,7 @@ export function buildAnnouncementEmailParts(input: {
                 <tr>
                   <td style="padding:8px 12px 16px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                      ${sangeetRow}
+                      ${panipatRows}
                       <tr>
                         <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
                           <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">${escapeHtml(startLabel)}</p>
@@ -446,14 +484,11 @@ export async function runAnnouncementEmail(input: {
       if (!email) continue;
       const subject = entry.subject || "";
       if (input.wave === "apology") {
+        // Apology content is the same full schedule for every site — one per inbox.
         if (subject.includes(marker)) {
-          // Match which schedule variant was sent (with vs without Sangeet).
-          if (/\(with Sangeet\)/i.test(subject)) {
-            alreadySent.add(recipientKey(email, "mehfil"));
-          } else {
-            alreadySent.add(recipientKey(email, "main"));
-            alreadySent.add(recipientKey(email, "laavan"));
-          }
+          alreadySent.add(recipientKey(email, "main"));
+          alreadySent.add(recipientKey(email, "mehfil"));
+          alreadySent.add(recipientKey(email, "laavan"));
         }
         continue;
       }
@@ -481,6 +516,8 @@ export async function runAnnouncementEmail(input: {
     site: FeatureSite;
     skipped?: string;
   }> = [];
+  /** Apology body is identical across sites — only one send per inbox in this run. */
+  const seenEmailThisRun = new Set<string>();
 
   for (const guest of recipients) {
     const key = recipientKey(guest.email, guest.site);
@@ -496,6 +533,18 @@ export async function runAnnouncementEmail(input: {
       continue;
     }
 
+    if (input.wave === "apology" && seenEmailThisRun.has(guest.email)) {
+      skipped += 1;
+      summary.push({
+        email: guest.email,
+        name: guest.name,
+        sources: guest.sources,
+        site: guest.site,
+        skipped: "Same inbox already queued for apology",
+      });
+      continue;
+    }
+
     const parts = buildAnnouncementEmailParts({
       guestName: guest.name,
       wave: input.wave,
@@ -503,6 +552,7 @@ export async function runAnnouncementEmail(input: {
     });
 
     if (dryRun) {
+      if (input.wave === "apology") seenEmailThisRun.add(guest.email);
       summary.push({
         email: guest.email,
         name: guest.name,
@@ -522,6 +572,7 @@ export async function runAnnouncementEmail(input: {
 
     if (result.ok) {
       sent += 1;
+      if (input.wave === "apology") seenEmailThisRun.add(guest.email);
       summary.push({
         email: guest.email,
         name: guest.name,
