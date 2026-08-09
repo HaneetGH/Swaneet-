@@ -4,6 +4,7 @@ import {
   getBrideInvite,
 } from "@/data/bride-invites";
 import { parseDisplayDate, sortEventsByDateTime } from "@/lib/datetime";
+import { collectAnnouncementRecipients } from "@/lib/announcement-email";
 import {
   buildEventEmailParts,
   type EventEmailLink,
@@ -37,7 +38,9 @@ export type EventEmailRecipient = {
   email: string;
   name: string;
   site: FeatureSite;
-  rsvpId: string;
+  rsvpId?: string;
+  /** How this guest was selected for the digest */
+  sources?: Array<"rsvp" | "stay" | "wish" | "login" | "announcement">;
 };
 
 export type EventEmailPlan = {
@@ -263,7 +266,10 @@ export async function planEventEmails(
   const tomorrowDateKey = shiftDateKey(asOfDateKey, 1);
 
   const flags = await getFeatureFlags();
-  const rsvps = await listRsvps();
+  const [rsvps, announcementGuests] = await Promise.all([
+    listRsvps(),
+    collectAnnouncementRecipients(),
+  ]);
   const sites = sitesForAudienceScope(options.scope || "all");
   const plans: EventEmailPlan[] = [];
 
@@ -294,6 +300,21 @@ export async function planEventEmails(
         name: rsvp.name,
         site: rsvpSite,
         rsvpId: rsvp.id,
+        sources: ["rsvp"],
+      });
+    }
+
+    // Also reach guests from the arrival-announcement audience (stay / wish / login),
+    // not only day-attending RSVPs.
+    for (const guest of announcementGuests) {
+      if (guest.site !== site) continue;
+      if (seen.has(guest.email)) continue;
+      seen.add(guest.email);
+      recipients.push({
+        email: guest.email,
+        name: guest.name,
+        site: guest.site,
+        sources: ["announcement", ...guest.sources],
       });
     }
 

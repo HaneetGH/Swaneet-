@@ -1,4 +1,5 @@
 import { sendResendEmail } from "@/lib/email";
+import { resolveEntryInviteSite } from "@/lib/rsvp-days";
 import {
   listAccommodations,
   listEmailLogs,
@@ -6,6 +7,7 @@ import {
   listGuestMessages,
   listRsvps,
 } from "@/lib/store";
+import type { FeatureSite } from "@/lib/types";
 import { wedding } from "@/data/wedding";
 
 export type AnnouncementWave = "today" | "tomorrow";
@@ -16,6 +18,8 @@ export type AnnouncementRecipient = {
   email: string;
   name: string;
   sources: AnnouncementSource[];
+  /** Best-known invite surface for digest / cron audience merging */
+  site: FeatureSite;
 };
 
 function escapeHtml(value: string) {
@@ -39,13 +43,28 @@ function siteBaseUrl(): string {
   return raw.replace(/\/$/, "");
 }
 
+function preferSite(current: FeatureSite, next: FeatureSite): FeatureSite {
+  if (current === next) return current;
+  // Prefer a bride invite surface over a default main guess.
+  if (current === "main" && (next === "mehfil" || next === "laavan")) {
+    return next;
+  }
+  return current;
+}
+
 function upsertRecipient(
   byEmail: Map<string, AnnouncementRecipient>,
-  input: { email?: string | null; name?: string | null; source: AnnouncementSource },
+  input: {
+    email?: string | null;
+    name?: string | null;
+    source: AnnouncementSource;
+    site?: FeatureSite;
+  },
 ) {
   const email = normalizeEmail(input.email);
   if (!email) return;
   const name = (input.name || "").trim();
+  const site = input.site || "main";
   const existing = byEmail.get(email);
   if (existing) {
     if (!existing.sources.includes(input.source)) {
@@ -54,12 +73,14 @@ function upsertRecipient(
     if ((!existing.name || existing.name === "Guest") && name) {
       existing.name = name;
     }
+    existing.site = preferSite(existing.site, site);
     return;
   }
   byEmail.set(email, {
     email,
     name: name || "Guest",
     sources: [input.source],
+    site,
   });
 }
 
@@ -84,6 +105,7 @@ export async function collectAnnouncementRecipients(): Promise<
       email: rsvp.email || rsvp.authEmail,
       name: rsvp.name,
       source: "rsvp",
+      site: resolveEntryInviteSite(rsvp),
     });
   }
 
@@ -94,6 +116,7 @@ export async function collectAnnouncementRecipients(): Promise<
       email: stay.email || stay.authEmail,
       name: stay.name,
       source: "stay",
+      site: resolveEntryInviteSite(stay),
     });
   }
 
@@ -104,6 +127,7 @@ export async function collectAnnouncementRecipients(): Promise<
       email: wish.authEmail,
       name: wish.displayName,
       source: "wish",
+      site: resolveEntryInviteSite(wish),
     });
   }
 
@@ -112,6 +136,7 @@ export async function collectAnnouncementRecipients(): Promise<
       email: login.email,
       name: login.name,
       source: "login",
+      site: resolveEntryInviteSite(login),
     });
   }
 
@@ -130,16 +155,17 @@ export function buildAnnouncementEmailParts(input: {
 
   const subject =
     input.wave === "tomorrow"
-      ? `Reminder · Celebrations begin from 11th August — please be with us · ${wedding.hashtag}`
-      : `Celebrations begin from 11th August — please be with us · ${wedding.hashtag}`;
+      ? `Reminder · Sangeet & wedding from 11th August — please be with us · ${wedding.hashtag}`
+      : `Sangeet · Wedding from 11th August — please be with us · ${wedding.hashtag}`;
 
   const opening =
     input.wave === "tomorrow"
-      ? "A warm reminder as we get closer — our #Swaneet celebrations begin from 11th August. Please make sure you are with us."
-      : "With love from both families — our #Swaneet celebrations begin from 11th August. Please make sure you are with us for the days ahead.";
+      ? "A warm reminder as we get closer — our #Swaneet celebrations include Sangeet on 9th August in Panipat, then wedding days from 11th August. Please make sure you are with us."
+      : "With love from both families — our #Swaneet celebrations include Sangeet on 9th August in Panipat, then wedding days from 11th August. Please make sure you are with us for the days ahead.";
 
   const scheduleLines = [
-    "From 11th August 2026 — wedding celebrations begin. Kindly plan to be present.",
+    "9th August (Sunday night) — Sangeet in Panipat · 8:00 PM.",
+    "From 11th August 2026 — wedding celebrations continue. Kindly plan to be present.",
     "12th August (Wednesday night) — Wedding Dinner at Maple Garden.",
     "13th August (Thursday) — Anand Karaj & Brunch.",
   ];
@@ -198,7 +224,8 @@ export function buildAnnouncementEmailParts(input: {
                 ${escapeHtml(headline)}
               </p>
               <p style="margin:10px auto 0;max-width:360px;font-family:Georgia,'Times New Roman',serif;font-size:14px;line-height:1.55;color:#e8d9b5;">
-                Celebrations begin from <strong style="color:#fff8e8;">11th August 2026</strong>
+                Sangeet on <strong style="color:#fff8e8;">9th August</strong>
+                · Wedding from <strong style="color:#fff8e8;">11th August 2026</strong>
               </p>
             </td>
           </tr>
@@ -230,10 +257,19 @@ export function buildAnnouncementEmailParts(input: {
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                       <tr>
                         <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
-                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Start</p>
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Sangeet</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#1a1208;">9th August 2026 · Sunday night</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
+                            Panipat · 8:00 PM — music, dance, and celebration with both families.
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Wedding days</p>
                           <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#1a1208;">11th August 2026</p>
                           <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
-                            Wedding celebrations begin — please be sure you are with us.
+                            Wedding celebrations continue in Jagadhri — please be sure you are with us.
                           </p>
                         </td>
                       </tr>
@@ -348,7 +384,7 @@ export async function runAnnouncementEmail(input: {
             entry.kind === "announcement" &&
             entry.status === "sent" &&
             entry.subject.includes(
-              input.wave === "tomorrow" ? "Reminder ·" : "Celebrations begin",
+              input.wave === "tomorrow" ? "Reminder ·" : "Sangeet ·",
             ),
         )
         .map((entry) => normalizeEmail(entry.to)),
