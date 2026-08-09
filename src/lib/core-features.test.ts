@@ -44,7 +44,10 @@ import {
   parseEventTimeBounds,
 } from "@/lib/calendar";
 import { formatEventsItinerary, filterUpcomingEvents } from "@/lib/email-itinerary";
-import { buildAnnouncementEmailParts } from "@/lib/announcement-email";
+import {
+  buildAnnouncementEmailParts,
+  mergeScheduleEvents,
+} from "@/lib/announcement-email";
 import { buildEventEmailParts } from "@/lib/email-event-template";
 import { buildStayConfirmationParts } from "@/lib/email-stay-template";
 import { shiftDateKey, sitesForAudienceScope } from "@/lib/event-emails";
@@ -1265,5 +1268,74 @@ describe("arrival announcement email", () => {
     expect(mehfil.text).toMatch(/mixed up groom and bride events/i);
     expect(mehfil.text).toContain("Sangeet");
     expect(mehfil.html).toContain("Panipat");
+  });
+
+  it("uses a dashboard-managed Sangeet in the schedule when provided", () => {
+    const managedSangeet: ManagedEvent = {
+      id: "event-manual-sangeet",
+      name: "Sangeet",
+      date: "9th August 2026",
+      day: "Sunday Night",
+      time: "8:30 PM",
+      venue: "Panipat Club",
+      venueDetail: "",
+      address: "Panipat",
+      description: "Manual dashboard Sangeet",
+      icon: "sun",
+    };
+    const dinner: ManagedEvent = {
+      id: "wedding-dinner",
+      name: "Wedding Dinner",
+      date: "12th August 2026",
+      day: "Wednesday Night",
+      time: "8:00 PM Onwards",
+      venue: "Maple Garden",
+      venueDetail: "",
+      address: "Jagadhri",
+      description: "",
+      icon: "moon",
+    };
+    const mail = buildAnnouncementEmailParts({
+      guestName: "Guest",
+      wave: "apology",
+      site: "main",
+      events: [managedSangeet, dinner],
+    });
+    expect(mail.text).toContain("Sangeet");
+    expect(mail.text).toContain("8:30 PM");
+    expect(mail.text).toContain("Panipat Club");
+    expect(mail.html).toContain("8:30 PM");
+    expect(mail.html).toContain("Panipat Club");
+  });
+
+  it("lets a dashboard Sangeet replace the hardcoded bride Sangeet", () => {
+    const hardcoded: ManagedEvent = {
+      id: "bride-sangeet",
+      name: "Sangeet",
+      date: "9th August 2026",
+      day: "Sunday Night",
+      time: "8:00 PM",
+      venue: "Panipat",
+      venueDetail: "",
+      address: "",
+      description: "",
+      icon: "sun",
+    };
+    const managed: ManagedEvent = {
+      id: "event-1",
+      name: "Sangeet",
+      date: "9th August 2026",
+      day: "Sunday Night",
+      time: "9:00 PM",
+      venue: "New Venue",
+      venueDetail: "",
+      address: "",
+      description: "",
+      icon: "sun",
+    };
+    const merged = mergeScheduleEvents([hardcoded], [managed]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.time).toBe("9:00 PM");
+    expect(merged[0]?.venue).toBe("New Venue");
   });
 });

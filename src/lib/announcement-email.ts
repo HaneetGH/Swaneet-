@@ -1,14 +1,22 @@
+import {
+  brideEvents,
+  brideInvites,
+  eventsForInvite,
+  getBrideInvite,
+} from "@/data/bride-invites";
+import { wedding } from "@/data/wedding";
+import { parseDisplayDate, sortEventsByDateTime } from "@/lib/datetime";
 import { sendResendEmail } from "@/lib/email";
 import { resolveEntryInviteSite } from "@/lib/rsvp-days";
 import {
   listAccommodations,
   listEmailLogs,
+  listEvents,
   listGuestLogins,
   listGuestMessages,
   listRsvps,
 } from "@/lib/store";
-import type { FeatureSite } from "@/lib/types";
-import { wedding } from "@/data/wedding";
+import type { FeatureSite, ManagedEvent } from "@/lib/types";
 
 export type AnnouncementWave = "today" | "tomorrow" | "apology";
 
@@ -50,6 +58,95 @@ export function announcementIncludesSangeet(site: FeatureSite): boolean {
 
 function recipientKey(email: string, site: FeatureSite): string {
   return `${email}::${site}`;
+}
+
+function eventDedupeKey(event: ManagedEvent): string {
+  const dateKey = parseDisplayDate(event.date) || event.date.trim().toLowerCase();
+  return `${dateKey}::${event.name.trim().toLowerCase()}`;
+}
+
+/**
+ * Merge schedule sources. Later arrays win on the same date+name so a
+ * dashboard-managed Sangeet replaces the hardcoded bride-invites copy.
+ */
+export function mergeScheduleEvents(
+  ...groups: ManagedEvent[][]
+): ManagedEvent[] {
+  const byKey = new Map<string, ManagedEvent>();
+  for (const group of groups) {
+    for (const event of group) {
+      byKey.set(eventDedupeKey(event), event);
+    }
+  }
+  return sortEventsByDateTime([...byKey.values()]);
+}
+
+function formatScheduleLine(event: ManagedEvent): string {
+  const when = [event.day, event.date].filter(Boolean).join(" · ");
+  const place = [event.venue, event.venueDetail]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(" · ");
+  const bits = [
+    when || event.date,
+    `— ${event.name}`,
+    place ? `at ${place}` : null,
+    event.time?.trim() ? `· ${event.time.trim()}` : null,
+  ].filter(Boolean);
+  return `${bits.join(" ")}.`;
+}
+
+function formatScheduleHtmlRow(event: ManagedEvent): string {
+  const when = [event.day, event.date].filter(Boolean).join(" · ");
+  const place = [event.venue, event.venueDetail]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(" · ");
+  const detail = [place, event.time?.trim()].filter(Boolean).join(" · ");
+  return `
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">${escapeHtml(event.name)}</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">${escapeHtml(when || event.date)}</p>
+                          ${
+                            detail
+                              ? `<p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">${escapeHtml(detail)}</p>`
+                              : ""
+                          }
+                        </td>
+                      </tr>`;
+}
+
+/**
+ * Live schedule for announcements:
+ * - apology → dashboard events + full Mehfil bride list (manual Sangeet included)
+ * - main → dashboard / managed events only
+ * - mehfil → bride invite events + dashboard events (dashboard wins on clashes)
+ * - laavan → laavan invite events + dashboard events
+ */
+export async function resolveAnnouncementScheduleEvents(
+  site: FeatureSite,
+  wave: AnnouncementWave,
+): Promise<ManagedEvent[]> {
+  const managed = await listEvents();
+  const mehfilInvite =
+    brideInvites.find((item) => item.tier === "mehfil") ||
+    getBrideInvite("swnt-chugh-mehfil-k7m2");
+  const laavanInvite =
+    brideInvites.find((item) => item.tier === "laavan") ||
+    getBrideInvite("swnt-chugh-laavan-p9x4");
+
+  if (wave === "apology") {
+    const mehfilEvents = mehfilInvite ? eventsForInvite(mehfilInvite) : brideEvents;
+    return mergeScheduleEvents(mehfilEvents, managed);
+  }
+  if (site === "main") return sortEventsByDateTime(managed);
+  if (site === "mehfil") {
+    const inviteEvents = mehfilInvite ? eventsForInvite(mehfilInvite) : [];
+    return mergeScheduleEvents(inviteEvents, managed);
+  }
+  const inviteEvents = laavanInvite ? eventsForInvite(laavanInvite) : [];
+  return mergeScheduleEvents(inviteEvents, managed);
 }
 
 function upsertRecipient(
@@ -163,16 +260,28 @@ export function buildAnnouncementEmailParts(input: {
   wave: AnnouncementWave;
   /** Defaults to main (groom) — no bride-only events */
   site?: FeatureSite;
+  /**
+   * Live events (dashboard + invite). When provided, schedule/timeline are
+   * built from these so a manually created Sangeet appears in the email.
+   */
+  events?: ManagedEvent[];
 }): { subject: string; text: string; html: string } {
   const site = input.site || "main";
   const isApology = input.wave === "apology";
+  const liveEvents = input.events?.length
+    ? sortEventsByDateTime(input.events)
+    : [];
+  const hasLiveSangeet = liveEvents.some((event) =>
+    /sangeet/i.test(event.name),
+  );
   /**
-   * Apology always lists the full #Swaneet celebrations (Panipat + Jagadhri),
-   * including Sangeet etc. — not a wedding-only note. Regular waves stay
-   * site-scoped so Mehfil gets Panipat events and groom/main does not.
+   * Apology always lists full celebrations. Mehfil gets Panipat events.
+   * If live events include Sangeet (e.g. dashboard-managed), show it too.
    */
   const includePanipatEvents =
-    isApology || announcementIncludesSangeet(site);
+    isApology ||
+    announcementIncludesSangeet(site) ||
+    (liveEvents.length > 0 && hasLiveSangeet);
   const greet = input.guestName.trim() || "Friend";
   const siteUrl = siteBaseUrl();
   const venue = wedding.venue.fullAddress;
@@ -182,7 +291,7 @@ export function buildAnnouncementEmailParts(input: {
   if (isApology) {
     subject = `Apology · we mixed groom & bride events · full correct schedule · ${wedding.hashtag}`;
     opening =
-      "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct #Swaneet schedule: Panipat celebrations on 9th August (Sukhmani Sahib Path, Mehndi, Jaggo & Sangeet), then wedding celebrations from 11th August in Jagadhri.";
+      "We’re sorry — a recent email mixed up groom and bride events. Please follow this correct #Swaneet schedule below (including Panipat celebrations such as Sangeet, then wedding days in Jagadhri).";
   } else if (includePanipatEvents) {
     subject =
       input.wave === "tomorrow"
@@ -203,7 +312,7 @@ export function buildAnnouncementEmailParts(input: {
         : "With love from both families — our #Swaneet celebrations begin from 11th August. Please make sure you are with us for the days ahead.";
   }
 
-  const scheduleLines = includePanipatEvents
+  const fallbackScheduleLines = includePanipatEvents
     ? [
         "9th August (Sunday) — Sukhmani Sahib Path in Panipat · 11:00 AM – 1:00 PM.",
         "9th August (Sunday) — Mehndi in Panipat · 2:00 PM onwards.",
@@ -218,6 +327,10 @@ export function buildAnnouncementEmailParts(input: {
         "12th August (Wednesday night) — Wedding Dinner at Maple Garden.",
         "13th August (Thursday) — Anand Karaj & Brunch.",
       ];
+
+  const scheduleLines = liveEvents.length
+    ? liveEvents.map(formatScheduleLine)
+    : fallbackScheduleLines;
 
   const text = [
     `Dear ${greet},`,
@@ -254,8 +367,10 @@ export function buildAnnouncementEmailParts(input: {
                 · Wedding from <strong style="color:#fff8e8;">11th August 2026</strong>`
     : `Celebrations begin from <strong style="color:#fff8e8;">11th August 2026</strong>`;
 
-  const panipatRows = includePanipatEvents
-    ? `
+  const timelineRows = liveEvents.length
+    ? liveEvents.map(formatScheduleHtmlRow).join("")
+    : includePanipatEvents
+      ? `
                       <tr>
                         <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
                           <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Sukhmani Sahib Path</p>
@@ -291,13 +406,54 @@ export function buildAnnouncementEmailParts(input: {
                             Panipat · 8:00 PM — music, dance, and celebration with both families.
                           </p>
                         </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Wedding days</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#1a1208;">11th August 2026</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
+                            Wedding celebrations in Jagadhri — please be sure you are with us.
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Wedding dinner</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">12th August · Wednesday night</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;">Maple Garden · 8:00 PM onwards</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:14px 12px;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Anand Karaj &amp; brunch</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">13th August · Thursday</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;">Morning ceremonies · blessings &amp; brunch</p>
+                        </td>
                       </tr>`
-    : "";
-
-  const startLabel = includePanipatEvents ? "Wedding days" : "Start";
-  const startDetail = includePanipatEvents
-    ? "Wedding celebrations in Jagadhri — please be sure you are with us."
-    : "Wedding celebrations begin — please be sure you are with us.";
+      : `
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Start</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#1a1208;">11th August 2026</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
+                            Wedding celebrations begin — please be sure you are with us.
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Wedding dinner</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">12th August · Wednesday night</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;">Maple Garden · 8:00 PM onwards</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:14px 12px;">
+                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Anand Karaj &amp; brunch</p>
+                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">13th August · Thursday</p>
+                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;">Morning ceremonies · blessings &amp; brunch</p>
+                        </td>
+                      </tr>`;
 
   const html = `
 <!DOCTYPE html>
@@ -356,30 +512,7 @@ export function buildAnnouncementEmailParts(input: {
                 <tr>
                   <td style="padding:8px 12px 16px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                      ${panipatRows}
-                      <tr>
-                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
-                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">${escapeHtml(startLabel)}</p>
-                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#1a1208;">11th August 2026</p>
-                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;line-height:1.5;">
-                            ${escapeHtml(startDetail)}
-                          </p>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:14px 12px;border-bottom:1px solid #efe4cf;">
-                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Wedding dinner</p>
-                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">12th August · Wednesday night</p>
-                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;">Maple Garden · 8:00 PM onwards</p>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:14px 12px;">
-                          <p style="margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8922a;">Anand Karaj &amp; brunch</p>
-                          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#1a1208;">13th August · Thursday</p>
-                          <p style="margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#6b5c4a;">Morning ceremonies · blessings &amp; brunch</p>
-                        </td>
-                      </tr>
+                      ${timelineRows}
                     </table>
                   </td>
                 </tr>
@@ -472,6 +605,11 @@ export async function runAnnouncementEmail(input: {
   const force = Boolean(input.force);
   const recipients = await collectAnnouncementRecipients();
   const waveTag = `announcement:${input.wave}`;
+  const scheduleBySite: Record<FeatureSite, ManagedEvent[]> = {
+    main: await resolveAnnouncementScheduleEvents("main", input.wave),
+    mehfil: await resolveAnnouncementScheduleEvents("mehfil", input.wave),
+    laavan: await resolveAnnouncementScheduleEvents("laavan", input.wave),
+  };
 
   /** Keyed by email::site so groom + bride sends for the same inbox stay independent */
   const alreadySent = new Set<string>();
@@ -549,6 +687,7 @@ export async function runAnnouncementEmail(input: {
       guestName: guest.name,
       wave: input.wave,
       site: guest.site,
+      events: scheduleBySite[guest.site],
     });
 
     if (dryRun) {
