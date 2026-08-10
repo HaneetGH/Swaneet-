@@ -16,14 +16,17 @@ import {
   inviteSlugForSite,
   resolveEntryInviteSite,
 } from "@/lib/rsvp-days";
+import { stayCoversDate } from "@/lib/stay-dates";
 import {
   getFeatureFlags,
   hasEventEmailSend,
+  listAccommodations,
   listEvents,
   listRsvps,
   recordEventEmailSend,
 } from "@/lib/store";
 import type {
+  AccommodationRequest,
   EventEmailAudienceScope,
   EventEmailPhase,
   FeatureFlags,
@@ -38,7 +41,10 @@ export type EventEmailRecipient = {
   email: string;
   name: string;
   site: FeatureSite;
-  rsvpId: string;
+  /** Present when the recipient came from an RSVP */
+  rsvpId?: string;
+  /** Present when the recipient came from a hotel stay (may also have rsvpId) */
+  stayId?: string;
 };
 
 export type EventEmailPlan = {
@@ -177,6 +183,12 @@ function guestEmail(rsvp: RsvpEntry): string {
   return (rsvp.email || rsvp.authEmail || "").trim().toLowerCase();
 }
 
+function stayGuestEmail(
+  stay: Pick<AccommodationRequest, "email" | "authEmail">,
+): string {
+  return (stay.email || stay.authEmail || "").trim().toLowerCase();
+}
+
 /** Attending that day (yes). Falls back to overall yes when no dayResponses. */
 function isAttendingDay(rsvp: RsvpEntry, dateKey: string): boolean {
   const days = rsvp.dayResponses || [];
@@ -185,6 +197,36 @@ function isAttendingDay(rsvp: RsvpEntry, dateKey: string): boolean {
     return match?.attendance === "yes";
   }
   return rsvp.attendance === "yes";
+}
+
+/**
+ * Hotel / room guests for digests: same invite-site split as RSVPs,
+ * not declined, and in-house today or tomorrow.
+ */
+export function stayEligibleForDigest(
+  stay: Pick<
+    AccommodationRequest,
+    | "status"
+    | "offerStatus"
+    | "inviteSite"
+    | "inviteTier"
+    | "email"
+    | "authEmail"
+    | "checkIn"
+    | "checkOut"
+  >,
+  site: FeatureSite,
+  todayDateKey: string,
+  tomorrowDateKey: string,
+): boolean {
+  if (stay.status === "declined") return false;
+  if (stay.offerStatus === "declined") return false;
+  if (resolveEntryInviteSite(stay) !== site) return false;
+  if (!stayGuestEmail(stay)) return false;
+  return (
+    stayCoversDate(stay.checkIn, stay.checkOut, todayDateKey) ||
+    stayCoversDate(stay.checkIn, stay.checkOut, tomorrowDateKey)
+  );
 }
 
 function buildLinks(input: {
@@ -264,7 +306,7 @@ export async function planEventEmails(
   const tomorrowDateKey = shiftDateKey(asOfDateKey, 1);
 
   const flags = await getFeatureFlags();
-  const rsvps = await listRsvps();
+  const [rsvps, stays] = await Promise.all([listRsvps(), listAccommodations()]);
   const sites = sitesForAudienceScope(options.scope || "all");
   const plans: EventEmailPlan[] = [];
 
@@ -284,8 +326,8 @@ export async function planEventEmails(
     const recipients: EventEmailRecipient[] = [];
     const seen = new Set<string>();
 
-    // Keep digests strictly site-scoped: only RSVPs for this invite surface
-    // who are attending today or tomorrow. Never mix groom/bride audiences.
+    // Site-scoped: RSVPs attending today/tomorrow, plus hotel stay guests
+    // in-house those nights. Never mix groom/bride audiences.
     for (const rsvp of rsvps) {
       const rsvpSite = resolveEntryInviteSite(rsvp);
       if (rsvpSite !== site) continue;
@@ -302,6 +344,23 @@ export async function planEventEmails(
         name: rsvp.name,
         site: rsvpSite,
         rsvpId: rsvp.id,
+      });
+    }
+
+    for (const stay of stays) {
+      if (!stayEligibleForDigest(stay, site, todayDateKey, tomorrowDateKey)) {
+        continue;
+      }
+      const email = stayGuestEmail(stay);
+      if (!email || seen.has(email)) continue;
+
+      seen.add(email);
+      recipients.push({
+        email,
+        name: stay.name,
+        site,
+        stayId: stay.id,
+        rsvpId: stay.rsvpId,
       });
     }
 
