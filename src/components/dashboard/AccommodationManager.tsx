@@ -567,6 +567,58 @@ export function AccommodationManager({
     [occupancy],
   );
 
+  /** Flat sheet: one row per guest with the room they were assigned. */
+  const assignmentSheetRows = useMemo(() => {
+    const rows: Array<{
+      key: string;
+      hotel: string;
+      room: string;
+      guest: string;
+      people: number;
+      phone: string;
+      email: string;
+      shared: boolean;
+    }> = [];
+
+    const byHotel = new Map<string, RoomOccupancyUnit[]>();
+    for (const unit of occupancy) {
+      const hotelKey = unit.hotelId || unit.hotelName || "hotel";
+      const list = byHotel.get(hotelKey) || [];
+      list.push(unit);
+      byHotel.set(hotelKey, list);
+    }
+
+    for (const units of byHotel.values()) {
+      units.forEach((unit, unitIndex) => {
+        const roomLabel = unit.roomDetails?.trim()
+          ? unit.roomDetails.trim()
+          : unit.roomGroupId
+            ? `Shared room ${unitIndex + 1}`
+            : `Room ${unitIndex + 1}`;
+        for (const guest of unit.stays) {
+          rows.push({
+            key: `${unit.key}-${guest.id}`,
+            hotel: unit.hotelName || "Hotel",
+            room: roomLabel,
+            guest: guest.name,
+            people: guest.people || 0,
+            phone: guest.phone || "",
+            email: guest.email || "",
+            shared: Boolean(unit.roomGroupId) || unit.stays.length > 1,
+          });
+        }
+      });
+    }
+
+    return rows.sort((a, b) => {
+      const hotelCmp = a.hotel.localeCompare(b.hotel);
+      if (hotelCmp !== 0) return hotelCmp;
+      const roomCmp = a.room.localeCompare(b.room);
+      if (roomCmp !== 0) return roomCmp;
+      return a.guest.localeCompare(b.guest);
+    });
+  }, [occupancy]);
+
   /** Booked rooms grouped by hotel for a clearer board */
   const occupancyByHotel = useMemo(() => {
     type HotelGroup = {
@@ -1340,6 +1392,88 @@ export function AccommodationManager({
                 </section>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-6 overflow-hidden rounded-2xl border border-gold/20 bg-[#141018]">
+        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-gold/15 px-4 py-3">
+          <div>
+            <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
+              Assignment sheet
+            </p>
+            <p className="mt-1 font-body text-xs text-muted">
+              Simple list of who is in which room. Existing room cards above
+              are unchanged.
+            </p>
+          </div>
+          <p className="font-body text-xs text-gold-soft">
+            {assignmentSheetRows.length} guest
+            {assignmentSheetRows.length === 1 ? "" : "s"} listed
+          </p>
+        </div>
+
+        {assignmentSheetRows.length === 0 ? (
+          <p className="px-4 py-6 text-center font-body text-sm text-muted">
+            No room assignments yet — confirm stays or assign rooms first.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-gold/15 bg-[#0d0b10]/80">
+                  {(
+                    [
+                      "Hotel",
+                      "Room",
+                      "Guest",
+                      "People",
+                      "Phone",
+                      "Email",
+                    ] as const
+                  ).map((heading) => (
+                    <th
+                      key={heading}
+                      className="whitespace-nowrap px-3 py-2.5 font-body text-[10px] uppercase tracking-[0.18em] text-muted"
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {assignmentSheetRows.map((row) => (
+                  <tr
+                    key={row.key}
+                    className="border-b border-gold/10 last:border-b-0"
+                  >
+                    <td className="whitespace-nowrap px-3 py-2.5 font-body text-sm text-cream/90">
+                      {row.hotel}
+                    </td>
+                    <td className="px-3 py-2.5 font-body text-sm text-gold-soft">
+                      {row.room}
+                      {row.shared ? (
+                        <span className="ml-2 font-body text-[10px] uppercase tracking-[0.14em] text-muted">
+                          shared
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2.5 font-display text-base text-cream">
+                      {row.guest}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 font-body text-sm text-muted">
+                      {row.people || "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 font-body text-sm text-muted">
+                      {row.phone || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 font-body text-sm text-muted">
+                      {row.email || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
