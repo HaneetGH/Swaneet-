@@ -13,6 +13,7 @@ export function RsvpStayBanner() {
   const invite = useInvite();
   const { enabled, ready } = useFeatureFlags();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const requestsOpen = !ready || enabled("accommodation_open");
 
   useEffect(() => {
     let active = true;
@@ -31,6 +32,51 @@ export function RsvpStayBanner() {
 
   if (ready && (!enabled("stay_banner") || !enabled("accommodation"))) {
     return null;
+  }
+
+  if (ready && !requestsOpen) {
+    return (
+      <div className="relative z-20 border-b border-gold/25 bg-[#120e16]/95">
+        {imageUrl ? (
+          <div className="relative mx-auto aspect-[21/7] max-h-48 w-full max-w-6xl overflow-hidden sm:aspect-[24/7] sm:max-h-56">
+            <Image
+              src={imageUrl}
+              alt="Accommodation"
+              fill
+              className="object-cover"
+              sizes="(max-width: 1152px) 100vw, 1152px"
+              unoptimized={imageUrl.startsWith("/uploads/")}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#120e16] via-[#120e16]/35 to-transparent" />
+          </div>
+        ) : null}
+
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gold/35 bg-gold/10 text-gold-soft">
+              <BedDouble size={16} />
+            </span>
+            <span className="min-w-0 text-left">
+              <span className="block font-body text-[10px] uppercase tracking-[0.28em] text-gold/70">
+                Accommodation
+              </span>
+              <span className="font-display text-lg text-cream sm:text-xl">
+                Accommodation requests are closed now
+              </span>
+              <span className="mt-0.5 block truncate font-body text-xs text-muted">
+                Already booked? Check your stay in My account
+              </span>
+            </span>
+          </span>
+          <Link
+            href={guestActionPath("/my-account", invite)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-gold/35 bg-gold/10 px-4 py-2 font-body text-[10px] uppercase tracking-[0.18em] text-gold-soft transition hover:bg-gold/15 sm:px-5 sm:text-xs"
+          >
+            Check booking
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (

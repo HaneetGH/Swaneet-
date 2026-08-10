@@ -22,7 +22,12 @@ export const FEATURE_KEYS: Array<{ id: FeatureKey; label: string; hint: string }
     {
       id: "accommodation",
       label: "Accommodation booking",
-      hint: "Stay request inside RSVP and stay forms",
+      hint: "Stay request inside RSVP and stay forms (viewing existing stays stays available)",
+    },
+    {
+      id: "accommodation_open",
+      label: "Accept new stay requests",
+      hint: "Off = show “requests closed” and block new bookings; guests with an existing stay can still check it in My account",
     },
     {
       id: "gallery",
@@ -65,6 +70,7 @@ export const FEATURE_KEYS: Array<{ id: FeatureKey; label: string; hint: string }
 const BASE_ON: SiteFeatureFlags = {
   rsvp: true,
   accommodation: true,
+  accommodation_open: true,
   gallery: true,
   guest_photos: true,
   stay_banner: true,
@@ -92,6 +98,7 @@ export function normalizeFeatureFlags(
   const keys: FeatureKey[] = [
     "rsvp",
     "accommodation",
+    "accommodation_open",
     "gallery",
     "guest_photos",
     "stay_banner",
@@ -122,6 +129,20 @@ export function isFeatureEnabled(
 ): boolean {
   return flags[site]?.[key] !== false;
 }
+
+/** Accommodation feature on and still accepting new stay requests. */
+export function isAccommodationRequestOpen(
+  flags: FeatureFlags,
+  site: FeatureSite,
+): boolean {
+  return (
+    isFeatureEnabled(flags, site, "accommodation") &&
+    isFeatureEnabled(flags, site, "accommodation_open")
+  );
+}
+
+export const ACCOMMODATION_CLOSED_MESSAGE =
+  "Accommodation requests are closed now. If you already submitted a stay request, sign in to My account to check your booking.";
 
 export function featureSiteFromInviteTier(
   tier?: "mehfil" | "laavan" | null,
