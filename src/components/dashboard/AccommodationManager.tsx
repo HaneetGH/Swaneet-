@@ -107,6 +107,21 @@ export function AccommodationManager({
   const [tab, setTab] = useState<"requests" | "rooms" | "hotels">("requests");
   /** First guest selected for room swap */
   const [swapFromId, setSwapFromId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
+  const [assignForm, setAssignForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    people: "2",
+    rooms: "1",
+    hotelId: "",
+    roomsAssigned: "1",
+    checkIn: "2026-08-12",
+    checkOut: "2026-08-14",
+    roomDetails: "",
+    useBlockedRooms: false,
+    sendEmail: true,
+  });
 
   useEffect(() => {
     fetch("/api/accommodation")
@@ -302,6 +317,74 @@ export function AccommodationManager({
       setMessage("Hotel removed.");
     } catch {
       setMessage("Could not delete hotel");
+    }
+  };
+
+  const assignDirect = async () => {
+    setAssigning(true);
+    setMessage("");
+    try {
+      const people = Number(assignForm.people);
+      const rooms = Number(assignForm.rooms);
+      const roomsAssigned = Number(assignForm.roomsAssigned || assignForm.rooms);
+      const res = await fetch("/api/accommodation/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: assignForm.name.trim(),
+          email: assignForm.email.trim(),
+          phone: assignForm.phone.trim() || undefined,
+          people,
+          rooms,
+          hotelId: assignForm.hotelId,
+          roomsAssigned,
+          checkIn: assignForm.checkIn,
+          checkOut: assignForm.checkOut,
+          roomDetails: assignForm.roomDetails.trim() || undefined,
+          useBlockedRooms: assignForm.useBlockedRooms,
+          sendEmail: assignForm.sendEmail,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        accommodation?: AccommodationRequest;
+        inventory?: RoomInventory;
+        email?: { sent?: boolean; error?: string };
+      };
+      if (!res.ok) {
+        setMessage(data.error || "Could not assign room");
+        return;
+      }
+      if (data.accommodation) {
+        setItems((prev) => [data.accommodation!, ...prev]);
+        setOpenId(data.accommodation.id);
+      }
+      if (data.inventory) {
+        setInventory({
+          ...emptyInventory,
+          ...data.inventory,
+          hotels: data.inventory.hotels || [],
+        });
+      }
+      setAssignForm((prev) => ({
+        ...prev,
+        name: "",
+        email: "",
+        phone: "",
+        roomDetails: "",
+      }));
+      setMessage(
+        data.email?.sent
+          ? `Room assigned and emailed to ${data.accommodation?.email}.`
+          : data.email?.error
+            ? `Room assigned, but email failed: ${data.email.error}`
+            : `Room assigned for ${data.accommodation?.name}.`,
+      );
+      setTab("requests");
+    } catch {
+      setMessage("Could not assign room");
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -1418,6 +1501,227 @@ export function AccommodationManager({
 
       {tab === "requests" ? (
       <>
+      <div className="mb-6 rounded-2xl border border-gold/25 bg-[#141018] p-5">
+        <div className="mb-4 flex items-start gap-3">
+          <BedDouble size={18} className="mt-0.5 shrink-0 text-gold" />
+          <div>
+            <h3 className="font-display text-xl text-cream">
+              Assign room directly
+            </h3>
+            <p className="mt-1 font-body text-sm text-muted">
+              Create a stay and confirm rooms without a guest request — name,
+              email, people, and rooms.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="block">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              Guest name
+            </span>
+            <input
+              className={fieldClass}
+              value={assignForm.name}
+              onChange={(e) =>
+                setAssignForm((prev) => ({ ...prev, name: e.target.value }))
+              }
+              placeholder="Full name"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              Email
+            </span>
+            <input
+              type="email"
+              className={fieldClass}
+              value={assignForm.email}
+              onChange={(e) =>
+                setAssignForm((prev) => ({ ...prev, email: e.target.value }))
+              }
+              placeholder="guest@email.com"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              Phone (optional)
+            </span>
+            <input
+              className={fieldClass}
+              value={assignForm.phone}
+              onChange={(e) =>
+                setAssignForm((prev) => ({ ...prev, phone: e.target.value }))
+              }
+              placeholder="Mobile"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              People
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={30}
+              className={fieldClass}
+              value={assignForm.people}
+              onChange={(e) =>
+                setAssignForm((prev) => ({ ...prev, people: e.target.value }))
+              }
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              Rooms requested
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={15}
+              className={fieldClass}
+              value={assignForm.rooms}
+              onChange={(e) => {
+                const value = e.target.value;
+                setAssignForm((prev) => ({
+                  ...prev,
+                  rooms: value,
+                  roomsAssigned: prev.roomsAssigned || value,
+                }));
+              }}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              Rooms to assign
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={30}
+              className={fieldClass}
+              value={assignForm.roomsAssigned}
+              onChange={(e) =>
+                setAssignForm((prev) => ({
+                  ...prev,
+                  roomsAssigned: e.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className="block sm:col-span-2 lg:col-span-1">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              Hotel
+            </span>
+            <select
+              className={fieldClass}
+              value={assignForm.hotelId}
+              onChange={(e) =>
+                setAssignForm((prev) => ({ ...prev, hotelId: e.target.value }))
+              }
+            >
+              <option value="">Select hotel</option>
+              {(inventory.hotels || []).map((hotel) => (
+                <option key={hotel.id} value={hotel.id}>
+                  {hotel.name} · free {hotel.available}
+                  {hotel.blocked ? ` · blocked ${hotel.blocked}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              Check-in
+            </span>
+            <input
+              type="date"
+              className={fieldClass}
+              value={assignForm.checkIn}
+              onChange={(e) =>
+                setAssignForm((prev) => ({ ...prev, checkIn: e.target.value }))
+              }
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              Check-out
+            </span>
+            <input
+              type="date"
+              className={fieldClass}
+              value={assignForm.checkOut}
+              onChange={(e) =>
+                setAssignForm((prev) => ({ ...prev, checkOut: e.target.value }))
+              }
+            />
+          </label>
+          <label className="block sm:col-span-2 lg:col-span-3">
+            <span className="mb-1 block font-body text-[10px] uppercase tracking-[0.18em] text-muted">
+              Room details (optional)
+            </span>
+            <input
+              className={fieldClass}
+              value={assignForm.roomDetails}
+              onChange={(e) =>
+                setAssignForm((prev) => ({
+                  ...prev,
+                  roomDetails: e.target.value,
+                }))
+              }
+              placeholder="Room number, floor, notes for guest"
+            />
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <label className="inline-flex items-center gap-2 font-body text-sm text-cream">
+            <input
+              type="checkbox"
+              checked={assignForm.useBlockedRooms}
+              onChange={(e) =>
+                setAssignForm((prev) => ({
+                  ...prev,
+                  useBlockedRooms: e.target.checked,
+                }))
+              }
+              className="h-4 w-4 accent-[#d4af37]"
+            />
+            Use blocked rooms if needed
+          </label>
+          <label className="inline-flex items-center gap-2 font-body text-sm text-cream">
+            <input
+              type="checkbox"
+              checked={assignForm.sendEmail}
+              onChange={(e) =>
+                setAssignForm((prev) => ({
+                  ...prev,
+                  sendEmail: e.target.checked,
+                }))
+              }
+              className="h-4 w-4 accent-[#d4af37]"
+            />
+            Email hotel details to guest
+          </label>
+          <Button
+            type="button"
+            disabled={
+              assigning ||
+              !assignForm.name.trim() ||
+              !assignForm.email.trim() ||
+              !assignForm.hotelId ||
+              !(inventory.hotels || []).length
+            }
+            onClick={() => void assignDirect()}
+            className="ml-auto"
+          >
+            {assigning ? "Assigning…" : "Assign & confirm"}
+          </Button>
+        </div>
+        {!(inventory.hotels || []).length ? (
+          <p className="mt-3 font-body text-xs text-amber-200">
+            Add a hotel under the Hotels tab before assigning rooms.
+          </p>
+        ) : null}
+      </div>
+
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
         {(
           [
