@@ -52,7 +52,7 @@ export const FEATURE_KEYS: Array<{ id: FeatureKey; label: string; hint: string }
     {
       id: "our_story",
       label: "Our Story section",
-      hint: "Show Our Story on bride invite pages (hidden on the main home page)",
+      hint: "Show Our Journey / Our Story on this site (off by default; turn on in Feature flags)",
     },
     {
       id: "landing",
@@ -61,7 +61,7 @@ export const FEATURE_KEYS: Array<{ id: FeatureKey; label: string; hint: string }
     },
   ];
 
-/** Most features on; face find + invite Our Story stay off until enabled. */
+/** Most features on; face find + Our Story stay off until enabled. */
 const BASE_ON: SiteFeatureFlags = {
   rsvp: true,
   accommodation: true,

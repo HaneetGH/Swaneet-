@@ -1,6 +1,7 @@
 import { Navigation } from "@/components/layout/Navigation";
 import { Footer } from "@/components/layout/Footer";
 import { Hero } from "@/components/sections/Hero";
+import { OurStory } from "@/components/sections/OurStory";
 import { Events } from "@/components/sections/Events";
 import { Venue } from "@/components/sections/Venue";
 import { Gallery } from "@/components/sections/Gallery";
@@ -22,6 +23,7 @@ export default function Home() {
       <GuestEngageBanner />
       <DownloadPhotosBanner />
       <RsvpStayBanner />
+      <OurStory />
       <Events />
       <Venue />
       <Gallery />

@@ -24,8 +24,7 @@ export function Navigation() {
   const links = useMemo(() => {
     const base: NavLink[] = [];
 
-    // Our Journey / Story is not on the main home page — only invite sites.
-    if (invite && (!ready || enabled("our_story"))) {
+    if (!ready || enabled("our_story")) {
       base.push({ href: "#story", label: "Story" });
     }
 
