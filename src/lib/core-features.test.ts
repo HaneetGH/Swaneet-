@@ -53,7 +53,8 @@ import {
 } from "@/lib/announcement-email";
 import { buildEventEmailParts } from "@/lib/email-event-template";
 import { buildStayConfirmationParts } from "@/lib/email-stay-template";
-import { shiftDateKey, sitesForAudienceScope } from "@/lib/event-emails";
+import { shiftDateKey, sitesForAudienceScope, stayEligibleForDigest } from "@/lib/event-emails";
+import { stayCoversDate } from "@/lib/stay-dates";
 import {
   audienceScopeLabel,
   isWithinScheduleWindow,
@@ -1100,6 +1101,59 @@ describe("event guest emails", () => {
     expect(sitesForAudienceScope("all")).toEqual(["main", "mehfil", "laavan"]);
     expect(audienceScopeLabel("main")).toMatch(/groom/i);
     expect(audienceScopeLabel("bride")).toMatch(/Mehfil/i);
+  });
+
+  it("treats hotel nights as check-in inclusive / check-out exclusive", () => {
+    expect(stayCoversDate("2026-08-12", "2026-08-14", "2026-08-12")).toBe(true);
+    expect(stayCoversDate("2026-08-12", "2026-08-14", "2026-08-13")).toBe(true);
+    expect(stayCoversDate("2026-08-12", "2026-08-14", "2026-08-14")).toBe(false);
+    expect(stayCoversDate("2026-08-12", "2026-08-14", "2026-08-11")).toBe(false);
+  });
+
+  it("includes site-matched hotel guests in digests for in-house nights", () => {
+    const mainStay = {
+      status: "confirmed" as const,
+      email: "hotel@example.com",
+      checkIn: "2026-08-12",
+      checkOut: "2026-08-14",
+      inviteSite: "main" as const,
+    };
+    expect(
+      stayEligibleForDigest(mainStay, "main", "2026-08-12", "2026-08-13"),
+    ).toBe(true);
+    // Bride digest must not pick up a main stay
+    expect(
+      stayEligibleForDigest(mainStay, "mehfil", "2026-08-12", "2026-08-13"),
+    ).toBe(false);
+
+    const mehfilStay = {
+      ...mainStay,
+      inviteSite: "mehfil" as const,
+      inviteTier: "mehfil" as const,
+    };
+    expect(
+      stayEligibleForDigest(mehfilStay, "mehfil", "2026-08-12", "2026-08-13"),
+    ).toBe(true);
+    expect(
+      stayEligibleForDigest(mehfilStay, "main", "2026-08-12", "2026-08-13"),
+    ).toBe(false);
+
+    expect(
+      stayEligibleForDigest(
+        { ...mainStay, status: "declined" },
+        "main",
+        "2026-08-12",
+        "2026-08-13",
+      ),
+    ).toBe(false);
+    expect(
+      stayEligibleForDigest(
+        { ...mainStay, checkIn: "2026-08-15", checkOut: "2026-08-16" },
+        "main",
+        "2026-08-12",
+        "2026-08-13",
+      ),
+    ).toBe(false);
   });
 
   it("normalizes job schedule and schedule windows", () => {

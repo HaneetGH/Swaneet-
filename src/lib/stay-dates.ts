@@ -9,6 +9,19 @@ export function stayNights(checkIn: string, checkOut: string): number {
   return Math.round(ms / (24 * 60 * 60 * 1000));
 }
 
+/**
+ * True when dateKey is a night the guest is in-house
+ * (checkIn inclusive, checkOut exclusive — same as hotel nights).
+ */
+export function stayCoversDate(
+  checkIn: string,
+  checkOut: string,
+  dateKey: string,
+): boolean {
+  if (!checkIn || !checkOut || !dateKey) return false;
+  return checkIn <= dateKey && dateKey < checkOut;
+}
+
 export function formatStayDateLabel(value: string) {
   if (!value) return "—";
   const date = new Date(`${value}T12:00:00`);
