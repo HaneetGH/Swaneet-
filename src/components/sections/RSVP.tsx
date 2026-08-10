@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/Button";
 import { useInvite } from "@/lib/invite-context";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useGuestAuth } from "@/hooks/useGuestAuth";
+import { guestActionPath } from "@/lib/guest-paths";
+import Link from "next/link";
 import {
   deriveOverallAttendance,
   rsvpDaysForSite,
@@ -153,6 +155,8 @@ export function RSVP() {
   const { user, ready: authReady } = useGuestAuth();
   const rsvpOn = enabled("rsvp");
   const accommodationOn = enabled("accommodation");
+  const accommodationOpen = accommodationOn && enabled("accommodation_open");
+  const canRequestStay = accommodationOpen;
   const [success, setSuccess] = useState(false);
   const [message, setMessage] = useState<ThankYouMessage | null>(null);
   const [staySubmitted, setStaySubmitted] = useState(false);
@@ -496,10 +500,10 @@ export function RSVP() {
   };
 
   useEffect(() => {
-    if (!accommodationOn) {
+    if (!canRequestStay) {
       setValue("needsAccommodation", "no");
     }
-  }, [accommodationOn, setValue]);
+  }, [canRequestStay, setValue]);
 
   return (
     <section id="rsvp" className="section-pad relative">
@@ -826,7 +830,28 @@ export function RSVP() {
                   </select>
                 </div>
 
-                {accommodationOn ? (
+                {accommodationOn && !canRequestStay ? (
+                <div className="rounded-2xl border border-gold/25 bg-[#100e14] p-4">
+                  <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
+                    Accommodation
+                  </p>
+                  <p className="mt-2 font-display text-xl text-cream">
+                    Accommodation requests are closed now
+                  </p>
+                  <p className="mt-2 font-body text-sm text-muted">
+                    New stay requests are not being accepted. If you already
+                    booked, check your booking in My account.
+                  </p>
+                  <Link
+                    href={guestActionPath("/my-account", invite)}
+                    className="mt-4 inline-flex font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft transition hover:text-gold"
+                  >
+                    Check my booking
+                  </Link>
+                </div>
+                ) : null}
+
+                {canRequestStay ? (
                 <div className="rounded-2xl border border-gold/25 bg-[#100e14] p-4">
                   <p className="font-body text-[10px] uppercase tracking-[0.25em] text-gold/70">
                     Accommodation

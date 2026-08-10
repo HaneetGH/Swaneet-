@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { isFeatureEnabled } from "@/lib/feature-flags";
+import {
+  isAccommodationRequestOpen,
+  isFeatureEnabled,
+} from "@/lib/feature-flags";
 import { getFaceProfile } from "@/lib/face-store";
 import {
   createGalleryAccessToken,
@@ -89,6 +92,7 @@ export async function GET(request: Request) {
       features: {
         rsvp: isFeatureEnabled(flags, inviteSite, "rsvp"),
         accommodation: isFeatureEnabled(flags, inviteSite, "accommodation"),
+        accommodationOpen: isAccommodationRequestOpen(flags, inviteSite),
         guestPhotos: isFeatureEnabled(flags, inviteSite, "guest_photos"),
         faceFind: faceOn,
         guestMessages: wishesOn,

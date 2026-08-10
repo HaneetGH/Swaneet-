@@ -168,6 +168,7 @@ export type EmailOtpEntry = {
 export type FeatureKey =
   | "rsvp"
   | "accommodation"
+  | "accommodation_open"
   | "gallery"
   | "guest_photos"
   | "stay_banner"

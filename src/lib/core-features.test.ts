@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACCOMMODATION_CLOSED_MESSAGE,
   defaultFeatureFlags,
   featureSiteFromInviteTier,
   featureSiteFromPathname,
+  isAccommodationRequestOpen,
   isFeatureEnabled,
   normalizeFeatureFlags,
 } from "@/lib/feature-flags";
@@ -131,6 +133,7 @@ describe("feature flags", () => {
   it("defaults core features on and face_find off", () => {
     const flags = defaultFeatureFlags();
     expect(isFeatureEnabled(flags, "main", "accommodation")).toBe(true);
+    expect(isFeatureEnabled(flags, "main", "accommodation_open")).toBe(true);
     expect(isFeatureEnabled(flags, "laavan", "rsvp")).toBe(true);
     expect(isFeatureEnabled(flags, "main", "face_find")).toBe(false);
     expect(isFeatureEnabled(flags, "mehfil", "face_find")).toBe(false);
@@ -152,6 +155,36 @@ describe("feature flags", () => {
     expect(isFeatureEnabled(flags, "laavan", "accommodation")).toBe(false);
     expect(isFeatureEnabled(flags, "mehfil", "accommodation")).toBe(true);
     expect(isFeatureEnabled(flags, "main", "accommodation")).toBe(true);
+  });
+
+  it("closes new stay requests while leaving accommodation feature on", () => {
+    const flags = normalizeFeatureFlags({
+      ...defaultFeatureFlags(),
+      main: {
+        ...defaultFeatureFlags().main,
+        accommodation_open: false,
+      },
+    });
+    expect(isFeatureEnabled(flags, "main", "accommodation")).toBe(true);
+    expect(isFeatureEnabled(flags, "main", "accommodation_open")).toBe(false);
+    expect(isAccommodationRequestOpen(flags, "main")).toBe(false);
+    expect(isAccommodationRequestOpen(flags, "mehfil")).toBe(true);
+    expect(ACCOMMODATION_CLOSED_MESSAGE).toMatch(/closed/i);
+  });
+
+  it("fills missing accommodation_open from defaults when normalizing", () => {
+    const flags = normalizeFeatureFlags({
+      main: {
+        rsvp: true,
+        accommodation: true,
+        gallery: true,
+        guest_photos: true,
+        stay_banner: true,
+        face_find: false,
+        guest_messages: true,
+      } as never,
+    });
+    expect(flags.main.accommodation_open).toBe(true);
   });
 
   it("maps invite tier to feature site", () => {

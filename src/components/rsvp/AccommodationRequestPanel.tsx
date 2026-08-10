@@ -9,8 +9,11 @@ import {
   signOutGuest,
 } from "@/components/rsvp/GuestAuthPanel";
 import { Button } from "@/components/ui/Button";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useInvite } from "@/lib/invite-context";
+import { guestActionPath } from "@/lib/guest-paths";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 const fieldClass =
   "w-full rounded-xl border border-gold/25 bg-[#141018] px-4 py-3 font-body text-sm text-cream outline-none transition placeholder:text-muted/60 focus:border-gold/60 focus:bg-[#1a1520] [color-scheme:dark]";
@@ -31,6 +34,7 @@ export function AccommodationRequestPanel({
   onDone,
 }: AccommodationRequestPanelProps) {
   const invite = useInvite();
+  const { enabled, ready } = useFeatureFlags();
   const [user, setUser] = useState<User | null>(null);
   const [emailVerified, setEmailVerified] = useState(false);
   const [emailFromAuth, setEmailFromAuth] = useState(false);
@@ -255,6 +259,33 @@ export function AccommodationRequestPanel({
       setSubmitting(false);
     }
   };
+
+  if (ready && enabled("accommodation") && !enabled("accommodation_open")) {
+    return (
+      <div className="rounded-2xl border border-gold/25 bg-[#100e14] px-5 py-6 text-center">
+        <p className="font-display text-2xl text-cream">
+          Accommodation requests are closed now
+        </p>
+        <p className="mt-2 font-body text-sm text-muted">
+          New stay requests are not being accepted. If you already booked, check
+          your booking in My account.
+        </p>
+        <Link
+          href={guestActionPath("/my-account", invite)}
+          className="mt-5 inline-flex font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft"
+        >
+          Check my booking
+        </Link>
+        {onDone ? (
+          <div className="mt-4">
+            <Button type="button" variant="outline" onClick={onDone}>
+              Done
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   if (success) {
     return (

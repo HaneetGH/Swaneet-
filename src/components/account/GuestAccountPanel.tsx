@@ -889,7 +889,9 @@ export function GuestAccountPanel() {
                   title="Stay booking"
                   subtitle="Current hotel request and confirmation status."
                   action={
-                    flagsReady && enabled("accommodation") ? (
+                    flagsReady &&
+                    enabled("accommodation") &&
+                    enabled("accommodation_open") ? (
                       <Link
                         href={rsvpHref}
                         className="font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft transition hover:text-gold"
@@ -902,9 +904,15 @@ export function GuestAccountPanel() {
                   {!stay ? (
                     <div className="rounded-2xl border border-gold/20 bg-white/[0.03] px-5 py-6">
                       <p className="font-body text-sm text-muted">
-                        No stay request on file yet.
+                        {flagsReady &&
+                        enabled("accommodation") &&
+                        !enabled("accommodation_open")
+                          ? "Accommodation requests are closed now."
+                          : "No stay request on file yet."}
                       </p>
-                      {flagsReady && enabled("accommodation") ? (
+                      {flagsReady &&
+                      enabled("accommodation") &&
+                      enabled("accommodation_open") ? (
                         <Link
                           href={rsvpHref}
                           className="mt-4 inline-flex font-body text-[11px] uppercase tracking-[0.18em] text-gold-soft"

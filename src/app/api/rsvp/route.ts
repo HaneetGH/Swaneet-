@@ -3,7 +3,9 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { notifyOwner } from "@/lib/email";
 import {
+  ACCOMMODATION_CLOSED_MESSAGE,
   featureSiteFromInviteTier,
+  isAccommodationRequestOpen,
   isFeatureEnabled,
 } from "@/lib/feature-flags";
 import { isGuestAuthFailure, requireGuestAuth } from "@/lib/require-guest";
@@ -125,9 +127,16 @@ export async function POST(request: Request) {
     }
 
     const stayAllowed = isFeatureEnabled(flags, site, "accommodation");
+    const stayOpen = isAccommodationRequestOpen(flags, site);
     if (parsed.data.needsAccommodation && !stayAllowed) {
       return NextResponse.json(
         { error: "Accommodation booking is turned off for this invite" },
+        { status: 403 },
+      );
+    }
+    if (parsed.data.needsAccommodation && !stayOpen) {
+      return NextResponse.json(
+        { error: ACCOMMODATION_CLOSED_MESSAGE },
         { status: 403 },
       );
     }

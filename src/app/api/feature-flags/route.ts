@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 const siteSchema = z.object({
   rsvp: z.boolean(),
   accommodation: z.boolean(),
+  /** Optional for older dashboard clients; normalize fills defaults. */
+  accommodation_open: z.boolean().optional(),
   gallery: z.boolean(),
   guest_photos: z.boolean(),
   stay_banner: z.boolean(),

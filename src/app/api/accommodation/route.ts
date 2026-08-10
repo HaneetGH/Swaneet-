@@ -8,7 +8,9 @@ import {
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { notifyOwner } from "@/lib/email";
 import {
+  ACCOMMODATION_CLOSED_MESSAGE,
   featureSiteFromInviteTier,
+  isAccommodationRequestOpen,
   isFeatureEnabled,
 } from "@/lib/feature-flags";
 import {
@@ -121,6 +123,12 @@ export async function POST(request: Request) {
     if (!isFeatureEnabled(flags, site, "accommodation")) {
       return NextResponse.json(
         { error: "Accommodation booking is turned off for this invite" },
+        { status: 403 },
+      );
+    }
+    if (!isAccommodationRequestOpen(flags, site)) {
+      return NextResponse.json(
+        { error: ACCOMMODATION_CLOSED_MESSAGE },
         { status: 403 },
       );
     }
