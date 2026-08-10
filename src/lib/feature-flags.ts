@@ -52,7 +52,7 @@ export const FEATURE_KEYS: Array<{ id: FeatureKey; label: string; hint: string }
     {
       id: "our_story",
       label: "Our Story section",
-      hint: "Show the Our Story timeline on this site (main on by default; invites opt-in)",
+      hint: "Show Our Story on bride invite pages (hidden on the main home page)",
     },
     {
       id: "landing",
@@ -70,13 +70,13 @@ const BASE_ON: SiteFeatureFlags = {
   stay_banner: true,
   face_find: false,
   guest_messages: true,
-  our_story: true,
+  our_story: false,
   landing: true,
 };
 
 export function defaultFeatureFlags(): FeatureFlags {
   return {
-    main: { ...BASE_ON, our_story: true },
+    main: { ...BASE_ON, our_story: false },
     mehfil: { ...BASE_ON, our_story: false },
     laavan: { ...BASE_ON, our_story: false },
   };

@@ -134,7 +134,7 @@ describe("feature flags", () => {
     expect(isFeatureEnabled(flags, "laavan", "rsvp")).toBe(true);
     expect(isFeatureEnabled(flags, "main", "face_find")).toBe(false);
     expect(isFeatureEnabled(flags, "mehfil", "face_find")).toBe(false);
-    expect(isFeatureEnabled(flags, "main", "our_story")).toBe(true);
+    expect(isFeatureEnabled(flags, "main", "our_story")).toBe(false);
     expect(isFeatureEnabled(flags, "mehfil", "our_story")).toBe(false);
     expect(isFeatureEnabled(flags, "laavan", "our_story")).toBe(false);
     expect(isFeatureEnabled(flags, "main", "landing")).toBe(true);
@@ -177,7 +177,7 @@ describe("feature flags", () => {
         guest_messages: true,
       } as never,
     });
-    expect(flags.main.our_story).toBe(true);
+    expect(flags.main.our_story).toBe(false);
     expect(flags.mehfil.our_story).toBe(false);
     expect(flags.main.landing).toBe(true);
   });
