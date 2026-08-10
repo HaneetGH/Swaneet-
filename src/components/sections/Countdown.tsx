@@ -7,67 +7,13 @@ import { wedding } from "@/data/wedding";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useInvite } from "@/lib/invite-context";
 import { pad } from "@/lib/utils";
-import { SectionHeading } from "@/components/ui/SectionHeading";
-import { GlassCard } from "@/components/ui/GlassCard";
 
-function Ring({
-  value,
-  max,
-  label,
-}: {
-  value: number;
-  max: number;
-  label: string;
-}) {
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
-  const progress = max === 0 ? 0 : value / max;
-  const offset = circumference * (1 - Math.min(1, progress));
-
-  return (
-    <div className="flex flex-col items-center gap-3">
-      <div className="relative h-28 w-28 sm:h-32 sm:w-32">
-        <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
-          <circle
-            cx="50"
-            cy="50"
-            r={radius}
-            fill="none"
-            stroke="rgba(255,248,230,0.08)"
-            strokeWidth="3"
-          />
-          <motion.circle
-            cx="50"
-            cy="50"
-            r={radius}
-            fill="none"
-            stroke="url(#goldGrad)"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            animate={{ strokeDashoffset: offset }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-          />
-          <defs>
-            <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#9a7b2f" />
-              <stop offset="50%" stopColor="#d4af37" />
-              <stop offset="100%" stopColor="#e8d5a3" />
-            </linearGradient>
-          </defs>
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="font-display text-3xl text-cream sm:text-4xl">
-            {pad(value)}
-          </span>
-        </div>
-      </div>
-      <span className="font-body text-[10px] uppercase tracking-[0.3em] text-muted">
-        {label}
-      </span>
-    </div>
-  );
-}
+const UNITS = [
+  { key: "days", label: "Days" },
+  { key: "hours", label: "Hours" },
+  { key: "minutes", label: "Mins" },
+  { key: "seconds", label: "Secs" },
+] as const;
 
 export function Countdown() {
   const invite = useInvite();
@@ -101,35 +47,51 @@ export function Countdown() {
 
   const subtitle = invite
     ? invite.tier === "mehfil"
-      ? "Until Sukhmani Sahib Path on 9th August 2026"
-      : "Until Haldi on 12th August 2026"
-    : "Until the Wedding Dinner on 12th August 2026";
+      ? "Until Sukhmani Sahib Path · 9 Aug"
+      : "Until Haldi · 12 Aug"
+    : "Until Wedding Dinner · 12 Aug";
 
   return (
-    <section id="countdown" className="section-pad relative">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.06),transparent_60%)]" />
-      <div className="relative mx-auto max-w-5xl">
-        <SectionHeading
-          eyebrow="Save the date"
-          title="Counting Down"
-          subtitle={subtitle}
-        />
+    <motion.div
+      id="countdown"
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.7, delay: 0.2 }}
+      className="flex flex-col items-center gap-1.5"
+      aria-live="polite"
+    >
+      <p className="font-body text-[9px] uppercase tracking-[0.35em] text-gold/55">
+        {subtitle}
+      </p>
 
-        <GlassCard glow className="mx-auto max-w-3xl">
-          {parts.isComplete ? (
-            <p className="text-center font-script text-4xl text-gold-soft">
-              The celebration begins!
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 gap-8 sm:grid-cols-4 sm:gap-4">
-              <Ring value={parts.days} max={365} label="Days" />
-              <Ring value={parts.hours} max={24} label="Hours" />
-              <Ring value={parts.minutes} max={60} label="Minutes" />
-              <Ring value={parts.seconds} max={60} label="Seconds" />
+      {parts.isComplete ? (
+        <p className="font-script text-lg text-gold-soft">
+          The celebration begins!
+        </p>
+      ) : (
+        <div className="flex items-stretch gap-2 sm:gap-3">
+          {UNITS.map((unit, index) => (
+            <div key={unit.key} className="flex items-stretch gap-2 sm:gap-3">
+              {index > 0 ? (
+                <span
+                  aria-hidden
+                  className="self-center font-display text-sm text-gold/30"
+                >
+                  :
+                </span>
+              ) : null}
+              <div className="flex min-w-[2.4rem] flex-col items-center sm:min-w-[2.75rem]">
+                <span className="font-display text-lg leading-none tracking-wide text-cream/90 sm:text-xl">
+                  {pad(parts[unit.key])}
+                </span>
+                <span className="mt-0.5 font-body text-[8px] uppercase tracking-[0.28em] text-muted">
+                  {unit.label}
+                </span>
+              </div>
             </div>
-          )}
-        </GlassCard>
-      </div>
-    </section>
+          ))}
+        </div>
+      )}
+    </motion.div>
   );
 }

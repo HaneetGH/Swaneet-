@@ -22,9 +22,7 @@ export function Navigation() {
   const onMainHome = pathname === "/";
 
   const links = useMemo(() => {
-    const base: NavLink[] = [
-      { href: "#countdown", label: "Countdown" },
-    ];
+    const base: NavLink[] = [];
 
     if (!ready || enabled("our_story")) {
       base.push({ href: "#story", label: "Story" });
