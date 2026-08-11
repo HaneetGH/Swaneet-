@@ -104,6 +104,11 @@ export function AccommodationManager({
   const [joinStayId, setJoinStayId] = useState<Record<string, string>>({});
   const [roomBusyKey, setRoomBusyKey] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
+  const [bulkHotelIds, setBulkHotelIds] = useState<string[]>([]);
+  const [bulkHotelId, setBulkHotelId] = useState("");
+  const [bulkUseBlocked, setBulkUseBlocked] = useState(false);
+  const [bulkClearRoomDetails, setBulkClearRoomDetails] = useState(true);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [tab, setTab] = useState<"requests" | "rooms" | "hotels">("requests");
   /** First guest selected for room swap */
   const [swapFromId, setSwapFromId] = useState<string | null>(null);
@@ -830,6 +835,104 @@ export function AccommodationManager({
     });
   };
 
+  const toggleBulkHotelId = (id: string) => {
+    const stay = items.find((item) => item.id === id);
+    if (!stay) return;
+    const groupIds = stay.roomGroupId
+      ? items
+          .filter((item) => item.roomGroupId === stay.roomGroupId)
+          .map((item) => item.id)
+      : [id];
+
+    setBulkHotelIds((prev) => {
+      const removing = groupIds.every((gid) => prev.includes(gid));
+      if (removing) {
+        return prev.filter((item) => !groupIds.includes(item));
+      }
+      const next = new Set(prev);
+      for (const gid of groupIds) next.add(gid);
+      if (next.size > 40) {
+        setMessage("Select at most 40 guests for one hotel move.");
+        return prev;
+      }
+      return [...next];
+    });
+  };
+
+  const bulkSelection = useMemo(() => {
+    const selected = items.filter((item) => bulkHotelIds.includes(item.id));
+    const groupKeys = new Set(
+      selected.map((item) => item.roomGroupId || item.id),
+    );
+    return {
+      selected,
+      count: selected.length,
+      people: selected.reduce((sum, item) => sum + (item.people || 0), 0),
+      units: groupKeys.size,
+    };
+  }, [bulkHotelIds, items]);
+
+  const onBulkMoveHotel = async () => {
+    if (!bulkSelection.count) {
+      setMessage("Select at least one guest to move.");
+      return;
+    }
+    if (!bulkHotelId) {
+      setMessage("Choose the destination hotel.");
+      return;
+    }
+    const hotel = (inventory.hotels || []).find((row) => row.id === bulkHotelId);
+    const names = bulkSelection.selected.map((item) => item.name).join(", ");
+    if (
+      !confirm(
+        `Move these guests to ${hotel?.name || "the selected hotel"}?\n\n${names}\n\n• ${bulkSelection.count} guest(s) · ${bulkSelection.units} room assignment(s)\n• Shared rooms move together\n• Room numbers/notes will ${
+          bulkClearRoomDetails ? "be cleared" : "be kept"
+        }\n• Guests are not emailed by this move`,
+      )
+    ) {
+      return;
+    }
+
+    setBulkBusy(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/accommodation/bulk-hotel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: bulkHotelIds,
+          hotelId: bulkHotelId,
+          useBlockedRooms: bulkUseBlocked,
+          clearRoomDetails: bulkClearRoomDetails,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        inventory?: RoomInventory;
+        stays?: AccommodationRequest[];
+      };
+      if (!res.ok) {
+        setMessage(data.error || "Could not move guests");
+        return;
+      }
+      if (data.inventory) setInventory(data.inventory);
+      if (data.stays?.length) {
+        const byId = new Map(data.stays.map((stay) => [stay.id, stay]));
+        setItems((prev) => prev.map((item) => byId.get(item.id) || item));
+      } else {
+        await refreshStays();
+      }
+      setBulkHotelIds([]);
+      setBulkHotelId("");
+      setMessage(data.message || "Guests moved to the new hotel.");
+    } catch {
+      setMessage("Could not move guests. Please try again.");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const mergeSelection = useMemo(() => {
     const selected = items.filter((item) => mergeIds.includes(item.id));
     const people = selected.reduce((sum, item) => sum + (item.people || 0), 0);
@@ -1476,6 +1579,133 @@ export function AccommodationManager({
             </table>
           </div>
         )}
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-gold/25 bg-[#141018] p-4">
+        <div className="flex flex-wrap items-start gap-2">
+          <Building2 size={16} className="mt-0.5 text-gold" />
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-lg text-cream">
+              Move guests to another hotel
+            </p>
+            <p className="mt-1 font-body text-xs leading-relaxed text-muted">
+              Select multiple people already in a room, pick the destination
+              hotel, and move them at once. Shared-room groups travel together.
+              Existing room cards and tools above stay the same.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 max-h-64 space-y-1.5 overflow-y-auto rounded-xl border border-gold/15 bg-[#0d0b10] p-2">
+          {assignedGuests.length === 0 ? (
+            <p className="px-2 py-3 font-body text-xs text-muted">
+              No assigned guests yet — confirm stays and assign rooms first.
+            </p>
+          ) : (
+            assignedGuests.map((item) => {
+              const checked = bulkHotelIds.includes(item.id);
+              return (
+                <label
+                  key={item.id}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2",
+                    checked ? "bg-gold/10" : "hover:bg-white/5",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleBulkHotelId(item.id)}
+                    className="h-4 w-4 accent-[#c4a35a]"
+                  />
+                  <span className="min-w-0 flex-1 font-body text-sm text-cream">
+                    {item.name}
+                    <span className="mt-0.5 block text-[11px] text-muted">
+                      {item.people} people
+                      {item.hotelName ? ` · now at ${item.hotelName}` : ""}
+                      {item.roomGroupId
+                        ? " · shared (whole room moves)"
+                        : " · solo"}
+                    </span>
+                  </span>
+                </label>
+              );
+            })
+          )}
+        </div>
+
+        {bulkSelection.count > 0 ? (
+          <div className="mt-4 space-y-3">
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <label className="block">
+                <span className="mb-1.5 block font-body text-[10px] uppercase tracking-[0.2em] text-muted">
+                  Destination hotel
+                </span>
+                <select
+                  className={cn(fieldClass, "appearance-none")}
+                  value={bulkHotelId}
+                  onChange={(e) => setBulkHotelId(e.target.value)}
+                >
+                  <option value="">Select hotel…</option>
+                  {(inventory.hotels || []).map((hotel) => (
+                    <option key={hotel.id} value={hotel.id}>
+                      {hotel.name} · {hotel.available} free
+                      {hotel.blocked ? ` · ${hotel.blocked} blocked` : ""} /{" "}
+                      {hotel.totalRooms}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="font-body text-xs text-gold-soft sm:pb-3">
+                {bulkSelection.count} guest
+                {bulkSelection.count === 1 ? "" : "s"} ·{" "}
+                {bulkSelection.people} people · {bulkSelection.units} room
+                {bulkSelection.units === 1 ? "" : "s"}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="inline-flex items-center gap-2 font-body text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={bulkUseBlocked}
+                  onChange={(e) => setBulkUseBlocked(e.target.checked)}
+                  className="h-4 w-4 accent-[#c4a35a]"
+                />
+                Use blocked rooms if needed
+              </label>
+              <label className="inline-flex items-center gap-2 font-body text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={bulkClearRoomDetails}
+                  onChange={(e) => setBulkClearRoomDetails(e.target.checked)}
+                  className="h-4 w-4 accent-[#c4a35a]"
+                />
+                Clear old room number / notes
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={bulkBusy || !bulkHotelId}
+                onClick={() => void onBulkMoveHotel()}
+              >
+                <ArrowLeftRight size={14} />
+                {bulkBusy ? "Moving…" : "Move to hotel"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={bulkBusy}
+                onClick={() => {
+                  setBulkHotelIds([]);
+                  setBulkHotelId("");
+                }}
+              >
+                Clear selection
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {swapFromId ? (

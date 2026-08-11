@@ -1762,6 +1762,165 @@ export async function updateAccommodation(
 }
 
 /**
+ * Move one or more assigned stays to another hotel in one step.
+ * Shared-room groups move together (select any member → whole group).
+ * Keeps roomsAssigned / share structure; only hotel fields change.
+ */
+export async function reassignStaysToHotel(input: {
+  ids: string[];
+  hotelId: string;
+  useBlockedRooms?: boolean;
+  /** Clear room-number notes that belong to the old hotel */
+  clearRoomDetails?: boolean;
+}): Promise<{
+  stays: AccommodationRequest[];
+  inventory: RoomInventory;
+  movedGuestCount: number;
+  roomsMoved: number;
+}> {
+  if (isVercelRuntime() && !hasDatabase()) {
+    throw new Error(
+      "Database is not configured. Connect Neon (DATABASE_URL) so stay moves save in production.",
+    );
+  }
+
+  const hotelId = input.hotelId.trim();
+  if (!hotelId) throw new Error("Select a hotel.");
+  if (!input.ids.length) throw new Error("Select at least one guest.");
+
+  const all = await listAccommodations();
+  const byId = new Map(all.map((item) => [item.id, item]));
+  const selected = new Set<string>();
+
+  for (const id of input.ids) {
+    const stay = byId.get(id);
+    if (!stay) throw new Error(`Stay request not found: ${id}`);
+    if (stay.status !== "confirmed") {
+      throw new Error(`${stay.name} is not confirmed yet — confirm them first.`);
+    }
+    if (stay.roomGroupId) {
+      for (const member of all) {
+        if (member.roomGroupId === stay.roomGroupId) selected.add(member.id);
+      }
+    } else {
+      if (!(typeof stay.roomsAssigned === "number" && stay.roomsAssigned > 0)) {
+        throw new Error(
+          `${stay.name} has no room assigned yet — assign a room first, then move hotels.`,
+        );
+      }
+      selected.add(stay.id);
+    }
+  }
+
+  const inventory = await getRoomInventory();
+  const hotelRow = inventory.hotels.find((hotel) => hotel.id === hotelId);
+  if (!hotelRow) {
+    throw new Error("Selected hotel was not found. Add the hotel first.");
+  }
+
+  const storeHotels = hasDatabase()
+    ? await listHotels()
+    : (await readStore()).hotels || [];
+  const listed = storeHotels.find((hotel) => hotel.id === hotelId);
+  const hotelName = listed?.name || hotelRow.name;
+  const hotelAddress = listed?.address || hotelRow.address;
+
+  /** Inventory units being moved (solo stay or shared primary). */
+  const units = new Map<
+    string,
+    { rooms: number; alreadyAtTarget: boolean; names: string[] }
+  >();
+
+  for (const id of selected) {
+    const stay = byId.get(id)!;
+    if (stay.roomGroupId) {
+      if (stay.roomGroupRole === "member") continue;
+      const rooms =
+        typeof stay.roomsAssigned === "number" && stay.roomsAssigned > 0
+          ? stay.roomsAssigned
+          : 0;
+      if (rooms <= 0) continue;
+      const members = all.filter((item) => item.roomGroupId === stay.roomGroupId);
+      units.set(stay.roomGroupId, {
+        rooms,
+        alreadyAtTarget: stay.hotelId === hotelId,
+        names: members.map((item) => item.name),
+      });
+    } else {
+      const rooms = stay.roomsAssigned || 0;
+      units.set(stay.id, {
+        rooms,
+        alreadyAtTarget: stay.hotelId === hotelId,
+        names: [stay.name],
+      });
+    }
+  }
+
+  if (!units.size) {
+    throw new Error("No assigned rooms found for the selected guests.");
+  }
+
+  const roomsNeeded = [...units.values()].reduce(
+    (sum, unit) => sum + (unit.alreadyAtTarget ? 0 : unit.rooms),
+    0,
+  );
+
+  if (roomsNeeded > 0) {
+    const free = hotelRow.available;
+    if (roomsNeeded > free) {
+      const shortfall = roomsNeeded - free;
+      if (!input.useBlockedRooms) {
+        throw new Error(
+          `Not enough free rooms at ${hotelRow.name}. Free: ${free}, needed: ${roomsNeeded}. Turn on “Use blocked rooms” to draw from the reserve.`,
+        );
+      }
+      if (shortfall > hotelRow.blocked) {
+        throw new Error(
+          `Not enough rooms at ${hotelRow.name} even with blocked reserve. Free: ${free}, blocked: ${hotelRow.blocked}, needed: ${roomsNeeded}.`,
+        );
+      }
+      await adjustHotelBlockedRooms(hotelId, -shortfall);
+    }
+  }
+
+  const nextRows: AccommodationRequest[] = [];
+  for (const id of selected) {
+    const stay = byId.get(id)!;
+    if (stay.hotelId === hotelId) {
+      nextRows.push({
+        ...stay,
+        hotelId,
+        hotelName: hotelName || stay.hotelName,
+        hotelAddress: hotelAddress || stay.hotelAddress,
+      });
+      continue;
+    }
+    nextRows.push({
+      ...stay,
+      hotelId,
+      hotelName,
+      hotelAddress: hotelAddress || undefined,
+      roomDetails: input.clearRoomDetails ? undefined : stay.roomDetails,
+    });
+  }
+
+  // Drop empty roomDetails
+  for (const row of nextRows) {
+    if (!row.roomDetails) delete row.roomDetails;
+    if (!row.hotelAddress) delete row.hotelAddress;
+  }
+
+  await persistAccommodationRows(nextRows);
+
+  return {
+    stays: nextRows,
+    inventory: await getRoomInventory(),
+    movedGuestCount: nextRows.length,
+    roomsMoved: [...units.values()].reduce((sum, unit) => sum + unit.rooms, 0),
+  };
+}
+
+/**
  * Put multiple stay requests in one shared physical room.
  * - Any combination of requests (e.g. 1+1+1 people, or 2+1, etc.)
  * - You decide capacity yourself — we do not store people-per-room limits
