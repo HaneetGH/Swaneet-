@@ -6,7 +6,9 @@
 
 ---
 
-**We turned a wedding invitation into a product that managed 100+ guests, hotel bookings, and photo sharing — all from one link.**
+**I built a full product for my own wedding — RSVPs, hotel bookings, AI photo search — all from one link.**
+
+No client. No freelance gig. Just my wedding, my problem, my solution.
 
 Here's the story of #Swaneet 👇
 
@@ -14,9 +16,9 @@ Here's the story of #Swaneet 👇
 
 **The thought:**
 
-Indian weddings are chaos — beautiful chaos. Guest lists on paper. Hotel rooms tracked in Excel. Photos scattered across 10 WhatsApp groups. RSVPs? "Haan ji aa rahe hain" on a call.
+My wedding was coming up. And I saw the same chaos every Indian wedding has — guest lists on paper, hotel rooms tracked in Excel, photos scattered across 10 WhatsApp groups, RSVPs over phone calls.
 
-We thought: what if one link could handle *everything*?
+I'm an engineer. I thought: why am I dealing with this manually? What if I build one link that handles *everything*?
 
 ---
 
@@ -48,7 +50,9 @@ We thought: what if one link could handle *everything*?
 
 **The lesson:**
 
-You don't need a startup to build a real product. Sometimes the best engineering is solving a problem right in front of you — even if it's your own wedding.
+I didn't build this for a client or a startup. I built it for myself — for my own wedding. And that's exactly why it worked. When you're the user, you know every pain point. You don't over-engineer. You just solve.
+
+Best product I've ever shipped — and I was the first customer.
 
 ---
 
@@ -60,9 +64,9 @@ You don't need a startup to build a real product. Sometimes the best engineering
 
 ---
 
-**We built a wedding platform that handled RSVPs, hotel bookings, and AI photo search — for our own wedding.**
+**I built a wedding platform for my own wedding — not a client project, not a startup. Just me solving my own problem.**
 
-Not a template. A real product:
+Not a template. A real product I actually used:
 
 → Guests RSVP per ceremony day — family sees numbers in real-time
 → Hotel room booking + assignment — guests request, family approves, emails go out
@@ -72,7 +76,7 @@ Not a template. A real product:
 
 The result? No Excel sheets. No WhatsApp chaos. Guests booked rooms, confirmed attendance, and found their photos — all from one link.
 
-Sometimes the best product you build is the one that solves your own problem.
+No client brief. No sprint board. Just me building for myself — and that's why it worked.
 
 #BuildInPublic #NextJS #WeddingTech #AI
 
@@ -82,11 +86,11 @@ Sometimes the best product you build is the one that solves your own problem.
 
 | Slide | Headline | Body |
 |-------|----------|------|
-| 1 | We built this for our wedding | One link. RSVPs, hotel bookings, photo sharing, wishes — all managed. |
+| 1 | I built this for MY wedding | No client. No startup. I was the user — and the engineer. |
 | 2 | The problem | Guest lists on paper. Rooms tracked in Excel. Photos in 10 WhatsApp groups. |
 | 3 | RSVP | Guests confirm per ceremony day. Family sees real-time attendance. No follow-up calls. |
 | 4 | Hotel Booking | Guests request rooms with dates. Family assigns from a hotel pool. Confirmation emails auto-sent. |
 | 5 | AI Photo Finder | Guest takes a selfie → AI matches their face across the gallery → they download their photos. |
 | 6 | Wishes Wall | Guests leave blessings. Family approves. They appear live — a digital guestbook. |
 | 7 | The Dashboard | One place: RSVPs, room occupancy, guest uploads, wishes — all managed by family. |
-| 8 | The takeaway | You don't need a startup to ship a real product. Solve the problem in front of you. |
+| 8 | The takeaway | I didn't need a client. I was the user. Best product I've ever shipped. |
