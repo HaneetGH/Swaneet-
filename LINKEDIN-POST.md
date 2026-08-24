@@ -48,6 +48,22 @@ I'm an engineer. I thought: why am I dealing with this manually? What if I build
 
 ---
 
+**The tech stack:**
+
+Next.js 15 · React 19 · TypeScript · Tailwind CSS · Framer Motion · GSAP · React Three Fiber (3D) · Neon Postgres · Vercel Blob · AWS Rekognition · Firebase Auth · Resend (email) · Vercel (hosting)
+
+---
+
+**How I scaled it when traffic spiked:**
+
+Wedding day = everyone opens the link at the same time. I used **feature flags per ceremony** — so I could toggle heavy features (gallery, photo uploads, face-find, wishes) on/off instantly without redeploying.
+
+When guest traffic peaked, I turned off non-essential features to keep the core (invitation + RSVP + hotel booking) fast. Once traffic settled, I flipped everything back on. Zero downtime. No panicked hotfix at my own wedding.
+
+Feature flags also let me run **two ceremony sites** (Mehfil + Laavan) from one codebase — each with its own set of enabled features.
+
+---
+
 **The lesson:**
 
 I didn't build this for a client or a startup. I built it for myself — for my own wedding. And that's exactly why it worked. When you're the user, you know every pain point. You don't over-engineer. You just solve.
@@ -75,6 +91,10 @@ Not a template. A real product I actually used:
 → One dashboard to manage it all
 
 The result? No Excel sheets. No WhatsApp chaos. Guests booked rooms, confirmed attendance, and found their photos — all from one link.
+
+Stack: Next.js 15 · React 19 · TypeScript · Tailwind · Neon Postgres · Vercel Blob · AWS Rekognition · Firebase Auth · Resend
+
+Scaling trick: feature flags per ceremony. Wedding day traffic spike? Turn off heavy features instantly, keep RSVP + booking fast. Flip them back on when traffic settles. Zero downtime at my own wedding.
 
 No client brief. No sprint board. Just me building for myself — and that's why it worked.
 
