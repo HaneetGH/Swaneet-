@@ -2,125 +2,91 @@
 
 ---
 
-## Option 1: Story-driven (recommended)
+## Option 1: Impact-focused (recommended)
 
 ---
 
-**We didn't just build a wedding website. We built a full-stack product — in weeks.**
+**We turned a wedding invitation into a product that managed 100+ guests, hotel bookings, and photo sharing — all from one link.**
 
-Here's the journey of **#Swaneet** 👇
-
----
-
-### 🤔 How we thought
-
-Every Indian wedding sends a PDF invite on WhatsApp. We asked: *what if the invite itself was an experience?*
-
-Not a template. Not a drag-and-drop builder. A cinematic, interactive microsite that feels like opening a designer envelope — on any phone.
+Here's the story of #Swaneet 👇
 
 ---
 
-### 🛠️ What we built
+**The thought:**
 
-A **premium wedding platform** — not just a page:
+Indian weddings are chaos — beautiful chaos. Guest lists on paper. Hotel rooms tracked in Excel. Photos scattered across 10 WhatsApp groups. RSVPs? "Haan ji aa rahe hain" on a call.
 
-- Cinematic hero with 3D elements (React Three Fiber + GSAP)
-- Full RSVP system with Google auth
-- Guest photo gallery with upload & moderation
-- Accommodation booking for out-of-town guests
-- A public "Wishes Wall" where guests leave blessings
-- Real-time dashboard for the family to manage everything
-
-Stack: **Next.js 15 · React 19 · TypeScript · Tailwind · Framer Motion · Neon Postgres · Vercel Blob**
+We thought: what if one link could handle *everything*?
 
 ---
 
-### 🧩 How we solved the hard problems
+**What we built — the major features:**
 
-**Problem:** Guests want to find *their* photos in a 500+ photo wedding gallery.
+🎟️ **Digital Invitation** — Not a PDF. A cinematic, animated invite guests actually open and interact with.
 
-**Solution:** We integrated **AWS Rekognition** for face-based photo search. A guest takes a selfie → the system matches their face across the entire gallery → they download only their photos.
+✅ **RSVP System** — Guests confirm per ceremony day (Mehfil, Laavan). Family sees attendance in real-time. No follow-up calls needed.
 
-No manual tagging. No scrolling through hundreds of images. Just AI doing what it does best.
+🏨 **Hotel Booking & Room Management** — Guests request rooms with check-in/out dates. Family manages a hotel pool, assigns rooms, confirms/declines — all from a dashboard. Guests get email confirmations. Partial-night offers handled automatically.
 
-We also solved:
-- Multi-site architecture (one codebase serves Mehfil + Laavan ceremonies)
-- Feature flags per ceremony (RSVP, gallery, face-find — all toggleable)
-- Email lifecycle (wish received → approved → live notifications via Resend)
-- Direct-to-Blob uploads that bypass serverless size limits
+📸 **AI Photo Finder** — After the wedding, guests take a selfie → AI finds all their photos from the gallery. No tagging. No scrolling through 500 photos.
 
----
+💬 **Wishes Wall** — Guests leave blessings. Family approves them. They appear live on the site.
 
-### 💡 How it helps
-
-For guests:
-- Beautiful, fast, mobile-first experience
-- One-tap RSVP, photo sharing, and wishes
-- AI finds their photos — no hunting
-
-For the family:
-- Full dashboard: RSVPs, stays, wishes, gallery — all in one place
-- Approve/reject content with a click
-- Real-time visibility into who's coming, who needs a room
-
-For us (the builders):
-- Proof that a wedding can be a **product launch**
-- A portfolio piece that combines design, full-stack engineering, and AI
+📊 **Family Dashboard** — One place to see: who's coming, who needs a room, how many rooms are left, guest uploads, wishes to approve.
 
 ---
 
-### 🚀 The result
+**How it actually helped:**
 
-A living, breathing wedding platform that guests actually *enjoy* using — not just another link they forget to open.
-
-**Tech is personal. The best products solve real problems for real people — even at a wedding.**
-
----
-
-If you're building something ambitious with Next.js, serverless infra, or AI — let's connect. Always happy to share learnings.
-
-#NextJS #React #FullStack #AI #AWSRekognition #Serverless #Vercel #WeddingTech #BuildInPublic #ProductEngineering
+- Guests booked hotel rooms directly through the site — no back-and-forth phone calls
+- Family could see room occupancy at a glance and manage inventory across hotels
+- RSVPs came in per-day, so catering and seating plans were accurate
+- Guests found their own wedding photos with a selfie — no one had to manually tag or share
+- Wishes came in before, during, and after the wedding — became a keepsake
 
 ---
 
-## Option 2: Shorter / punchier version
+**The lesson:**
+
+You don't need a startup to build a real product. Sometimes the best engineering is solving a problem right in front of you — even if it's your own wedding.
 
 ---
 
-**We built an AI-powered wedding platform from scratch. Here's what we learned.**
-
-The ask: a digital wedding invitation.
-What we shipped: a full product.
-
-→ Cinematic 3D invite (React Three Fiber + GSAP)
-→ Google-auth RSVP + accommodation booking
-→ Guest photo gallery with AI face search (AWS Rekognition)
-→ Wishes wall with moderation & email lifecycle
-→ Family dashboard to manage everything
-
-The hardest problem? Letting guests find *their* photos in a 500-image gallery — without tagging a single face manually.
-
-We solved it with Rekognition: upload a selfie → get your photos. Done.
-
-Stack: Next.js 15 · React 19 · TypeScript · Tailwind · Neon Postgres · Vercel Blob · AWS Rekognition · Resend
-
-**Tech is personal. The best engineering solves real problems — even at a wedding.**
-
-#NextJS #BuildInPublic #AI #FullStack #WeddingTech
+#BuildInPublic #FullStack #NextJS #WeddingTech #ProductEngineering
 
 ---
 
-## Option 3: Carousel / slide-by-slide breakdown
+## Option 2: Shorter version
 
-Use each section below as one carousel slide:
+---
+
+**We built a wedding platform that handled RSVPs, hotel bookings, and AI photo search — for our own wedding.**
+
+Not a template. A real product:
+
+→ Guests RSVP per ceremony day — family sees numbers in real-time
+→ Hotel room booking + assignment — guests request, family approves, emails go out
+→ AI photo finder — take a selfie, get your wedding photos (no manual tagging)
+→ Wishes wall — guests leave blessings, family curates them live
+→ One dashboard to manage it all
+
+The result? No Excel sheets. No WhatsApp chaos. Guests booked rooms, confirmed attendance, and found their photos — all from one link.
+
+Sometimes the best product you build is the one that solves your own problem.
+
+#BuildInPublic #NextJS #WeddingTech #AI
+
+---
+
+## Option 3: Carousel slides
 
 | Slide | Headline | Body |
 |-------|----------|------|
-| 1 | We built this for a wedding. | Not a template. A full-stack AI-powered platform. |
-| 2 | The thought | Every wedding invite is a WhatsApp PDF. We wanted an *experience*. |
-| 3 | What we built | Cinematic 3D invite · RSVP · Gallery · Wishes Wall · Dashboard |
-| 4 | The hard problem | 500+ wedding photos. How does a guest find *theirs*? |
-| 5 | The AI solve | Selfie → AWS Rekognition face match → download your photos |
-| 6 | The stack | Next.js 15 · React 19 · Neon · Vercel Blob · Rekognition · Resend |
-| 7 | The result | Guests love it. Family manages everything from one dashboard. |
-| 8 | The lesson | Tech is personal. Build things that matter to real people. |
+| 1 | We built this for our wedding | One link. RSVPs, hotel bookings, photo sharing, wishes — all managed. |
+| 2 | The problem | Guest lists on paper. Rooms tracked in Excel. Photos in 10 WhatsApp groups. |
+| 3 | RSVP | Guests confirm per ceremony day. Family sees real-time attendance. No follow-up calls. |
+| 4 | Hotel Booking | Guests request rooms with dates. Family assigns from a hotel pool. Confirmation emails auto-sent. |
+| 5 | AI Photo Finder | Guest takes a selfie → AI matches their face across the gallery → they download their photos. |
+| 6 | Wishes Wall | Guests leave blessings. Family approves. They appear live — a digital guestbook. |
+| 7 | The Dashboard | One place: RSVPs, room occupancy, guest uploads, wishes — all managed by family. |
+| 8 | The takeaway | You don't need a startup to ship a real product. Solve the problem in front of you. |
