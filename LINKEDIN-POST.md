@@ -48,19 +48,28 @@ I'm an engineer. I thought: why am I dealing with this manually? What if I build
 
 ---
 
-**The tech stack:**
+**Every problem → a solution → the right tool:**
 
-Next.js 15 · React 19 · TypeScript · Tailwind CSS · Framer Motion · GSAP · React Three Fiber (3D) · Neon Postgres · Vercel Blob · AWS Rekognition · Firebase Auth · Resend (email) · Vercel (hosting)
+| Problem I faced | How I solved it | Tech I used |
+|---|---|---|
+| Boring PDF invites no one opens | Cinematic animated 3D invite | React Three Fiber · GSAP · Framer Motion |
+| "Are you coming?" phone calls | Self-serve RSVP per ceremony day | Next.js · Neon Postgres |
+| Hotel room chaos in Excel | Guests request rooms, I assign from a pool | Neon Postgres · Resend (confirmations) |
+| Guest login without passwords | Google sign-in, one tap | Firebase Auth |
+| 500+ wedding photos, guests can't find theirs | Selfie → AI matches their face → download | AWS Rekognition |
+| Photo/video uploads hit serverless limits | Direct-to-cloud upload | Vercel Blob |
+| Guests want to leave blessings | Wishes wall with moderation | Neon Postgres · Resend (status emails) |
+| Wedding day traffic spike | Feature flags — toggle features on/off instantly | Custom per-ceremony flags |
+| Two ceremonies, one codebase | Multi-site architecture with shared components | Next.js 15 · TypeScript |
+| Need to manage everything in one place | Family dashboard — RSVPs, rooms, photos, wishes | Tailwind CSS · React 19 |
+
+Hosted on **Vercel**. Database on **Neon Postgres**. Emails via **Resend**. All serverless — scales to zero when the wedding is over.
 
 ---
 
 **How I scaled it when traffic spiked:**
 
-Wedding day = everyone opens the link at the same time. I used **feature flags per ceremony** — so I could toggle heavy features (gallery, photo uploads, face-find, wishes) on/off instantly without redeploying.
-
-When guest traffic peaked, I turned off non-essential features to keep the core (invitation + RSVP + hotel booking) fast. Once traffic settled, I flipped everything back on. Zero downtime. No panicked hotfix at my own wedding.
-
-Feature flags also let me run **two ceremony sites** (Mehfil + Laavan) from one codebase — each with its own set of enabled features.
+Wedding day = everyone opens the link at the same time. Feature flags let me toggle heavy features (gallery, uploads, face-find) off instantly — keeping RSVP + hotel booking fast. Once traffic settled, I flipped everything back on. Zero downtime. No panicked hotfix at my own wedding.
 
 ---
 
@@ -69,6 +78,14 @@ Feature flags also let me run **two ceremony sites** (Mehfil + Laavan) from one 
 I didn't build this for a client or a startup. I built it for myself — for my own wedding. And that's exactly why it worked. When you're the user, you know every pain point. You don't over-engineer. You just solve.
 
 Best product I've ever shipped — and I was the first customer.
+
+---
+
+**It's now a product.**
+
+What started as my own wedding solution is now something anyone can use. If you're planning a wedding and tired of the WhatsApp + Excel + phone call chaos — or if you're a developer who wants to offer this to clients — let's connect.
+
+DM me. Happy to help. 🤝
 
 ---
 
@@ -92,11 +109,17 @@ Not a template. A real product I actually used:
 
 The result? No Excel sheets. No WhatsApp chaos. Guests booked rooms, confirmed attendance, and found their photos — all from one link.
 
-Stack: Next.js 15 · React 19 · TypeScript · Tailwind · Neon Postgres · Vercel Blob · AWS Rekognition · Firebase Auth · Resend
+Every problem had a tool:
+- Face search → AWS Rekognition
+- Auth → Firebase (Google one-tap)
+- Database → Neon Postgres
+- Photo uploads → Vercel Blob
+- Emails → Resend
+- Traffic spikes → Feature flags (toggle features live)
 
-Scaling trick: feature flags per ceremony. Wedding day traffic spike? Turn off heavy features instantly, keep RSVP + booking fast. Flip them back on when traffic settles. Zero downtime at my own wedding.
+No client brief. No sprint board. Just me solving my own wedding chaos.
 
-No client brief. No sprint board. Just me building for myself — and that's why it worked.
+**It's now a product.** If you're planning a wedding and want to skip the WhatsApp + Excel mess — DM me. Happy to help. 🤝
 
 #BuildInPublic #NextJS #WeddingTech #AI
 
